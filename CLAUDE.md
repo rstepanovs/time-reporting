@@ -6,7 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Time tracking with subsequent billing. Monorepo containing a Python API (`backend/`) and a React web
 client (`frontend/`). Infrastructure, a health-check endpoint, and user accounts with JWT
-authentication exist; domain models (projects, time entries, invoices) do not yet.
+authentication exist, as do customers; the remaining domain models (projects, time entries,
+invoices) do not yet.
 
 ## Commands
 
@@ -101,11 +102,19 @@ The **users** module (`modules/users/`) owns the `User` entity, roles (`UserRole
 The **auth** module (`modules/auth/`) owns JWT issuing/validation and login, and reaches user data only
 through `users.contracts` messages (`GetUserCredentialsByEmail`, `RecordSuccessfulLogin`, ...) — it never
 imports `users.models` or `users.repository`. `auth/dependencies.py` (`CurrentUserDep`, `require_roles`,
-`AdminDep`) is the one exception to the "only `contracts.py`" rule: every protected router depends on it
-directly. Role and `is_active` are re-read from the database on every request (via the token's `sub`),
-not trusted from the token, so deactivation/role/password changes take effect immediately — enforced by
-comparing the token's `ver` claim against the user's current `token_version`, which password
-changes/resets increment.
+`AdminDep`, `ManagerDep`) is the one exception to the "only `contracts.py`" rule: every protected
+router depends on it directly. Role and `is_active` are re-read from the database on every request (via
+the token's `sub`), not trusted from the token, so deactivation/role/password changes take effect
+immediately — enforced by comparing the token's `ver` claim against the user's current
+`token_version`, which password changes/resets increment.
+
+The **customers** module (`modules/customers/`) owns the `Customer` entity: name, legal details, a
+structured billing address (ISO 3166-1 alpha-2 country), a billing period (`interval_count` ×
+`BillingIntervalUnit`, counted from `anchor_date`), currency (ISO 4217) and payment terms. Customers
+are never deleted, only archived (`is_active`), because billing data will reference them. Any
+authenticated user can read them; writes require `ManagerDep` (`admin` or `project_manager`).
+`UpdateCustomer` treats `None` as "unchanged"; optional text fields are cleared by naming them in
+`clear_fields`, which the router fills from fields sent as JSON `null`.
 
 `core/passwords.py` (Argon2id via `pwdlib`, hashing off the event loop in a thread) and
 `db/mixins.py:TimestampMixin` (`created_at`/`updated_at`) are shared kernel, not owned by a module.

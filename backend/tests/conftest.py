@@ -10,12 +10,20 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from support import DEFAULT_PASSWORD, AuthHeaders, UserFactory
+from support import (
+    DEFAULT_BILLING_ADDRESS,
+    DEFAULT_BILLING_PERIOD,
+    DEFAULT_PASSWORD,
+    AuthHeaders,
+    CustomerFactory,
+    UserFactory,
+)
 from time_reporting.core.config import get_settings
 from time_reporting.core.cqrs import Bus
 from time_reporting.db.session import get_session
 from time_reporting.main import create_app
 from time_reporting.modules.auth.jwt import create_access_token
+from time_reporting.modules.customers.contracts import CreateCustomer, CustomerDTO
 from time_reporting.modules.registry import build_registry
 from time_reporting.modules.users.contracts import CreateUser, UserDTO, UserRole
 
@@ -73,6 +81,25 @@ def make_user(bus: Bus) -> UserFactory:
                 email=email or f"user{created}@example.com",
                 role=role,
                 password=password,
+            )
+        )
+
+    return factory
+
+
+@pytest.fixture
+def make_customer(bus: Bus) -> CustomerFactory:
+    created = 0
+
+    async def factory(*, name: str | None = None) -> CustomerDTO:
+        nonlocal created
+        created += 1
+        return await bus.execute(
+            CreateCustomer(
+                name=name or f"Customer {created}",
+                billing_address=DEFAULT_BILLING_ADDRESS,
+                billing_period=DEFAULT_BILLING_PERIOD,
+                currency="EUR",
             )
         )
 

@@ -58,3 +58,5 @@ def require_roles(*roles: UserRole) -> Callable[[UserDTO], Awaitable[UserDTO]]:
 
 
 AdminDep = Annotated[UserDTO, Depends(require_roles(UserRole.ADMIN))]
+# Administrators and project managers, who manage billing data such as customers.
+ManagerDep = Annotated[UserDTO, Depends(require_roles(UserRole.ADMIN, UserRole.PROJECT_MANAGER))]
