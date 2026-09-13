@@ -1,0 +1,185 @@
+from uuid import uuid4
+
+import pytest
+
+from support import DEFAULT_PASSWORD, UserFactory
+from time_reporting.core.cqrs import Bus
+from time_reporting.core.passwords import verify_password
+from time_reporting.modules.users.contracts import (
+    ChangeOwnPassword,
+    CreateUser,
+    EmailAlreadyExistsError,
+    GetUserById,
+    GetUserCredentialsByEmail,
+    InvalidCurrentPasswordError,
+    ListUsers,
+    RecordSuccessfulLogin,
+    ResetUserPassword,
+    SelfModificationError,
+    UpdateUser,
+    UserNotFoundError,
+    UserRole,
+)
+
+
+async def test_create_user_normalizes_email_and_hashes_password(bus: Bus) -> None:
+    user = await bus.execute(
+        CreateUser(
+            name="Ann",
+            email="  Ann@Example.COM ",
+            role=UserRole.PROJECT_MANAGER,
+            password=DEFAULT_PASSWORD,
+        )
+    )
+
+    assert user.email == "ann@example.com"
+    assert user.role is UserRole.PROJECT_MANAGER
+    assert user.is_active
+    assert user.token_version == 0
+    assert user.last_login_at is None
+
+    credentials = await bus.query(GetUserCredentialsByEmail(email="ANN@example.com"))
+    assert credentials is not None
+    assert credentials.id == user.id
+    assert (await verify_password(DEFAULT_PASSWORD, credentials.password_hash))[0]
+
+
+async def test_duplicate_email_is_rejected_and_session_stays_usable(
+    bus: Bus, make_user: UserFactory
+) -> None:
+    existing = await make_user(email="dup@example.com")
+
+    with pytest.raises(EmailAlreadyExistsError):
+        await make_user(email="DUP@example.com")
+
+    assert await bus.query(GetUserById(user_id=existing.id)) == existing
+
+
+async def test_get_unknown_user_returns_none(bus: Bus) -> None:
+    assert await bus.query(GetUserById(user_id=uuid4())) is None
+    assert await bus.query(GetUserCredentialsByEmail(email="nobody@example.com")) is None
+
+
+async def test_update_user_changes_only_given_fields(bus: Bus, make_user: UserFactory) -> None:
+    admin = await make_user(role=UserRole.ADMIN)
+    user = await make_user(name="Old Name")
+
+    updated = await bus.execute(
+        UpdateUser(
+            user_id=user.id,
+            acting_user_id=admin.id,
+            email="New@Example.com",
+            role=UserRole.PROJECT_MANAGER,
+            is_active=False,
+        )
+    )
+
+    assert updated.name == "Old Name"
+    assert updated.email == "new@example.com"
+    assert updated.role is UserRole.PROJECT_MANAGER
+    assert not updated.is_active
+    assert updated.updated_at >= user.updated_at
+
+
+async def test_update_unknown_user_raises(bus: Bus, make_user: UserFactory) -> None:
+    admin = await make_user(role=UserRole.ADMIN)
+
+    with pytest.raises(UserNotFoundError):
+        await bus.execute(UpdateUser(user_id=uuid4(), acting_user_id=admin.id, name="X"))
+
+
+async def test_update_rejects_taken_email(bus: Bus, make_user: UserFactory) -> None:
+    admin = await make_user(role=UserRole.ADMIN)
+    await make_user(email="taken@example.com")
+    user = await make_user()
+
+    with pytest.raises(EmailAlreadyExistsError):
+        await bus.execute(
+            UpdateUser(user_id=user.id, acting_user_id=admin.id, email="taken@example.com")
+        )
+
+
+@pytest.mark.parametrize(
+    "changes", [{"role": UserRole.WORKER}, {"is_active": False}], ids=["demote", "deactivate"]
+)
+async def test_admin_cannot_demote_or_deactivate_self(
+    bus: Bus, make_user: UserFactory, changes: dict[str, object]
+) -> None:
+    admin = await make_user(role=UserRole.ADMIN)
+
+    with pytest.raises(SelfModificationError):
+        await bus.execute(UpdateUser(user_id=admin.id, acting_user_id=admin.id, **changes))  # type: ignore[arg-type]
+
+
+async def test_admin_can_edit_own_profile(bus: Bus, make_user: UserFactory) -> None:
+    admin = await make_user(role=UserRole.ADMIN)
+
+    updated = await bus.execute(
+        UpdateUser(
+            user_id=admin.id,
+            acting_user_id=admin.id,
+            name="Renamed",
+            role=UserRole.ADMIN,
+            is_active=True,
+        )
+    )
+
+    assert updated.name == "Renamed"
+
+
+async def test_reset_password_invalidates_tokens(bus: Bus, make_user: UserFactory) -> None:
+    user = await make_user(email="reset@example.com")
+
+    await bus.execute(ResetUserPassword(user_id=user.id, new_password="brand-new-password"))
+
+    credentials = await bus.query(GetUserCredentialsByEmail(email="reset@example.com"))
+    assert credentials is not None
+    assert credentials.token_version == user.token_version + 1
+    assert (await verify_password("brand-new-password", credentials.password_hash))[0]
+
+
+async def test_change_own_password_requires_current_password(
+    bus: Bus, make_user: UserFactory
+) -> None:
+    user = await make_user()
+
+    with pytest.raises(InvalidCurrentPasswordError):
+        await bus.execute(
+            ChangeOwnPassword(
+                user_id=user.id, current_password="wrong-password", new_password="new-password"
+            )
+        )
+    unchanged = await bus.query(GetUserById(user_id=user.id))
+    assert unchanged is not None
+    assert unchanged.token_version == user.token_version
+
+    await bus.execute(
+        ChangeOwnPassword(
+            user_id=user.id, current_password=DEFAULT_PASSWORD, new_password="new-password"
+        )
+    )
+    changed = await bus.query(GetUserById(user_id=user.id))
+    assert changed is not None
+    assert changed.token_version == user.token_version + 1
+
+
+async def test_record_successful_login(bus: Bus, make_user: UserFactory) -> None:
+    user = await make_user()
+
+    await bus.execute(RecordSuccessfulLogin(user_id=user.id))
+
+    logged_in = await bus.query(GetUserById(user_id=user.id))
+    assert logged_in is not None
+    assert logged_in.last_login_at is not None
+
+
+async def test_list_users_is_paginated(bus: Bus, make_user: UserFactory) -> None:
+    total_before = (await bus.query(ListUsers(limit=1, offset=0))).total
+    for _ in range(3):
+        await make_user()
+
+    page = await bus.query(ListUsers(limit=2, offset=0))
+
+    assert page.total == total_before + 3
+    assert len(page.items) == 2
+    assert (page.limit, page.offset) == (2, 0)

@@ -29,6 +29,7 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgresql+asyncpg://time_reporting:time_reporting@localhost:5432/time_reporting
+      JWT_SECRET_KEY: ci-only-secret-key-not-used-in-production-00000000
     steps:
       - uses: actions/checkout@v5
 
