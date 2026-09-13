@@ -4,7 +4,7 @@ import argparse
 import asyncio
 import getpass
 import sys
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 
 from pydantic import EmailStr, TypeAdapter, ValidationError
 
@@ -18,6 +18,7 @@ from time_reporting.modules.users.contracts import (
     UserDTO,
     UserRole,
 )
+from time_reporting.seed import DEFAULT_DEMO_PASSWORD, SeedReport, seed_demo_data
 
 _email_adapter: TypeAdapter[str] = TypeAdapter(EmailStr)
 
@@ -30,7 +31,8 @@ async def create_admin(bus: Bus, *, name: str, email: str, password: str) -> Use
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
-    # "create-admin" is currently the only command; the parser rejects anything else.
+    if args.command == "seed-demo":
+        return _seed_demo_command(args)
     return _create_admin_command(args)
 
 
@@ -48,6 +50,17 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="read the password from the first line of stdin instead of prompting",
     )
+
+    seed_demo_parser = commands.add_parser(
+        "seed-demo",
+        help="create demo users (one per role) and customers for local development; "
+        "existing records are left untouched",
+    )
+    seed_demo_parser.add_argument(
+        "--password-stdin",
+        action="store_true",
+        help=f"read the demo users' password from stdin instead of using {DEFAULT_DEMO_PASSWORD!r}",
+    )
     return parser
 
 
@@ -63,10 +76,8 @@ def _create_admin_command(args: argparse.Namespace) -> int:
     password = _read_password(from_stdin=args.password_stdin)
     if password is None:
         return _fail("passwords do not match")
-    if not PASSWORD_MIN_LENGTH <= len(password) <= PASSWORD_MAX_LENGTH:
-        return _fail(
-            f"password must be between {PASSWORD_MIN_LENGTH} and {PASSWORD_MAX_LENGTH} characters"
-        )
+    if not _password_length_ok(password):
+        return _fail(_PASSWORD_LENGTH_ERROR)
 
     try:
         admin = asyncio.run(_create_admin_in_database(name=name, email=email, password=password))
@@ -76,13 +87,53 @@ def _create_admin_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def _seed_demo_command(args: argparse.Namespace) -> int:
+    password = DEFAULT_DEMO_PASSWORD
+    if args.password_stdin:
+        password = sys.stdin.readline().rstrip("\r\n")
+        if not _password_length_ok(password):
+            return _fail(_PASSWORD_LENGTH_ERROR)
+
+    report = asyncio.run(_seed_demo_in_database(password=password))
+
+    for email in report.created_users:
+        print(f"Created user {email}")
+    for email in report.existing_users:
+        print(f"Skipped user {email} (already exists)")
+    for name in report.created_customers:
+        print(f"Created customer {name}")
+    for name in report.existing_customers:
+        print(f"Skipped customer {name} (already exists)")
+    if report.created_users:
+        shown = "the one read from stdin" if args.password_stdin else DEFAULT_DEMO_PASSWORD
+        print(f"New demo users sign in with password: {shown}")
+    return 0
+
+
 async def _create_admin_in_database(*, name: str, email: str, password: str) -> UserDTO:
+    return await _with_bus(lambda bus: create_admin(bus, name=name, email=email, password=password))
+
+
+async def _seed_demo_in_database(*, password: str) -> SeedReport:
+    return await _with_bus(lambda bus: seed_demo_data(bus, password=password))
+
+
+async def _with_bus[T](action: Callable[[Bus], Awaitable[T]]) -> T:
+    """Run ``action`` with a bus built the same way as for a request, then release the engine."""
     try:
         async with SessionFactory() as session:
-            bus = Bus(build_registry(), session)
-            return await create_admin(bus, name=name, email=email, password=password)
+            return await action(Bus(build_registry(), session))
     finally:
         await engine.dispose()
+
+
+_PASSWORD_LENGTH_ERROR = (
+    f"password must be between {PASSWORD_MIN_LENGTH} and {PASSWORD_MAX_LENGTH} characters"
+)
+
+
+def _password_length_ok(password: str) -> bool:
+    return PASSWORD_MIN_LENGTH <= len(password) <= PASSWORD_MAX_LENGTH
 
 
 def _read_password(*, from_stdin: bool) -> str | None:

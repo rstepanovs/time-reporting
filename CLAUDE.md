@@ -28,6 +28,7 @@ uv run mypy                                                      # type check (s
 uv run alembic -c backend/alembic.ini upgrade head               # apply migrations
 uv run alembic -c backend/alembic.ini revision --autogenerate -m "describe change"
 uv run time-reporting create-admin --email you@example.com --name "You"   # first admin account
+uv run time-reporting seed-demo                                  # demo users (password demo-password) + customers
 ```
 
 ### Frontend (run from `frontend/`)
@@ -74,7 +75,10 @@ head`) → `backend` → `frontend` (nginx, proxies `/api/` to `backend`).
 - **`migrations/env.py`** — async Alembic environment; reads the DB URL from `Settings`, not from
   `alembic.ini`, so it always agrees with the running app.
 - **`cli.py`** — the `time-reporting` console script (`[project.scripts]` in `backend/pyproject.toml`);
-  currently only `create-admin`, run through a `Bus` built the same way as in a request.
+  `create-admin` and `seed-demo`, each run through a `Bus` built the same way as in a request.
+- **`seed.py`** — demo data for local development (one user per role, sharing the password
+  `demo-password`, plus active and archived customers). Idempotent: existing emails/customer names are
+  skipped. Tests seed uniquely renamed copies, because the test database doubles as the dev database.
 
 ### Feature modules (`modules/`) and the CQRS bus
 
