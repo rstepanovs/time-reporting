@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     jwt_secret_key: SecretStr = Field(min_length=32)
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
+    # Browsers send `Secure` cookies only over HTTPS and to http://localhost; disable only when the
+    # web client is served over plain HTTP from another host.
+    auth_cookie_secure: bool = True
 
 
 @lru_cache

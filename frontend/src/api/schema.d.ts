@@ -58,6 +58,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Session
+         * @description Sign the web client in: the access token is set as an httpOnly cookie, never returned.
+         *
+         *     The JSON-only body cannot be sent cross-origin without CORS preflight, which rules out
+         *     login CSRF without requiring the CSRF header here.
+         */
+        post: operations["create_session_api_v1_auth_session_post"];
+        /**
+         * Delete Session
+         * @description Sign the web client out by clearing the session cookie. Safe to call when signed out.
+         */
+        delete: operations["delete_session_api_v1_auth_session_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/me": {
         parameters: {
             query?: never;
@@ -404,6 +431,21 @@ export interface components {
             /** New Password */
             new_password: string;
         };
+        /** SessionCreateRequest */
+        SessionCreateRequest: {
+            /** Email */
+            email: string;
+            /** Password */
+            password: string;
+        };
+        /** SessionResponse */
+        SessionResponse: {
+            /**
+             * Expires In
+             * @description Session lifetime in seconds
+             */
+            expires_in: number;
+        };
         /** TokenResponse */
         TokenResponse: {
             /** Access Token */
@@ -595,6 +637,64 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    create_session_api_v1_auth_session_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionResponse"];
+                };
+            };
+            /** @description Incorrect email or password */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_session_api_v1_auth_session_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

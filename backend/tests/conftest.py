@@ -58,7 +58,8 @@ def bus(db_session: AsyncSession) -> Bus:
 async def client(db_session: AsyncSession) -> AsyncIterator[AsyncClient]:
     app = create_app()
     app.dependency_overrides[get_session] = lambda: db_session
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    # HTTPS, so the client's cookie jar sends back the `Secure` session cookie.
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="https://test") as client:
         yield client
 
 

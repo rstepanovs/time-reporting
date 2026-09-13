@@ -1,4 +1,4 @@
-"""Route guards: resolve the caller from the bearer token and enforce roles.
+"""Route guards: resolve the caller from the access token and enforce roles.
 
 This is the auth module's public API for other modules' routers.
 """
@@ -6,16 +6,24 @@ This is the auth module's public API for other modules' routers.
 from collections.abc import Awaitable, Callable
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import APIKeyCookie, OAuth2PasswordBearer
 
 from time_reporting.api.deps import BusDep
 from time_reporting.modules.auth.exceptions import InvalidTokenError
 from time_reporting.modules.auth.jwt import decode_access_token
+from time_reporting.modules.auth.session_cookie import ACCESS_TOKEN_COOKIE, CSRF_HEADER
 from time_reporting.modules.users.contracts import GetUserById, UserDTO, UserRole
 
 # Must match the login route: api_router prefix + auth router prefix + "/login".
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
+cookie_scheme = APIKeyCookie(
+    name=ACCESS_TOKEN_COOKIE,
+    auto_error=False,
+    description="Session cookie set by POST /api/v1/auth/session for the web client.",
+)
+
+_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 
 def _unauthorized() -> HTTPException:
@@ -26,7 +34,26 @@ def _unauthorized() -> HTTPException:
     )
 
 
-async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], bus: BusDep) -> UserDTO:
+def _resolve_token(request: Request, bearer_token: str | None, cookie_token: str | None) -> str:
+    # An explicit Authorization header wins over a cookie the browser may attach on its own.
+    if bearer_token is not None:
+        return bearer_token
+    if cookie_token is None:
+        raise _unauthorized()
+    if request.method not in _SAFE_METHODS and CSRF_HEADER not in request.headers:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail=f"Missing {CSRF_HEADER} header"
+        )
+    return cookie_token
+
+
+async def get_current_user(
+    request: Request,
+    bearer_token: Annotated[str | None, Depends(oauth2_scheme)],
+    cookie_token: Annotated[str | None, Depends(cookie_scheme)],
+    bus: BusDep,
+) -> UserDTO:
+    token = _resolve_token(request, bearer_token, cookie_token)
     try:
         payload = decode_access_token(token)
     except InvalidTokenError as exc:

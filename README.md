@@ -38,6 +38,7 @@ Time tracking with subsequent billing. Monorepo containing a Python API and a Re
     ├── vite.config.ts      # dev server proxies /api to the backend
     └── src/
         ├── api/            # typed client, generated schema, query client
+        ├── auth/           # session (httpOnly cookie), sign-in / sign-out hooks, route guard
         ├── components/
         ├── pages/
         └── test/
