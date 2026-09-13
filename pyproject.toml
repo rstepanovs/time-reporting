@@ -1,0 +1,67 @@
+# Workspace root: not a package itself, only ties the Python members together
+# and holds shared tooling configuration.
+[project]
+name = "time-reporting"
+version = "0.1.0"
+description = "Time tracking and billing (monorepo root)"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = ["time-reporting-backend"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.16",
+    "mypy>=2.3",
+    "pytest>=9.1",
+    "pytest-asyncio>=1.4",
+    "httpx>=0.28.1",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["backend"]
+
+[tool.uv.sources]
+time-reporting-backend = { workspace = true }
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["backend/src", "backend/tests"]
+extend-exclude = ["backend/migrations/versions"]
+
+[tool.ruff.lint]
+select = [
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "F",     # pyflakes
+    "I",     # isort
+    "N",     # pep8-naming
+    "UP",    # pyupgrade
+    "B",     # flake8-bugbear
+    "SIM",   # flake8-simplify
+    "ASYNC", # flake8-async
+    "RUF",   # ruff-specific rules
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["time_reporting"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+files = ["backend/src", "backend/tests"]
+mypy_path = "backend/src"
+plugins = ["pydantic.mypy"]
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

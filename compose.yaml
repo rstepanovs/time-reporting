@@ -1,0 +1,54 @@
+name: time-reporting
+
+x-backend-env: &backend-env
+  DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-time_reporting}:${POSTGRES_PASSWORD:-time_reporting}@db:5432/${POSTGRES_DB:-time_reporting}
+  CORS_ORIGINS: '["http://localhost:8080"]'
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-time_reporting}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-time_reporting}
+      POSTGRES_DB: ${POSTGRES_DB:-time_reporting}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["alembic", "-c", "backend/alembic.ini", "upgrade", "head"]
+    environment: *backend-env
+    depends_on:
+      db:
+        condition: service_healthy
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment: *backend-env
+    ports:
+      - "8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  frontend:
+    build:
+      context: frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+volumes:
+  db-data:
