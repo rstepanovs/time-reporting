@@ -341,6 +341,127 @@ export interface paths {
         patch: operations["update_project_billing_item_api_v1_projects__project_id__billing_items__item_id__patch"];
         trace?: never;
     };
+    "/api/v1/calendar/days": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Calendar Days */
+        get: operations["get_calendar_days_api_v1_calendar_days_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/calendar/non-working-days": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Non Working Days */
+        get: operations["list_non_working_days_api_v1_calendar_non_working_days_get"];
+        put?: never;
+        /** Add Non Working Day */
+        post: operations["add_non_working_day_api_v1_calendar_non_working_days_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/calendar/non-working-days/{non_working_day_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Non Working Day */
+        delete: operations["delete_non_working_day_api_v1_calendar_non_working_days__non_working_day_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Non Working Day */
+        patch: operations["update_non_working_day_api_v1_calendar_non_working_days__non_working_day_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/calendar/non-working-days/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import Public Holidays */
+        post: operations["import_public_holidays_api_v1_calendar_non_working_days_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/timesheets/weeks/{week_start}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Timesheet Week */
+        get: operations["get_timesheet_week_api_v1_timesheets_weeks__week_start__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/timesheets/weeks/{week_start}/entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Save Timesheet Week */
+        put: operations["save_timesheet_week_api_v1_timesheets_weeks__week_start__entries_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/timesheets/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Timesheet Options */
+        get: operations["list_timesheet_options_api_v1_timesheets_options_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/users/{user_id}/removal-impact": {
         parameters: {
             query?: never;
@@ -583,6 +704,17 @@ export interface components {
              */
             client_secret?: string | null;
         };
+        /** CalendarDayResponse */
+        CalendarDayResponse: {
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Is Weekend */
+            is_weekend: boolean;
+            non_working_day: components["schemas"]["NonWorkingDayResponse"] | null;
+        };
         /** CustomerCreateRequest */
         CustomerCreateRequest: {
             /** Name */
@@ -695,6 +827,58 @@ export interface components {
              * @constant
              */
             status: "ok";
+        };
+        /** ImportHolidaysRequest */
+        ImportHolidaysRequest: {
+            /** Year */
+            year: number;
+        };
+        /** ImportHolidaysResponse */
+        ImportHolidaysResponse: {
+            /** Added */
+            added: number;
+        };
+        /** NonWorkingDayCreateRequest */
+        NonWorkingDayCreateRequest: {
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Name */
+            name: string;
+            kind: components["schemas"]["NonWorkingDayKind"];
+        };
+        /**
+         * NonWorkingDayKind
+         * @enum {string}
+         */
+        NonWorkingDayKind: "public_holiday" | "bridge_day" | "company_day_off";
+        /** NonWorkingDayResponse */
+        NonWorkingDayResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Name */
+            name: string;
+            kind: components["schemas"]["NonWorkingDayKind"];
+        };
+        /**
+         * NonWorkingDayUpdateRequest
+         * @description Partial update: omitted fields are left unchanged. ``kind`` is immutable.
+         */
+        NonWorkingDayUpdateRequest: {
+            /** Day */
+            day?: string | null;
+            /** Name */
+            name?: string | null;
         };
         /** PasswordChangeRequest */
         PasswordChangeRequest: {
@@ -852,10 +1036,10 @@ export interface components {
         };
         /**
          * RemovalBlockerKind
-         * @description What prevents a permanent delete. More kinds arrive with time entries and invoices.
+         * @description What prevents a permanent delete. More kinds arrive with invoices.
          * @enum {string}
          */
-        RemovalBlockerKind: "self" | "projects";
+        RemovalBlockerKind: "self" | "projects" | "time_entries";
         /** RemovalCountResponse */
         RemovalCountResponse: {
             /** Kind */
@@ -889,6 +1073,11 @@ export interface components {
         RemovalResponse: {
             outcome: components["schemas"]["RemovalOutcome"];
         };
+        /** SaveTimesheetWeekRequest */
+        SaveTimesheetWeekRequest: {
+            /** Changes */
+            changes: components["schemas"]["TimeEntryChangeRequest"][];
+        };
         /** SessionCreateRequest */
         SessionCreateRequest: {
             /** Email */
@@ -903,6 +1092,132 @@ export interface components {
              * @description Session lifetime in seconds
              */
             expires_in: number;
+        };
+        /**
+         * TimeEntryChangeRequest
+         * @description One cell's new value. Omit ``quantity`` (or send it as ``null``) to delete the entry.
+         */
+        TimeEntryChangeRequest: {
+            /**
+             * Billing Item Id
+             * Format: uuid
+             */
+            billing_item_id: string;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Quantity */
+            quantity?: number | string | null;
+            /** Note */
+            note?: string | null;
+        };
+        /** TimeEntryResponse */
+        TimeEntryResponse: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Quantity */
+            quantity: string;
+            /** Note */
+            note: string | null;
+        };
+        /** TimesheetBillingItemResponse */
+        TimesheetBillingItemResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            preset: components["schemas"]["BillingItemPreset"] | null;
+            /** Name */
+            name: string;
+            unit: components["schemas"]["BillingUnit"];
+            /** Unit Rate */
+            unit_rate: string | null;
+            /** Markup Percent */
+            markup_percent: string | null;
+            /** Position */
+            position: number;
+            /** Is Active */
+            is_active: boolean;
+        };
+        /** TimesheetCustomerResponse */
+        TimesheetCustomerResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Currency */
+            currency: string;
+        };
+        /** TimesheetOptionResponse */
+        TimesheetOptionResponse: {
+            project: components["schemas"]["TimesheetProjectResponse"];
+            /** Billing Items */
+            billing_items: components["schemas"]["TimesheetBillingItemResponse"][];
+        };
+        /** TimesheetProjectResponse */
+        TimesheetProjectResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            customer: components["schemas"]["TimesheetCustomerResponse"];
+            /** Name */
+            name: string;
+            /** Is Active */
+            is_active: boolean;
+        };
+        /** TimesheetRowResponse */
+        TimesheetRowResponse: {
+            project: components["schemas"]["TimesheetProjectResponse"];
+            billing_item: components["schemas"]["TimesheetBillingItemResponse"];
+            /** Is Open */
+            is_open: boolean;
+            /** Entries */
+            entries: components["schemas"]["TimeEntryResponse"][];
+        };
+        /** TimesheetUserResponse */
+        TimesheetUserResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Email */
+            email: string;
+        };
+        /** TimesheetWeekResponse */
+        TimesheetWeekResponse: {
+            user: components["schemas"]["TimesheetUserResponse"];
+            /**
+             * Week Start
+             * Format: date
+             */
+            week_start: string;
+            /** Can Edit */
+            can_edit: boolean;
+            /** Days */
+            days: components["schemas"]["CalendarDayResponse"][];
+            /** Rows */
+            rows: components["schemas"]["TimesheetRowResponse"][];
         };
         /** TokenResponse */
         TokenResponse: {
@@ -2132,6 +2447,343 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_calendar_days_api_v1_calendar_days_get: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarDayResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_non_working_days_api_v1_calendar_non_working_days_get: {
+        parameters: {
+            query?: {
+                year?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NonWorkingDayResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_non_working_day_api_v1_calendar_non_working_days_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NonWorkingDayCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NonWorkingDayResponse"];
+                };
+            };
+            /** @description A non-working day already exists on this date */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_non_working_day_api_v1_calendar_non_working_days__non_working_day_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                non_working_day_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Non-working day not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_non_working_day_api_v1_calendar_non_working_days__non_working_day_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                non_working_day_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NonWorkingDayUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NonWorkingDayResponse"];
+                };
+            };
+            /** @description Non-working day not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A non-working day already exists on this date */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_public_holidays_api_v1_calendar_non_working_days_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportHolidaysRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportHolidaysResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_timesheet_week_api_v1_timesheets_weeks__week_start__get: {
+        parameters: {
+            query?: {
+                user_id?: string | null;
+            };
+            header?: never;
+            path: {
+                week_start: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimesheetWeekResponse"];
+                };
+            };
+            /** @description The week/entries violate a timesheet rule */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_timesheet_week_api_v1_timesheets_weeks__week_start__entries_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                week_start: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveTimesheetWeekRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimesheetWeekResponse"];
+                };
+            };
+            /** @description The week/entries violate a timesheet rule */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_timesheet_options_api_v1_timesheets_options_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimesheetOptionResponse"][];
                 };
             };
         };
