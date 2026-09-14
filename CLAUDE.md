@@ -139,6 +139,16 @@ customer name, a member's name and email) is fetched via batch queries — `GetC
 importing those modules' `models`. `DeleteProject` (permanent) cascades to its members (FK
 `ON DELETE CASCADE`).
 
+The projects module also owns `ProjectBillingItem`: the positions a project's invoices will be made
+of (normal/overtime/travel hours, per diems, purchasing/other expenses), each with an immutable
+`unit` (`hour`, `day` or `amount`) and, depending on that unit, a `unit_rate` or a `markup_percent`
+in the customer's currency. Creating a project creates its six defaults (`DEFAULT_BILLING_ITEMS`,
+unpriced); further items are added directly to one project (there is no catalog shared across
+projects). Access mirrors projects: any authenticated user reads them, `ManagerDep` adds/edits/
+archives/restores, and permanently deleting one — blocked by a foreign key once time entries
+reference it, reported as `BillingItemInUseError` — is admin only, like every other permanent
+delete. `DeleteProject` cascades to its billing items as well as its members.
+
 The **users** module also exposes `GET /users/directory` (`ManagerDep`): a minimal, active-only,
 search-filtered user list for pickers (e.g. adding a project member), since `GET /users` itself is
 admin-only. Both `users.ListUsers` and `customers.ListCustomers`-style listing now support this
@@ -158,9 +168,11 @@ deleting a user first removes its project memberships (`RemoveUserFromAllProject
 `ON DELETE RESTRICT` foreign key doesn't get in the way, and deleting a project cascades to its
 members. `GetUserRemovalImpact` / `GetCustomerRemovalImpact` / `GetProjectRemovalImpact` report what
 a permanent delete would affect (`blockers`, `effects`) before the user confirms; they're built only
-from each module's own contract queries (`ListProjects`, `ListProjectMembers`), never new
-cross-module queries. A same-outer-command failure (e.g. the delete itself fails after memberships
-were already removed) rolls back the whole `RemoveUser` command, per the bus's transaction rule.
+from each module's own contract queries (`ListProjects`, `ListProjectMembers`,
+`ListProjectBillingItems`), never new cross-module queries. A project's impact always lists a
+`project_billing_items` effect, since every project has at least its six defaults. A
+same-outer-command failure (e.g. the delete itself fails after memberships were already removed)
+rolls back the whole `RemoveUser` command, per the bus's transaction rule.
 Archiving stays reachable directly through the owning module's existing `PATCH` endpoint too
 (`ManagerDep`); only the permanent-delete path is admin-only.
 
@@ -191,13 +203,19 @@ owned by a module.
   pages use; elsewhere (e.g. the projects customer picker) only the read-only `useCustomers` is
   needed.
 - **`projects/`** — `api.ts` (typed calls for all `/projects` endpoints plus `ProjectConflictError`
-  (409) / `ProjectRuleError` (400, backend `detail` as the message) / `ProjectNotFoundError` (404)),
-  `hooks.ts` (`projectKeys` + `useProjects`/`useProject`/`useProjectMembers` queries and
-  `useCreateProject`/`useUpdateProject`/`useAddProjectMember`/`useRemoveProjectMember` mutations, all
-  invalidating `projectKeys.all` on success), and `ProjectFormModal.tsx` (shared create/edit form used
+  (409) / `ProjectRuleError` (400, backend `detail` as the message) / `ProjectNotFoundError` (404),
+  and for billing items `BillingItemConflictError` (409 name) / `BillingItemInUseError` (409 on
+  delete, a different meaning than a project's own 409, mapped separately)),
+  `hooks.ts` (`projectKeys` + `useProjects`/`useProject`/`useProjectMembers`/`useProjectBillingItems`
+  queries and `useCreateProject`/`useUpdateProject`/`useAddProjectMember`/`useRemoveProjectMember`/
+  `useAddProjectBillingItem`/`useUpdateProjectBillingItem`/`useDeleteProjectBillingItem` mutations,
+  all invalidating `projectKeys.all` on success), `ProjectFormModal.tsx` (shared create/edit form used
   by `pages/ProjectsPage.tsx`, `pages/ProjectDetailsPage.tsx` and `pages/admin/AdminProjectsPage.tsx`;
   an optional `onCreated` callback lets the admin page stay put instead of navigating to the new
-  project).
+  project), and `BillingItemFormModal.tsx` (create/edit a billing item; the unit is locked once
+  editing, and its rate/markup field swaps by unit). `pages/ProjectDetailsPage.tsx`'s "Billing items"
+  section is readable by anyone, editable by managers, and offers "Delete permanently" to admins
+  only — the one write in this router that isn't `ManagerDep`.
 - **`admin/`** — the shared archive-or-delete UI for all three entities: `api.ts`
   (`getRemovalImpact`/`removeEntity` against `/api/v1/admin/...`, plus `RemovalBlockedError` (409,
   carries `blockers`), `RemovalRuleError` (400) and `RemovalNotFoundError` (404)), `hooks.ts`
