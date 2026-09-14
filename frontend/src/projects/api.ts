@@ -178,8 +178,8 @@ export async function addProjectBillingItem(
     name: string;
     unit: BillingUnit;
     description?: string | null;
-    unit_rate?: string | null;
-    markup_percent?: string | null;
+    unit_rate?: number | string | null;
+    markup_percent?: number | string | null;
   },
 ): Promise<BillingItem> {
   const { data, response } = await api.POST("/api/v1/projects/{project_id}/billing-items", {
@@ -196,8 +196,8 @@ export async function updateProjectBillingItem(
   body: {
     name?: string;
     description?: string | null;
-    unit_rate?: string | null;
-    markup_percent?: string | null;
+    unit_rate?: number | string | null;
+    markup_percent?: number | string | null;
     is_active?: boolean;
   },
 ): Promise<BillingItem> {

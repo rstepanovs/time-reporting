@@ -216,6 +216,17 @@ Dependency order: **B1 → B2 → B3 → B4** → **F1 → F2** → **D1**.
 - Tests (`ProjectDetailsPage.test.tsx`): items rendered with formatted prices; worker sees no
   actions; manager adds/edits (rate field swaps with the unit); archived toggle; admin-only delete;
   conflict error shown in the form.
+- The "Show archived" switch is visible to everyone (reading is unrestricted), not just managers —
+  only "Add billing item" and the row action menu are manager/admin-gated.
+- A per-row menu action that opens its own modal (delete) has to keep that modal's state *outside*
+  `<Menu.Dropdown>`: Mantine unmounts the dropdown's contents as soon as a `Menu.Item` is clicked,
+  which tore down an in-dropdown delete-confirmation component before its modal ever rendered.
+  `BillingItemRowActions` lifts both the edit and delete modals to itself, matching the existing
+  `UserRowActions` pattern in `AdminUsersPage.tsx` — this cost a test failure to discover.
+- `test/setup.ts` gained an `Element.prototype.scrollIntoView` stub: Mantine's non-searchable
+  `Select` (the billing item unit) invokes it while scrolling the keyboard cursor into view, which
+  jsdom doesn't implement and previously went untriggered by this suite's other, searchable
+  Selects.
 
 ### D1. Docs and final verification
 

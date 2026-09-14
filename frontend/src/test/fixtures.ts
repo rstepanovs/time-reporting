@@ -1,6 +1,6 @@
 import type { CurrentUser } from "@/auth/api";
 import type { Customer } from "@/customers/api";
-import type { Project, ProjectMember } from "@/projects/api";
+import type { BillingItem, Project, ProjectMember } from "@/projects/api";
 
 export const testUser: CurrentUser = {
   id: "3f0c8a52-6a55-4f5e-9d0e-6a1c1f1f2b10",
@@ -62,6 +62,36 @@ export const testProject: Project = {
   },
   name: "Website Revamp",
   description: "Redesign the public marketing site.",
+  is_active: true,
+  created_at: "2026-02-01T08:00:00Z",
+  updated_at: "2026-02-01T08:00:00Z",
+};
+
+export const testBillingItem: BillingItem = {
+  id: "b1a1a1a1-1111-1111-1111-111111111111",
+  project_id: testProject.id,
+  preset: "normal_hours",
+  name: "Normal working hours",
+  description: null,
+  unit: "hour",
+  unit_rate: "90.00",
+  markup_percent: null,
+  position: 1,
+  is_active: true,
+  created_at: "2026-02-01T08:00:00Z",
+  updated_at: "2026-02-01T08:00:00Z",
+};
+
+export const testCustomBillingItem: BillingItem = {
+  id: "b2a2a2a2-2222-2222-2222-222222222222",
+  project_id: testProject.id,
+  preset: null,
+  name: "On-call standby",
+  description: "Weekend on-call",
+  unit: "amount",
+  unit_rate: null,
+  markup_percent: "10.00",
+  position: 7,
   is_active: true,
   created_at: "2026-02-01T08:00:00Z",
   updated_at: "2026-02-01T08:00:00Z",
