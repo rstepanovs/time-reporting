@@ -66,3 +66,14 @@ class UserPageResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class UserSummaryResponse(BaseModel):
+    """Minimal user fields for pickers (e.g. the project member directory)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+    email: str
+    role: UserRole

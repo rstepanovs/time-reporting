@@ -1,5 +1,6 @@
 import os
 from collections.abc import AsyncIterator
+from uuid import UUID
 
 # Settings are read at import time (module-level get_settings() calls, e.g. db/session.py), so the
 # secret must be set before anything under time_reporting is imported.
@@ -16,6 +17,7 @@ from support import (
     DEFAULT_PASSWORD,
     AuthHeaders,
     CustomerFactory,
+    ProjectFactory,
     UserFactory,
 )
 from time_reporting.core.config import get_settings
@@ -24,6 +26,7 @@ from time_reporting.db.session import get_session
 from time_reporting.main import create_app
 from time_reporting.modules.auth.jwt import create_access_token
 from time_reporting.modules.customers.contracts import CreateCustomer, CustomerDTO
+from time_reporting.modules.projects.contracts import CreateProject, ProjectDTO
 from time_reporting.modules.registry import build_registry
 from time_reporting.modules.users.contracts import CreateUser, UserDTO, UserRole
 
@@ -101,6 +104,31 @@ def make_customer(bus: Bus) -> CustomerFactory:
                 billing_address=DEFAULT_BILLING_ADDRESS,
                 billing_period=DEFAULT_BILLING_PERIOD,
                 currency="EUR",
+            )
+        )
+
+    return factory
+
+
+@pytest.fixture
+def make_project(bus: Bus, make_customer: CustomerFactory) -> ProjectFactory:
+    created = 0
+
+    async def factory(
+        *,
+        customer_id: UUID | None = None,
+        name: str | None = None,
+        description: str | None = None,
+    ) -> ProjectDTO:
+        nonlocal created
+        created += 1
+        if customer_id is None:
+            customer_id = (await make_customer()).id
+        return await bus.execute(
+            CreateProject(
+                customer_id=customer_id,
+                name=name or f"Project {created}",
+                description=description,
             )
         )
 

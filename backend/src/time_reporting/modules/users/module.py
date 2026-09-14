@@ -6,6 +6,7 @@ from time_reporting.modules.users.contracts import (
     CreateUser,
     GetUserById,
     GetUserCredentialsByEmail,
+    GetUsersByIds,
     ListUsers,
     RecordSuccessfulLogin,
     ResetUserPassword,
@@ -16,6 +17,7 @@ from time_reporting.modules.users.handlers import (
     CreateUserHandler,
     GetUserByIdHandler,
     GetUserCredentialsByEmailHandler,
+    GetUsersByIdsHandler,
     ListUsersHandler,
     RecordSuccessfulLoginHandler,
     ResetUserPasswordHandler,
@@ -25,6 +27,7 @@ from time_reporting.modules.users.handlers import (
 
 def register(registry: HandlerRegistry) -> None:
     registry.query(GetUserById, GetUserByIdHandler)
+    registry.query(GetUsersByIds, GetUsersByIdsHandler)
     registry.query(GetUserCredentialsByEmail, GetUserCredentialsByEmailHandler)
     registry.query(ListUsers, ListUsersHandler)
 

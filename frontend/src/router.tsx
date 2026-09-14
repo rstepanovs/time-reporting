@@ -6,6 +6,8 @@ import { ChangePasswordPage } from "@/pages/ChangePasswordPage";
 import { HomePage } from "@/pages/HomePage";
 import { LoginPage } from "@/pages/LoginPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
+import { ProjectDetailsPage } from "@/pages/ProjectDetailsPage";
+import { ProjectsPage } from "@/pages/ProjectsPage";
 
 export const routes: RouteObject[] = [
   { path: "/login", element: <LoginPage /> },
@@ -17,6 +19,8 @@ export const routes: RouteObject[] = [
         element: <AppLayout />,
         children: [
           { index: true, element: <HomePage /> },
+          { path: "projects", element: <ProjectsPage /> },
+          { path: "projects/:projectId", element: <ProjectDetailsPage /> },
           { path: "account/password", element: <ChangePasswordPage /> },
           { path: "*", element: <NotFoundPage /> },
         ],

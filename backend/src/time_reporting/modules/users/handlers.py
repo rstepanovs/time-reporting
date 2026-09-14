@@ -9,6 +9,7 @@ from time_reporting.modules.users.contracts import (
     CreateUser,
     GetUserById,
     GetUserCredentialsByEmail,
+    GetUsersByIds,
     ListUsers,
     RecordSuccessfulLogin,
     ResetUserPassword,
@@ -63,12 +64,25 @@ class GetUserCredentialsByEmailHandler(_QueryHandler):
         )
 
 
+class GetUsersByIdsHandler(_QueryHandler):
+    async def handle(self, query: GetUsersByIds) -> tuple[UserDTO, ...]:
+        users = await self._users.get_by_ids(query.user_ids)
+        return tuple(to_dto(user) for user in users)
+
+
 class ListUsersHandler(_QueryHandler):
     async def handle(self, query: ListUsers) -> UserPageDTO:
-        users = await self._users.get_page(limit=query.limit, offset=query.offset)
+        users = await self._users.get_page(
+            limit=query.limit,
+            offset=query.offset,
+            search=query.search,
+            include_inactive=query.include_inactive,
+        )
         return UserPageDTO(
             items=tuple(to_dto(user) for user in users),
-            total=await self._users.count(),
+            total=await self._users.count(
+                search=query.search, include_inactive=query.include_inactive
+            ),
             limit=query.limit,
             offset=query.offset,
         )

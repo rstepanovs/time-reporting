@@ -61,6 +61,13 @@ class GetUserById(Query[UserDTO | None]):
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class GetUsersByIds(Query[tuple[UserDTO, ...]]):
+    """Users matching ``user_ids``, ordered by name then id. Unknown ids are silently omitted."""
+
+    user_ids: frozenset[UUID]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class GetUserCredentialsByEmail(Query[UserCredentialsDTO | None]):
     email: str
 
@@ -69,6 +76,9 @@ class GetUserCredentialsByEmail(Query[UserCredentialsDTO | None]):
 class ListUsers(Query[UserPageDTO]):
     limit: int
     offset: int
+    # Case-insensitive substring match against name or email.
+    search: str | None = None
+    include_inactive: bool = True
 
 
 # --- Commands ---

@@ -5,3 +5,8 @@ export const roleLabels: Record<UserRole, string> = {
   project_manager: "Project manager",
   worker: "Worker",
 };
+
+/** Administrators and project managers can create/edit customers, projects and their members. */
+export function canManage(role: UserRole): boolean {
+  return role === "admin" || role === "project_manager";
+}

@@ -104,6 +104,10 @@ def _seed_demo_command(args: argparse.Namespace) -> int:
         print(f"Created customer {name}")
     for name in report.existing_customers:
         print(f"Skipped customer {name} (already exists)")
+    for name in report.created_projects:
+        print(f"Created project {name}")
+    for name in report.existing_projects:
+        print(f"Skipped project {name} (already exists)")
     if report.created_users:
         shown = "the one read from stdin" if args.password_stdin else DEFAULT_DEMO_PASSWORD
         print(f"New demo users sign in with password: {shown}")

@@ -1,5 +1,18 @@
-import { AppShell, Avatar, Badge, Box, Group, Menu, Text, Title, UnstyledButton } from "@mantine/core";
-import { Link, Outlet } from "react-router";
+import {
+  AppShell,
+  Avatar,
+  Badge,
+  Box,
+  Burger,
+  Group,
+  Menu,
+  NavLink,
+  Text,
+  Title,
+  UnstyledButton,
+} from "@mantine/core";
+import { useDisclosure } from "@mantine/hooks";
+import { Link, Outlet, useLocation } from "react-router";
 
 import { useAuthenticatedUser, useSignOut } from "@/auth/hooks";
 import { roleLabels } from "@/auth/roles";
@@ -44,15 +57,52 @@ function AccountMenu() {
   );
 }
 
-export function AppLayout() {
+const NAV_ITEMS = [
+  { to: "/", label: "Home" },
+  { to: "/projects", label: "Projects" },
+];
+
+function Navigation({ onNavigate }: { onNavigate?: () => void }) {
+  const location = useLocation();
   return (
-    <AppShell header={{ height: 56 }} padding="md">
+    <>
+      {NAV_ITEMS.map((item) => (
+        <NavLink
+          key={item.to}
+          component={Link}
+          to={item.to}
+          label={item.label}
+          active={
+            item.to === "/" ? location.pathname === "/" : location.pathname.startsWith(item.to)
+          }
+          onClick={onNavigate}
+        />
+      ))}
+    </>
+  );
+}
+
+export function AppLayout() {
+  const [mobileOpened, { toggle: toggleMobile, close: closeMobile }] = useDisclosure();
+
+  return (
+    <AppShell
+      header={{ height: 56 }}
+      navbar={{ width: 220, breakpoint: "sm", collapsed: { mobile: !mobileOpened } }}
+      padding="md"
+    >
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between">
-          <Title order={3}>Time Reporting</Title>
+          <Group gap="sm">
+            <Burger opened={mobileOpened} onClick={toggleMobile} hiddenFrom="sm" size="sm" />
+            <Title order={3}>Time Reporting</Title>
+          </Group>
           <AccountMenu />
         </Group>
       </AppShell.Header>
+      <AppShell.Navbar p="sm">
+        <Navigation onNavigate={closeMobile} />
+      </AppShell.Navbar>
       <AppShell.Main>
         <Outlet />
       </AppShell.Main>

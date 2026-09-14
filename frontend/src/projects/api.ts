@@ -1,0 +1,124 @@
+import { api } from "@/api/client";
+import { ApiError } from "@/api/errors";
+import type { components } from "@/api/schema";
+
+export type Project = components["schemas"]["ProjectResponse"];
+export type ProjectPage = components["schemas"]["ProjectPageResponse"];
+export type ProjectMember = components["schemas"]["ProjectMemberResponse"];
+
+/** A project name is already taken for that customer (409). */
+export class ProjectConflictError extends Error {
+  constructor() {
+    super("A project with this name already exists for this customer");
+    this.name = "ProjectConflictError";
+  }
+}
+
+/** A business rule was violated, e.g. the customer is archived (400). The backend's message. */
+export class ProjectRuleError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ProjectRuleError";
+  }
+}
+
+/** The project (or, for member operations, the membership) was not found (404). */
+export class ProjectNotFoundError extends Error {
+  constructor() {
+    super("Project not found");
+    this.name = "ProjectNotFoundError";
+  }
+}
+
+async function ruleAwareError(response: Response): Promise<Error> {
+  if (response.status === 409) return new ProjectConflictError();
+  if (response.status === 404) return new ProjectNotFoundError();
+  if (response.status === 400) {
+    const body = (await response.clone().json().catch(() => null)) as { detail?: string } | null;
+    return new ProjectRuleError(body?.detail ?? "This action is not allowed");
+  }
+  return new ApiError(response);
+}
+
+export async function listProjects(params: {
+  limit?: number;
+  offset?: number;
+  includeInactive?: boolean;
+  customerId?: string;
+  memberId?: string;
+  search?: string;
+}): Promise<ProjectPage> {
+  const { data, response } = await api.GET("/api/v1/projects", {
+    params: {
+      query: {
+        limit: params.limit,
+        offset: params.offset,
+        include_inactive: params.includeInactive,
+        customer_id: params.customerId,
+        member_id: params.memberId,
+        search: params.search,
+      },
+    },
+  });
+  if (!data) throw new ApiError(response);
+  return data;
+}
+
+export async function getProject(projectId: string): Promise<Project> {
+  const { data, response } = await api.GET("/api/v1/projects/{project_id}", {
+    params: { path: { project_id: projectId } },
+  });
+  if (!data) throw await ruleAwareError(response);
+  return data;
+}
+
+export async function createProject(body: {
+  customerId: string;
+  name: string;
+  description?: string | null;
+}): Promise<Project> {
+  const { data, response } = await api.POST("/api/v1/projects", {
+    body: { customer_id: body.customerId, name: body.name, description: body.description },
+  });
+  if (!data) throw await ruleAwareError(response);
+  return data;
+}
+
+export async function updateProject(
+  projectId: string,
+  body: { name?: string; description?: string | null; is_active?: boolean },
+): Promise<Project> {
+  const { data, response } = await api.PATCH("/api/v1/projects/{project_id}", {
+    params: { path: { project_id: projectId } },
+    body,
+  });
+  if (!data) throw await ruleAwareError(response);
+  return data;
+}
+
+export async function listProjectMembers(projectId: string): Promise<ProjectMember[]> {
+  const { data, response } = await api.GET("/api/v1/projects/{project_id}/members", {
+    params: { path: { project_id: projectId } },
+  });
+  if (!data) throw await ruleAwareError(response);
+  return data;
+}
+
+export async function addProjectMember(
+  projectId: string,
+  userId: string,
+): Promise<ProjectMember> {
+  const { data, response } = await api.POST("/api/v1/projects/{project_id}/members", {
+    params: { path: { project_id: projectId } },
+    body: { user_id: userId },
+  });
+  if (!data) throw await ruleAwareError(response);
+  return data;
+}
+
+export async function removeProjectMember(projectId: string, userId: string): Promise<void> {
+  const { response } = await api.DELETE("/api/v1/projects/{project_id}/members/{user_id}", {
+    params: { path: { project_id: projectId, user_id: userId } },
+  });
+  if (!response.ok) throw await ruleAwareError(response);
+}

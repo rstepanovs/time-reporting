@@ -6,8 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Time tracking with subsequent billing. Monorepo containing a Python API (`backend/`) and a React web
 client (`frontend/`). Infrastructure, a health-check endpoint, and user accounts with JWT
-authentication exist, as do customers; the remaining domain models (projects, time entries,
-invoices) do not yet.
+authentication exist, as do customers and their projects; the remaining domain models (time
+entries, invoices) do not yet.
 
 ## Commands
 
@@ -77,8 +77,10 @@ head`) → `backend` → `frontend` (nginx, proxies `/api/` to `backend`).
 - **`cli.py`** — the `time-reporting` console script (`[project.scripts]` in `backend/pyproject.toml`);
   `create-admin` and `seed-demo`, each run through a `Bus` built the same way as in a request.
 - **`seed.py`** — demo data for local development (one user per role, sharing the password
-  `demo-password`, plus active and archived customers). Idempotent: existing emails/customer names are
-  skipped. Tests seed uniquely renamed copies, because the test database doubles as the dev database.
+  `demo-password`, active and archived customers, and a few projects with members per customer).
+  Idempotent: existing emails/customer or project names are skipped. Projects are created for each
+  customer before it is archived (creating a project requires an active customer); tests seed
+  uniquely renamed copies, because the test database doubles as the dev database.
 
 ### Feature modules (`modules/`) and the CQRS bus
 
@@ -120,8 +122,29 @@ authenticated user can read them; writes require `ManagerDep` (`admin` or `proje
 `UpdateCustomer` treats `None` as "unchanged"; optional text fields are cleared by naming them in
 `clear_fields`, which the router fills from fields sent as JSON `null`.
 
-`core/passwords.py` (Argon2id via `pwdlib`, hashing off the event loop in a thread) and
-`db/mixins.py:TimestampMixin` (`created_at`/`updated_at`) are shared kernel, not owned by a module.
+The **projects** module (`modules/projects/`) owns the `Project` entity (belongs to one `Customer`,
+`customer_id` immutable after creation) and `ProjectMember`, a plain user↔project link with no
+per-project role. Project names are unique per customer, not globally. Like customers, projects are
+never deleted, only archived (`is_active`); creating a project, or reactivating one, requires its
+customer to currently be active, but archiving a customer does not cascade to its projects. Only
+active users can be added as members, and only to an active project; a member later deactivated
+stays listed (with `is_active=false`) rather than disappearing. Access follows customers: any
+authenticated user can read projects and members, `ManagerDep` is required to create/update projects
+and to add/remove members. `ListProjects` filters by `customer_id`, `member_id` and a `search`
+substring against the name. Cross-module display data (a project's customer name, a member's name
+and email) is fetched via batch queries — `GetCustomersByIds` / `GetUsersByIds` in the respective
+modules' `contracts.py` — rather than joining across modules; `Project`/`ProjectMember` reference
+`customers.id` / `users.id` by table name only, never by importing those modules' `models`.
+
+The **users** module also exposes `GET /users/directory` (`ManagerDep`): a minimal, active-only,
+search-filtered user list for pickers (e.g. adding a project member), since `GET /users` itself is
+admin-only. Both `users.ListUsers` and `customers.ListCustomers`-style listing now support this
+through repository-level search helpers; `db/queries.py:escape_like` is the shared kernel helper for
+building a literal (non-wildcard) `ILIKE` pattern from user input, reused by both modules.
+
+`core/passwords.py` (Argon2id via `pwdlib`, hashing off the event loop in a thread), `db/queries.py`
+(`escape_like`) and `db/mixins.py:TimestampMixin` (`created_at`/`updated_at`) are shared kernel, not
+owned by a module.
 
 ### Frontend (`frontend/src/`)
 
@@ -136,14 +159,27 @@ authenticated user can read them; writes require `ManagerDep` (`admin` or `proje
   and `RequireAuth.tsx` (route guard redirecting to `/login` with the page to return to). Signing in or
   out drops every cached query, so no data leaks between users; explicit sign-out and password change
   navigate to `/login` with `flushSync`, so the next sign-in does not return to the page left behind.
+- **`customers/api.ts`** / **`users/api.ts`** — thin typed wrappers for the read-only endpoints those
+  modules need on the frontend (`listCustomers`, `searchUserDirectory`); `customers/hooks.ts` /
+  `users/hooks.ts` wrap them as TanStack Query hooks (`useCustomers`, `useUserDirectory`).
+- **`projects/`** — `api.ts` (typed calls for all `/projects` endpoints plus `ProjectConflictError`
+  (409) / `ProjectRuleError` (400, backend `detail` as the message) / `ProjectNotFoundError` (404)),
+  `hooks.ts` (`projectKeys` + `useProjects`/`useProject`/`useProjectMembers` queries and
+  `useCreateProject`/`useUpdateProject`/`useAddProjectMember`/`useRemoveProjectMember` mutations, all
+  invalidating `projectKeys.all` on success), and `ProjectFormModal.tsx` (shared create/edit form used
+  by both `pages/ProjectsPage.tsx` and `pages/ProjectDetailsPage.tsx`).
 - **`router.tsx`** — route tree (`routes`, also used by tests): `/login` is public, everything else sits
   under `RequireAuth` → `AppLayout`. Page components live in `pages/`, shared chrome in `components/`.
+- **`components/AppLayout.tsx`** — the signed-in shell: header with the account menu and an
+  `AppShell.Navbar` (collapsible on mobile via a `Burger`) linking to the pages in `pages/`.
 - **`App.tsx`** — top-level provider composition: `MantineProvider` → `DatesProvider` →
   `QueryClientProvider` → `RouterProvider` (imported from `react-router/dom`, which `flushSync`
   navigation requires).
-- **`test/setup.ts`** — Vitest setup (jsdom polyfills for `matchMedia`/`ResizeObserver` that Mantine
-  needs, RTL cleanup). Wired in via `vite.config.ts`'s `test.setupFiles`. `test/renderApp.tsx` renders
-  the full route tree in a memory router with a fresh `QueryClient`; tests mock `@/auth/api`.
+- **`test/setup.ts`** — Vitest setup (jsdom polyfills for `matchMedia`/`ResizeObserver`/`document.fonts`
+  that Mantine needs, RTL cleanup). Wired in via `vite.config.ts`'s `test.setupFiles`.
+  `test/renderApp.tsx` renders the full route tree in a memory router with a fresh `QueryClient`;
+  tests mock `@/auth/api` and, for the projects pages, `@/projects/api` / `@/customers/api` /
+  `@/users/api`. Mantine's `Select` renders an input with `role="combobox"`, not `"textbox"`.
 
 ### API convention
 
