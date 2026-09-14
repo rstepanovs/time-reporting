@@ -5,9 +5,29 @@ from httpx import AsyncClient
 
 from support import DEFAULT_PASSWORD, AuthHeaders, CustomerFactory, ProjectFactory, UserFactory
 from time_reporting.modules.auth.session_cookie import CSRF_HEADER
+from time_reporting.modules.projects.contracts import BillingItemPreset
 from time_reporting.modules.users.contracts import UserRole
 
 CSRF_HEADERS = {CSRF_HEADER: "fetch"}
+# 2026-09-14 is a Monday.
+A_MONDAY = "2026-09-14"
+
+
+async def _book_normal_hours(
+    client: AsyncClient, headers: dict[str, str], *, project_id: str
+) -> None:
+    """Book one hour of normal working time on ``project_id`` for the caller identified by
+    ``headers``, so a permanent delete of them/the project is blocked by a real time entry."""
+    items = await client.get(f"/api/v1/projects/{project_id}/billing-items", headers=headers)
+    item_id = next(
+        i["id"] for i in items.json() if i["preset"] == BillingItemPreset.NORMAL_HOURS.value
+    )
+    response = await client.put(
+        f"/api/v1/timesheets/weeks/{A_MONDAY}/entries",
+        headers=headers,
+        json={"changes": [{"billing_item_id": item_id, "date": A_MONDAY, "quantity": "1.00"}]},
+    )
+    assert response.status_code == 200
 
 
 @pytest.mark.parametrize("role", [UserRole.PROJECT_MANAGER, UserRole.WORKER])
@@ -105,6 +125,38 @@ async def test_permanent_delete_blocked_by_project_returns_409_with_blockers(
     assert response.status_code == 409
     detail = response.json()["detail"]
     assert detail["blockers"] == [{"kind": "projects", "count": 1}]
+
+
+async def test_permanent_delete_blocked_by_time_entries_returns_409(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    admin_headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    worker = await make_user(role=UserRole.WORKER)
+    worker_headers = auth_headers(worker)
+    project = await make_project()
+    await client.post(
+        f"/api/v1/projects/{project.id}/members",
+        headers=admin_headers,
+        json={"user_id": str(worker.id)},
+    )
+    await _book_normal_hours(client, worker_headers, project_id=str(project.id))
+
+    user_response = await client.delete(
+        f"/api/v1/admin/users/{worker.id}", headers=admin_headers, params={"permanent": "true"}
+    )
+    project_response = await client.delete(
+        f"/api/v1/admin/projects/{project.id}",
+        headers=admin_headers,
+        params={"permanent": "true"},
+    )
+
+    assert user_response.status_code == 409
+    assert user_response.json()["detail"]["blockers"] == [{"kind": "time_entries", "count": 1}]
+    assert project_response.status_code == 409
+    assert project_response.json()["detail"]["blockers"] == [{"kind": "time_entries", "count": 1}]
 
 
 async def test_admin_cannot_remove_self(

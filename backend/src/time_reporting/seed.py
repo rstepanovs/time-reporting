@@ -5,7 +5,7 @@ already exist are left untouched.
 """
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from uuid import UUID
 
@@ -32,11 +32,25 @@ from time_reporting.modules.projects.contracts import (
     UpdateProject,
     UpdateProjectBillingItem,
 )
+from time_reporting.modules.timesheets.contracts import (
+    CountTimeEntries,
+    ListTimesheetOptions,
+    SaveTimesheetWeek,
+    TimeEntryChange,
+)
 from time_reporting.modules.users.contracts import (
     CreateUser,
     EmailAlreadyExistsError,
     GetUserCredentialsByEmail,
     UserRole,
+)
+from time_reporting.modules.work_calendar.contracts import (
+    AddNonWorkingDay,
+    HolidayCountryNotSupportedError,
+    ImportPublicHolidays,
+    ListNonWorkingDays,
+    NonWorkingDayAlreadyExistsError,
+    NonWorkingDayKind,
 )
 
 DEFAULT_DEMO_PASSWORD = "demo-password"
@@ -191,6 +205,14 @@ DEMO_BILLING_RATES: dict[BillingItemPreset, Decimal] = {
 }
 DEMO_PURCHASING_MARKUP = Decimal("10.00")
 
+# The public holiday whose following day becomes the demo bridge day (a Thursday holiday, so the
+# Friday after it is the classic "long weekend" bridge day).
+DEMO_BRIDGE_DAY_AFTER_HOLIDAY = "Ascension Day"
+# Roles that get a couple of weeks of booked normal working hours, so a fresh checkout has
+# something to look at on the Timesheet page; admins aren't expected to book their own time.
+DEMO_TIME_ENTRY_ROLES = frozenset({UserRole.WORKER, UserRole.PROJECT_MANAGER})
+DEMO_DAILY_HOURS = Decimal("8")
+
 
 @dataclass(slots=True)
 class SeedReport:
@@ -200,6 +222,9 @@ class SeedReport:
     existing_customers: list[str] = field(default_factory=list)
     created_projects: list[str] = field(default_factory=list)
     existing_projects: list[str] = field(default_factory=list)
+    imported_holidays: int = 0
+    created_bridge_day: bool = False
+    seeded_time_entries_for: list[str] = field(default_factory=list)
 
 
 async def _find_customer_id_by_name(bus: Bus, name: str) -> UUID:
@@ -243,6 +268,84 @@ async def _apply_demo_billing_rates(bus: Bus, project_id: UUID) -> None:
             )
 
 
+async def _seed_calendar(bus: Bus, report: SeedReport, *, today: date) -> None:
+    """Import this and next year's public holidays, and add one demo bridge day.
+
+    Both steps are idempotent by nature (``ImportPublicHolidays`` only adds missing dates, and a
+    taken date is skipped), so re-running changes nothing once seeded.
+    """
+    for year in (today.year, today.year + 1):
+        try:
+            report.imported_holidays += await bus.execute(ImportPublicHolidays(year=year))
+        except HolidayCountryNotSupportedError:
+            # Demo data is best-effort: an unconfigured HOLIDAY_COUNTRY just skips the calendar.
+            return
+
+    holiday_dates_by_name = {
+        day.name: day.day for day in await bus.query(ListNonWorkingDays(year=today.year))
+    }
+    holiday_date = holiday_dates_by_name.get(DEMO_BRIDGE_DAY_AFTER_HOLIDAY)
+    if holiday_date is None:
+        return
+    try:
+        await bus.execute(
+            AddNonWorkingDay(
+                day=holiday_date + timedelta(days=1),
+                name="Bridge day",
+                kind=NonWorkingDayKind.BRIDGE_DAY,
+            )
+        )
+    except NonWorkingDayAlreadyExistsError:
+        pass
+    else:
+        report.created_bridge_day = True
+
+
+async def _seed_time_entries(
+    bus: Bus,
+    report: SeedReport,
+    users: tuple[DemoUser, ...],
+    user_ids_by_email: dict[str, UUID],
+    *,
+    today: date,
+) -> None:
+    """Book two weeks of normal working hours (last week in full, this week up to today) for each
+    user with a ``DEMO_TIME_ENTRY_ROLES`` role that doesn't already have any time entries."""
+    this_monday = today - timedelta(days=today.weekday())
+    for user in users:
+        if user.role not in DEMO_TIME_ENTRY_ROLES:
+            continue
+        user_id = user_ids_by_email.get(user.email)
+        if user_id is None:
+            continue
+        if await bus.query(CountTimeEntries(user_id=user_id)):
+            continue
+        options = await bus.query(ListTimesheetOptions(user_id=user_id))
+        normal_item_id = next(
+            (
+                item.id
+                for option in options
+                for item in option.billing_items
+                if item.preset is BillingItemPreset.NORMAL_HOURS
+            ),
+            None,
+        )
+        if normal_item_id is None:
+            continue
+
+        for week_start in (this_monday - timedelta(days=7), this_monday):
+            changes = tuple(
+                TimeEntryChange(billing_item_id=normal_item_id, date=day, quantity=DEMO_DAILY_HOURS)
+                for offset in range(5)  # Monday..Friday
+                if (day := week_start + timedelta(days=offset)) <= today
+            )
+            if changes:
+                await bus.execute(
+                    SaveTimesheetWeek(user_id=user_id, week_start=week_start, changes=changes)
+                )
+        report.seeded_time_entries_for.append(user.email)
+
+
 async def _project_exists(bus: Bus, customer_id: UUID, name: str) -> bool:
     page = await bus.query(
         ListProjects(limit=1, offset=0, customer_id=customer_id, search=name, include_inactive=True)
@@ -257,11 +360,15 @@ async def seed_demo_data(
     users: tuple[DemoUser, ...] = DEMO_USERS,
     customers: tuple[DemoCustomer, ...] = DEMO_CUSTOMERS,
     projects: tuple[DemoProject, ...] = DEMO_PROJECTS,
+    today: date | None = None,
 ) -> SeedReport:
     """Create the missing demo records; each one is committed by its own top-level command."""
     report = SeedReport()
     user_ids_by_email: dict[str, UUID] = {}
     customer_ids_by_name: dict[str, UUID] = {}
+    today = today or date.today()
+
+    await _seed_calendar(bus, report, today=today)
 
     for user in users:
         try:
@@ -338,5 +445,7 @@ async def seed_demo_data(
                     customer_id=customer_ids_by_name[customer.create.name], is_active=False
                 )
             )
+
+    await _seed_time_entries(bus, report, users, user_ids_by_email, today=today)
 
     return report

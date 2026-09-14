@@ -2,6 +2,8 @@
 
 import io
 from dataclasses import replace
+from datetime import date
+from decimal import Decimal
 from uuid import uuid4
 
 import pytest
@@ -17,13 +19,16 @@ from time_reporting.modules.projects.contracts import (
     ListProjectMembers,
     ListProjects,
 )
+from time_reporting.modules.timesheets.contracts import CountTimeEntries, GetTimesheetWeek
 from time_reporting.modules.users.contracts import GetUserById, GetUserCredentialsByEmail, UserRole
+from time_reporting.modules.work_calendar.contracts import ListNonWorkingDays, NonWorkingDayKind
 from time_reporting.seed import (
     DEFAULT_DEMO_PASSWORD,
     DEMO_BILLING_RATES,
     DEMO_CUSTOMERS,
     DEMO_PROJECTS,
     DEMO_PURCHASING_MARKUP,
+    DEMO_TIME_ENTRY_ROLES,
     DEMO_USERS,
     DemoCustomer,
     DemoProject,
@@ -31,6 +36,10 @@ from time_reporting.seed import (
     SeedReport,
     seed_demo_data,
 )
+
+# Seeding uses this as "today" so holiday counts and week boundaries are deterministic; it is
+# itself a Monday.
+SEED_TODAY = date(2026, 9, 14)
 
 # The test database may already hold the real demo records (it doubles as the dev database), so
 # the seed runs against uniquely renamed copies of them.
@@ -78,12 +87,17 @@ async def test_seed_creates_users_customers_and_projects(bus: Bus) -> None:
         _unique_projects(suffix),
     )
 
-    report = await seed_demo_data(bus, users=users, customers=customers, projects=projects)
+    report = await seed_demo_data(
+        bus, users=users, customers=customers, projects=projects, today=SEED_TODAY
+    )
 
-    assert report == SeedReport(
-        created_users=[user.email for user in users],
-        created_customers=[customer.create.name for customer in customers],
-        created_projects=[project.name for project in projects],
+    assert report.created_users == [user.email for user in users]
+    assert report.created_customers == [customer.create.name for customer in customers]
+    assert report.created_projects == [project.name for project in projects]
+    assert (report.existing_users, report.existing_customers, report.existing_projects) == (
+        [],
+        [],
+        [],
     )
     for user in users:
         credentials = await bus.query(GetUserCredentialsByEmail(email=user.email))
@@ -130,6 +144,37 @@ async def test_seed_creates_users_customers_and_projects(bus: Bus) -> None:
             assert stored_item.unit == demo_item.unit
             assert stored_item.unit_rate == demo_item.unit_rate
 
+    # Calendar: this and next year's public holidays plus one bridge day (the calendar is shared,
+    # not namespaced by suffix, but the test transaction rolls back so it starts out empty).
+    assert report.imported_holidays > 0
+    assert report.created_bridge_day is True
+    non_working_days = await bus.query(ListNonWorkingDays(year=SEED_TODAY.year))
+    assert any(day.kind is NonWorkingDayKind.BRIDGE_DAY for day in non_working_days)
+
+    # Time entries: only workers/PMs get demo hours booked, not admins. SEED_TODAY is itself a
+    # Monday, so last week gets all five weekdays but this week gets only today (Monday).
+    time_entry_users = {user for user in users if user.role in DEMO_TIME_ENTRY_ROLES}
+    assert set(report.seeded_time_entries_for) == {user.email for user in time_entry_users}
+    for user in time_entry_users:
+        credentials = await bus.query(GetUserCredentialsByEmail(email=user.email))
+        assert credentials is not None
+        assert await bus.query(CountTimeEntries(user_id=credentials.id)) == 6
+        this_week = await bus.query(
+            GetTimesheetWeek(
+                user_id=credentials.id, week_start=SEED_TODAY, viewer_id=credentials.id
+            )
+        )
+        booked_dates = {entry.date for row in this_week.rows for entry in row.entries}
+        assert booked_dates == {SEED_TODAY}
+        for row in this_week.rows:
+            for entry in row.entries:
+                assert entry.quantity == Decimal("8.00")
+    for user in users:
+        if user.role not in DEMO_TIME_ENTRY_ROLES:
+            credentials = await bus.query(GetUserCredentialsByEmail(email=user.email))
+            assert credentials is not None
+            assert await bus.query(CountTimeEntries(user_id=credentials.id)) == 0
+
 
 async def test_seed_is_idempotent(bus: Bus) -> None:
     suffix = uuid4().hex[:8]
@@ -138,9 +183,11 @@ async def test_seed_is_idempotent(bus: Bus) -> None:
         _unique_customers(suffix),
         _unique_projects(suffix),
     )
-    await seed_demo_data(bus, users=users, customers=customers, projects=projects)
+    await seed_demo_data(bus, users=users, customers=customers, projects=projects, today=SEED_TODAY)
 
-    report = await seed_demo_data(bus, users=users, customers=customers, projects=projects)
+    report = await seed_demo_data(
+        bus, users=users, customers=customers, projects=projects, today=SEED_TODAY
+    )
 
     assert report == SeedReport(
         existing_users=[user.email for user in users],

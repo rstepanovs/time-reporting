@@ -349,6 +349,38 @@ async def test_project_manager_cannot_permanently_delete_a_billing_item(
     assert allowed.status_code == 204
 
 
+async def test_admin_cannot_permanently_delete_a_billing_item_in_use(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    admin_headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    worker = await make_user(role=UserRole.WORKER)
+    worker_headers = auth_headers(worker)
+    project = await make_project()
+    await client.post(
+        f"/api/v1/projects/{project.id}/members",
+        headers=admin_headers,
+        json={"user_id": str(worker.id)},
+    )
+    items = await client.get(f"/api/v1/projects/{project.id}/billing-items", headers=admin_headers)
+    item_id = next(i["id"] for i in items.json() if i["preset"] == "normal_hours")
+    # 2026-09-14 is a Monday.
+    booked = await client.put(
+        "/api/v1/timesheets/weeks/2026-09-14/entries",
+        headers=worker_headers,
+        json={"changes": [{"billing_item_id": item_id, "date": "2026-09-14", "quantity": "1.00"}]},
+    )
+    assert booked.status_code == 200
+
+    response = await client.delete(
+        f"/api/v1/projects/{project.id}/billing-items/{item_id}", headers=admin_headers
+    )
+
+    assert response.status_code == 409
+
+
 async def test_billing_items_require_authentication(
     client: AsyncClient, make_project: ProjectFactory
 ) -> None:

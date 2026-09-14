@@ -37,6 +37,7 @@ from time_reporting.modules.projects.contracts import (
     RemoveUserFromAllProjects,
     UpdateProject,
 )
+from time_reporting.modules.timesheets.contracts import CountTimeEntries
 from time_reporting.modules.users.contracts import (
     DeleteUser,
     GetUserById,
@@ -64,9 +65,14 @@ class AdminRemovalService:
         memberships = await self._bus.query(
             ListProjects(limit=1, offset=0, member_id=user_id, include_inactive=True)
         )
+        time_entry_count = await self._bus.query(CountTimeEntries(user_id=user_id))
         blockers = []
         if user_id == acting_user_id:
             blockers.append(RemovalCountDTO(kind=RemovalBlockerKind.SELF, count=1))
+        if time_entry_count:
+            blockers.append(
+                RemovalCountDTO(kind=RemovalBlockerKind.TIME_ENTRIES, count=time_entry_count)
+            )
         effects = []
         if memberships.total:
             effects.append(
@@ -104,6 +110,12 @@ class AdminRemovalService:
         billing_items = await self._bus.query(
             ListProjectBillingItems(project_id=project_id, include_inactive=True)
         )
+        time_entry_count = await self._bus.query(CountTimeEntries(project_id=project_id))
+        blockers = []
+        if time_entry_count:
+            blockers.append(
+                RemovalCountDTO(kind=RemovalBlockerKind.TIME_ENTRIES, count=time_entry_count)
+            )
         effects = []
         if members:
             effects.append(
@@ -117,8 +129,8 @@ class AdminRemovalService:
             )
         return RemovalImpactDTO(
             is_active=project.is_active,
-            can_delete_permanently=True,
-            blockers=(),
+            can_delete_permanently=not blockers,
+            blockers=tuple(blockers),
             effects=tuple(effects),
         )
 
@@ -199,14 +211,18 @@ class AdminRemovalService:
         impact = await self.get_project_removal_impact(project_id)
         if impact is None:
             raise RemovalTargetNotFoundError(project_id)
-        # Projects currently have no blockers; a future ProjectInUseError (e.g. time entries) is
-        # still handled below in case that changes before the impact query catches up.
+        if impact.blockers:
+            raise RemovalBlockedError(impact.blockers)
 
         try:
             await self._bus.execute(DeleteProject(project_id=project_id))
         except ProjectNotFoundError as exc:
             raise RemovalTargetNotFoundError(project_id) from exc
         except ProjectInUseError as exc:
-            raise RemovalBlockedError(()) from exc
+            # A race with a concurrent time entry added after the impact check above; the exact
+            # count is unknown at this point.
+            raise RemovalBlockedError(
+                (RemovalCountDTO(kind=RemovalBlockerKind.TIME_ENTRIES, count=0),)
+            ) from exc
         logger.info("Permanently deleted project %s", project_id)
         return RemovalOutcome.DELETED

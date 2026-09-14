@@ -13,9 +13,6 @@ from time_reporting.modules.users.contracts import EmailAlreadyExistsError, User
 from time_reporting.modules.users.models import User
 
 _EMAIL_UNIQUE_CONSTRAINT = "uq_users_email"
-# The project_members.user_id foreign key (RESTRICT); referenced by table/constraint name only,
-# never by importing the projects module.
-_MEMBERSHIP_FK_CONSTRAINT = "fk_project_members_user_id_users"
 
 
 def normalize_email(email: str) -> str:
@@ -86,12 +83,13 @@ class UserRepository:
             raise
 
     async def delete(self, user: User) -> None:
-        """Delete ``user``. Raises ``UserInUseError`` if it is still a project member."""
+        """Delete ``user``. Raises ``UserInUseError`` if other data (a project membership, a time
+        entry, ...) still references it."""
         user_id = user.id  # read before flush: a failed flush may expire ORM attributes
         await self._session.delete(user)
         try:
             await self._session.flush()
         except IntegrityError as exc:
-            if _MEMBERSHIP_FK_CONSTRAINT in str(exc.orig):
+            if "foreign key constraint" in str(exc.orig):
                 raise UserInUseError(user_id) from exc
             raise
