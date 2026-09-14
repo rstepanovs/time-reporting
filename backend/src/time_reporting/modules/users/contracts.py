@@ -129,6 +129,14 @@ class RecordSuccessfulLogin(Command[None]):
     rehashed_password_hash: str | None = field(default=None, repr=False)
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class DeleteUser(Command[None]):
+    """Permanently delete a user. Raises ``UserInUseError`` if it is still a project member."""
+
+    user_id: UUID
+    acting_user_id: UUID
+
+
 # --- Exceptions ---
 
 
@@ -150,7 +158,15 @@ class EmailAlreadyExistsError(UserError):
 
 class SelfModificationError(UserError):
     def __init__(self) -> None:
-        super().__init__("Users cannot change their own role or deactivate themselves")
+        super().__init__("Users cannot change their own role, deactivate, or delete themselves")
+
+
+class UserInUseError(UserError):
+    """Raised when deleting a user blocked by data referencing it (e.g. project membership)."""
+
+    def __init__(self, user_id: UUID) -> None:
+        super().__init__(f"User {user_id} is referenced by other data and cannot be deleted")
+        self.user_id = user_id
 
 
 class InvalidCurrentPasswordError(UserError):

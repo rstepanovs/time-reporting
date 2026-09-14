@@ -106,8 +106,9 @@ class UpdateProject(Command[ProjectDTO]):
     """Partial update: fields left as ``None`` are not changed.
 
     ``customer_id`` is immutable and not part of this command. The optional ``description`` is
-    cleared by naming it in ``clear_fields``. Projects are never deleted; archive them with
-    ``is_active=False``. Re-activating a project under an archived customer is rejected.
+    cleared by naming it in ``clear_fields``. Archive a project with ``is_active=False``;
+    permanently deleting an unreferenced one goes through the admin module's ``DeleteProject``.
+    Re-activating a project under an archived customer is rejected.
     """
 
     project_id: UUID
@@ -126,6 +127,25 @@ class AddProjectMember(Command[ProjectMemberDTO]):
 @dataclass(frozen=True, slots=True, kw_only=True)
 class RemoveProjectMember(Command[None]):
     project_id: UUID
+    user_id: UUID
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class DeleteProject(Command[None]):
+    """Permanently delete a project and its memberships (cascade). May raise ``ProjectInUseError``
+    if other data (e.g. future time entries) still references it."""
+
+    project_id: UUID
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RemoveUserFromAllProjects(Command[int]):
+    """Delete every membership of ``user_id``, returning how many were removed.
+
+    Used before permanently deleting a user, whose id is referenced (``ON DELETE RESTRICT``) by
+    ``project_members``.
+    """
+
     user_id: UUID
 
 
@@ -191,3 +211,11 @@ class ProjectMemberNotFoundError(ProjectError):
         super().__init__(f"User {user_id} is not a member of project {project_id}")
         self.project_id = project_id
         self.user_id = user_id
+
+
+class ProjectInUseError(ProjectError):
+    """Raised when deleting a project blocked by other data referencing it."""
+
+    def __init__(self, project_id: UUID) -> None:
+        super().__init__(f"Project {project_id} is referenced by other data and cannot be deleted")
+        self.project_id = project_id

@@ -8,6 +8,7 @@ from time_reporting.modules.customers.contracts import UpdateCustomer
 from time_reporting.modules.projects.contracts import (
     AddProjectMember,
     CreateProject,
+    DeleteProject,
     GetProjectById,
     ListProjectMembers,
     ListProjects,
@@ -21,6 +22,7 @@ from time_reporting.modules.projects.contracts import (
     ProjectNameAlreadyExistsError,
     ProjectNotFoundError,
     RemoveProjectMember,
+    RemoveUserFromAllProjects,
     UpdateProject,
 )
 from time_reporting.modules.users.contracts import UpdateUser, UserRole
@@ -248,3 +250,46 @@ async def test_remove_unknown_member_raises(bus: Bus, make_project: ProjectFacto
 async def test_remove_member_from_unknown_project_raises(bus: Bus) -> None:
     with pytest.raises(ProjectNotFoundError):
         await bus.execute(RemoveProjectMember(project_id=uuid4(), user_id=uuid4()))
+
+
+async def test_delete_project_cascades_to_members(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    project = await make_project()
+    user = await make_user()
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=user.id))
+
+    await bus.execute(DeleteProject(project_id=project.id))
+
+    assert await bus.query(GetProjectById(project_id=project.id)) is None
+    with pytest.raises(ProjectNotFoundError):
+        await bus.query(ListProjectMembers(project_id=project.id))
+
+
+async def test_delete_unknown_project_raises(bus: Bus) -> None:
+    with pytest.raises(ProjectNotFoundError):
+        await bus.execute(DeleteProject(project_id=uuid4()))
+
+
+async def test_remove_user_from_all_projects_returns_count(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    project_a = await make_project()
+    project_b = await make_project()
+    user = await make_user()
+    await bus.execute(AddProjectMember(project_id=project_a.id, user_id=user.id))
+    await bus.execute(AddProjectMember(project_id=project_b.id, user_id=user.id))
+
+    removed = await bus.execute(RemoveUserFromAllProjects(user_id=user.id))
+
+    assert removed == 2
+    assert await bus.query(ListProjectMembers(project_id=project_a.id)) == ()
+    assert await bus.query(ListProjectMembers(project_id=project_b.id)) == ()
+
+
+async def test_remove_user_from_all_projects_with_no_memberships_returns_zero(
+    bus: Bus, make_user: UserFactory
+) -> None:
+    user = await make_user()
+
+    assert await bus.execute(RemoveUserFromAllProjects(user_id=user.id)) == 0

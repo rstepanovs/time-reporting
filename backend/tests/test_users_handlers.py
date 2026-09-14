@@ -2,12 +2,14 @@ from uuid import uuid4
 
 import pytest
 
-from support import DEFAULT_PASSWORD, UserFactory
+from support import DEFAULT_PASSWORD, ProjectFactory, UserFactory
 from time_reporting.core.cqrs import Bus
 from time_reporting.core.passwords import verify_password
+from time_reporting.modules.projects.contracts import AddProjectMember, RemoveUserFromAllProjects
 from time_reporting.modules.users.contracts import (
     ChangeOwnPassword,
     CreateUser,
+    DeleteUser,
     EmailAlreadyExistsError,
     GetUserById,
     GetUserCredentialsByEmail,
@@ -18,6 +20,7 @@ from time_reporting.modules.users.contracts import (
     ResetUserPassword,
     SelfModificationError,
     UpdateUser,
+    UserInUseError,
     UserNotFoundError,
     UserRole,
 )
@@ -235,3 +238,48 @@ async def test_get_users_by_ids_orders_by_name_and_omits_unknown(
 
 async def test_get_users_by_ids_with_empty_set_returns_empty(bus: Bus) -> None:
     assert await bus.query(GetUsersByIds(user_ids=frozenset())) == ()
+
+
+async def test_delete_user_removes_the_row(bus: Bus, make_user: UserFactory) -> None:
+    admin = await make_user(role=UserRole.ADMIN)
+    user = await make_user()
+
+    await bus.execute(DeleteUser(user_id=user.id, acting_user_id=admin.id))
+
+    assert await bus.query(GetUserById(user_id=user.id)) is None
+
+
+async def test_delete_user_rejects_self_deletion(bus: Bus, make_user: UserFactory) -> None:
+    admin = await make_user(role=UserRole.ADMIN)
+
+    with pytest.raises(SelfModificationError):
+        await bus.execute(DeleteUser(user_id=admin.id, acting_user_id=admin.id))
+
+    assert await bus.query(GetUserById(user_id=admin.id)) is not None
+
+
+async def test_delete_unknown_user_raises(bus: Bus, make_user: UserFactory) -> None:
+    admin = await make_user(role=UserRole.ADMIN)
+
+    with pytest.raises(UserNotFoundError):
+        await bus.execute(DeleteUser(user_id=uuid4(), acting_user_id=admin.id))
+
+
+async def test_delete_user_blocked_by_project_membership(
+    bus: Bus, make_user: UserFactory, make_project: ProjectFactory
+) -> None:
+    admin = await make_user(role=UserRole.ADMIN)
+    user = await make_user()
+    project = await make_project()
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=user.id))
+
+    with pytest.raises(UserInUseError):
+        await bus.execute(DeleteUser(user_id=user.id, acting_user_id=admin.id))
+
+    assert await bus.query(GetUserById(user_id=user.id)) is not None
+
+    removed = await bus.execute(RemoveUserFromAllProjects(user_id=user.id))
+    assert removed == 1
+
+    await bus.execute(DeleteUser(user_id=user.id, acting_user_id=admin.id))
+    assert await bus.query(GetUserById(user_id=user.id)) is None

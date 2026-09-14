@@ -7,10 +7,16 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from time_reporting.modules.customers.contracts import CustomerNameAlreadyExistsError
+from time_reporting.modules.customers.contracts import (
+    CustomerInUseError,
+    CustomerNameAlreadyExistsError,
+)
 from time_reporting.modules.customers.models import Customer
 
 _NAME_UNIQUE_CONSTRAINT = "uq_customers_name"
+# The projects.customer_id foreign key (RESTRICT); referenced by table/constraint name only, never
+# by importing the projects module.
+_PROJECTS_FK_CONSTRAINT = "fk_projects_customer_id_customers"
 
 
 class CustomerRepository:
@@ -61,4 +67,15 @@ class CustomerRepository:
             # A concurrent request may have taken the name after the service's pre-check.
             if _NAME_UNIQUE_CONSTRAINT in str(exc.orig):
                 raise CustomerNameAlreadyExistsError(customer.name) from exc
+            raise
+
+    async def delete(self, customer: Customer) -> None:
+        """Delete ``customer``. Raises ``CustomerInUseError`` if it still has projects."""
+        customer_id = customer.id  # read before flush: a failed flush may expire ORM attributes
+        await self._session.delete(customer)
+        try:
+            await self._session.flush()
+        except IntegrityError as exc:
+            if _PROJECTS_FK_CONSTRAINT in str(exc.orig):
+                raise CustomerInUseError(customer_id) from exc
             raise

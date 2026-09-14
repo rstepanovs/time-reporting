@@ -125,8 +125,8 @@ class UpdateCustomer(Command[CustomerDTO]):
     """Partial update: fields left as ``None`` are not changed.
 
     ``billing_address`` and ``billing_period`` replace the whole value. Optional text fields named
-    in ``clear_fields`` are reset to ``None``. Customers are never deleted; archive them with
-    ``is_active=False``.
+    in ``clear_fields`` are reset to ``None``. Archive a customer with ``is_active=False``;
+    permanently deleting an unreferenced one goes through the admin module's ``DeleteCustomer``.
     """
 
     customer_id: UUID
@@ -141,6 +141,13 @@ class UpdateCustomer(Command[CustomerDTO]):
     notes: str | None = None
     is_active: bool | None = None
     clear_fields: frozenset[ClearableCustomerField] = frozenset()
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class DeleteCustomer(Command[None]):
+    """Permanently delete a customer. Raises ``CustomerInUseError`` if it still has projects."""
+
+    customer_id: UUID
 
 
 # --- Exceptions ---
@@ -160,3 +167,13 @@ class CustomerNameAlreadyExistsError(CustomerError):
     def __init__(self, name: str) -> None:
         super().__init__(f"A customer named {name!r} already exists")
         self.name = name
+
+
+class CustomerInUseError(CustomerError):
+    """Raised when deleting a customer blocked by other data referencing it (e.g. a project)."""
+
+    def __init__(self, customer_id: UUID) -> None:
+        super().__init__(
+            f"Customer {customer_id} is referenced by other data and cannot be deleted"
+        )
+        self.customer_id = customer_id

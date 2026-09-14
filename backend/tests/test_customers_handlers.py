@@ -4,15 +4,17 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from support import DEFAULT_BILLING_ADDRESS, DEFAULT_BILLING_PERIOD, CustomerFactory
+from support import DEFAULT_BILLING_ADDRESS, DEFAULT_BILLING_PERIOD, CustomerFactory, ProjectFactory
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.customers.contracts import (
     BillingAddressDTO,
     BillingIntervalUnit,
     BillingPeriodDTO,
     CreateCustomer,
+    CustomerInUseError,
     CustomerNameAlreadyExistsError,
     CustomerNotFoundError,
+    DeleteCustomer,
     GetCustomerById,
     GetCustomersByIds,
     ListCustomers,
@@ -187,3 +189,28 @@ async def test_get_customers_by_ids_orders_by_name_and_includes_archived(
 
 async def test_get_customers_by_ids_with_empty_set_returns_empty(bus: Bus) -> None:
     assert await bus.query(GetCustomersByIds(customer_ids=frozenset())) == ()
+
+
+async def test_delete_customer_removes_the_row(bus: Bus, make_customer: CustomerFactory) -> None:
+    customer = await make_customer()
+
+    await bus.execute(DeleteCustomer(customer_id=customer.id))
+
+    assert await bus.query(GetCustomerById(customer_id=customer.id)) is None
+
+
+async def test_delete_unknown_customer_raises(bus: Bus) -> None:
+    with pytest.raises(CustomerNotFoundError):
+        await bus.execute(DeleteCustomer(customer_id=uuid4()))
+
+
+async def test_delete_customer_blocked_by_project(
+    bus: Bus, make_customer: CustomerFactory, make_project: ProjectFactory
+) -> None:
+    customer = await make_customer()
+    await make_project(customer_id=customer.id)
+
+    with pytest.raises(CustomerInUseError):
+        await bus.execute(DeleteCustomer(customer_id=customer.id))
+
+    assert await bus.query(GetCustomerById(customer_id=customer.id)) is not None

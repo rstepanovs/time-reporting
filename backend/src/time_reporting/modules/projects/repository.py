@@ -4,15 +4,16 @@ Flushes but never commits — the bus owns transactions.
 """
 
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import CursorResult, Select, delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from time_reporting.db.queries import escape_like
 from time_reporting.modules.projects.contracts import (
+    ProjectInUseError,
     ProjectMemberAlreadyExistsError,
     ProjectNameAlreadyExistsError,
 )
@@ -113,6 +114,18 @@ class ProjectRepository:
                 raise ProjectNameAlreadyExistsError(project.customer_id, project.name) from exc
             raise
 
+    async def delete(self, project: Project) -> None:
+        """Delete ``project``. Members cascade-delete; other data may still block this with a
+        foreign-key violation, raised as ``ProjectInUseError``."""
+        project_id = project.id  # read before flush: a failed flush may expire ORM attributes
+        await self._session.delete(project)
+        try:
+            await self._session.flush()
+        except IntegrityError as exc:
+            if "foreign key constraint" in str(exc.orig):
+                raise ProjectInUseError(project_id) from exc
+            raise
+
 
 class ProjectMemberRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -140,3 +153,14 @@ class ProjectMemberRepository:
     async def delete(self, member: ProjectMember) -> None:
         await self._session.delete(member)
         await self._session.flush()
+
+    async def delete_all_for_user(self, user_id: UUID) -> int:
+        """Delete every membership of ``user_id`` and return how many rows were removed."""
+        result = cast(
+            CursorResult[Any],
+            await self._session.execute(
+                delete(ProjectMember).where(ProjectMember.user_id == user_id)
+            ),
+        )
+        await self._session.flush()
+        return result.rowcount

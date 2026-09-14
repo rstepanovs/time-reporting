@@ -10,6 +10,7 @@ from time_reporting.modules.customers.contracts import (
     CreateCustomer,
     CustomerDTO,
     CustomerPageDTO,
+    DeleteCustomer,
     GetCustomerById,
     GetCustomersByIds,
     ListCustomers,
@@ -98,3 +99,8 @@ class CreateCustomerHandler(_CommandHandler):
 class UpdateCustomerHandler(_CommandHandler):
     async def handle(self, command: UpdateCustomer) -> CustomerDTO:
         return to_dto(await self._service.update_customer(command))
+
+
+class DeleteCustomerHandler(_CommandHandler):
+    async def handle(self, command: DeleteCustomer) -> None:
+        await self._service.delete_customer(command.customer_id)
