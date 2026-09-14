@@ -80,6 +80,22 @@ async def test_worker_can_read_but_not_write(
     assert updated.status_code == 403
 
 
+async def test_list_customers_supports_search(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_customer: CustomerFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    headers = auth_headers(await make_user())
+    match = await make_customer(name="Findable Customer")
+    await make_customer(name="Unrelated")
+
+    response = await client.get("/api/v1/customers", headers=headers, params={"search": "Findable"})
+
+    assert response.status_code == 200
+    assert {item["id"] for item in response.json()["items"]} == {str(match.id)}
+
+
 async def test_customers_require_authentication(client: AsyncClient) -> None:
     assert (await client.get("/api/v1/customers")).status_code == 401
     assert (await client.post("/api/v1/customers", json=_payload())).status_code == 401

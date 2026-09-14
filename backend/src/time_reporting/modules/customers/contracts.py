@@ -92,6 +92,8 @@ class ListCustomers(Query[CustomerPageDTO]):
     limit: int
     offset: int
     include_inactive: bool = False
+    # Case-insensitive substring match against name or legal name.
+    search: str | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

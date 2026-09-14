@@ -73,11 +73,16 @@ class GetCustomersByIdsHandler(_QueryHandler):
 class ListCustomersHandler(_QueryHandler):
     async def handle(self, query: ListCustomers) -> CustomerPageDTO:
         customers = await self._customers.get_page(
-            limit=query.limit, offset=query.offset, include_inactive=query.include_inactive
+            limit=query.limit,
+            offset=query.offset,
+            include_inactive=query.include_inactive,
+            search=query.search,
         )
         return CustomerPageDTO(
             items=tuple(to_dto(customer) for customer in customers),
-            total=await self._customers.count(include_inactive=query.include_inactive),
+            total=await self._customers.count(
+                include_inactive=query.include_inactive, search=query.search
+            ),
             limit=query.limit,
             offset=query.offset,
         )

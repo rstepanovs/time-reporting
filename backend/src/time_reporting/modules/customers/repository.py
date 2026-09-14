@@ -1,12 +1,14 @@
 """Persistence of ``Customer`` entities. Flushes but never commits — the bus owns transactions."""
 
 from collections.abc import Sequence
+from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from time_reporting.db.queries import escape_like
 from time_reporting.modules.customers.contracts import (
     CustomerInUseError,
     CustomerNameAlreadyExistsError,
@@ -41,22 +43,40 @@ class CustomerRepository:
         return result.all()
 
     async def get_page(
-        self, *, limit: int, offset: int, include_inactive: bool
+        self, *, limit: int, offset: int, include_inactive: bool, search: str | None
     ) -> Sequence[Customer]:
         statement = (
-            select(Customer).order_by(Customer.name, Customer.id).limit(limit).offset(offset)
+            self._filtered(select(Customer), include_inactive=include_inactive, search=search)
+            .order_by(Customer.name, Customer.id)
+            .limit(limit)
+            .offset(offset)
         )
-        if not include_inactive:
-            statement = statement.where(Customer.is_active.is_(True))
         result = await self._session.scalars(statement)
         return result.all()
 
-    async def count(self, *, include_inactive: bool) -> int:
-        statement = select(func.count()).select_from(Customer)
-        if not include_inactive:
-            statement = statement.where(Customer.is_active.is_(True))
+    async def count(self, *, include_inactive: bool, search: str | None) -> int:
+        statement = self._filtered(
+            select(func.count()).select_from(Customer),
+            include_inactive=include_inactive,
+            search=search,
+        )
         result = await self._session.execute(statement)
         return result.scalar_one()
+
+    def _filtered[T: tuple[Any, ...]](
+        self, statement: Select[T], *, include_inactive: bool, search: str | None
+    ) -> Select[T]:
+        if not include_inactive:
+            statement = statement.where(Customer.is_active.is_(True))
+        if search:
+            pattern = f"%{escape_like(search)}%"
+            statement = statement.where(
+                or_(
+                    Customer.name.ilike(pattern, escape="\\"),
+                    Customer.legal_name.ilike(pattern, escape="\\"),
+                )
+            )
+        return statement
 
     async def save(self, customer: Customer) -> None:
         """Add ``customer`` to the session (if new) and flush pending changes."""
