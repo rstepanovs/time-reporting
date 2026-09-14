@@ -8,6 +8,13 @@ export type TimesheetOption = components["schemas"]["TimesheetOptionResponse"];
 export type TimeEntry = components["schemas"]["TimeEntryResponse"];
 export type TimeEntryChange = components["schemas"]["TimeEntryChangeRequest"];
 
+/** A project/billing-item pair picked from the options list, before it has any entries — the
+ * shape a draft row (added but not yet saved) takes in the grid. */
+export type PickedRow = {
+  project: TimesheetOption["project"];
+  billing_item: TimesheetOption["billing_items"][number];
+};
+
 /** A rule was violated while reading/saving a week (400/403/404). The backend's message, or a
  * generic one for the 403 "not your timesheet" case (which carries no body). */
 export class TimesheetRuleError extends Error {

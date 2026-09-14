@@ -1,6 +1,8 @@
 import type { CurrentUser } from "@/auth/api";
+import type { CalendarDay, NonWorkingDay } from "@/calendar/api";
 import type { Customer } from "@/customers/api";
 import type { BillingItem, Project, ProjectMember } from "@/projects/api";
+import type { TimesheetOption, TimesheetRow, TimesheetWeek } from "@/timesheets/api";
 
 export const testUser: CurrentUser = {
   id: "3f0c8a52-6a55-4f5e-9d0e-6a1c1f1f2b10",
@@ -104,4 +106,77 @@ export const testProjectMember: ProjectMember = {
   role: testWorker.role,
   is_active: true,
   added_at: "2026-02-02T08:00:00Z",
+};
+
+// 2026-09-14 is a Monday.
+export const TEST_WEEK_START = "2026-09-14";
+
+export const testNonWorkingDay: NonWorkingDay = {
+  id: "d1a1a1a1-1111-1111-1111-111111111111",
+  day: "2026-09-16",
+  name: "Custom Holiday",
+  kind: "company_day_off",
+};
+
+export const testCalendarDays: CalendarDay[] = [
+  { day: "2026-09-14", is_weekend: false, non_working_day: null },
+  { day: "2026-09-15", is_weekend: false, non_working_day: null },
+  { day: "2026-09-16", is_weekend: false, non_working_day: testNonWorkingDay },
+  { day: "2026-09-17", is_weekend: false, non_working_day: null },
+  { day: "2026-09-18", is_weekend: false, non_working_day: null },
+  { day: "2026-09-19", is_weekend: true, non_working_day: null },
+  { day: "2026-09-20", is_weekend: true, non_working_day: null },
+];
+
+export const testTimesheetRow: TimesheetRow = {
+  project: {
+    id: testProject.id,
+    customer: {
+      id: testCustomer.id,
+      name: testCustomer.name,
+      is_active: true,
+      currency: testCustomer.currency,
+    },
+    name: testProject.name,
+    is_active: true,
+  },
+  billing_item: {
+    id: testBillingItem.id,
+    project_id: testProject.id,
+    preset: "normal_hours",
+    name: "Normal working hours",
+    unit: "hour",
+    unit_rate: "90.00",
+    markup_percent: null,
+    position: 1,
+    is_active: true,
+  },
+  is_open: true,
+  entries: [{ date: "2026-09-14", quantity: "8.00", note: null }],
+};
+
+export const testTimesheetWeek: TimesheetWeek = {
+  user: { id: testWorker.id, name: testWorker.name, email: testWorker.email },
+  week_start: TEST_WEEK_START,
+  can_edit: true,
+  days: testCalendarDays,
+  rows: [testTimesheetRow],
+};
+
+export const testTimesheetOption: TimesheetOption = {
+  project: testTimesheetRow.project,
+  billing_items: [
+    testTimesheetRow.billing_item,
+    {
+      id: "b3a3a3a3-3333-3333-3333-333333333333",
+      project_id: testProject.id,
+      preset: "overtime_hours",
+      name: "Overtime working hours",
+      unit: "hour",
+      unit_rate: "135.00",
+      markup_percent: null,
+      position: 2,
+      is_active: true,
+    },
+  ],
 };

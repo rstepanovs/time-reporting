@@ -58,6 +58,7 @@ function AccountMenu() {
 }
 
 const NAV_ITEMS = [
+  { to: "/timesheet", label: "Timesheet" },
   { to: "/", label: "Home" },
   { to: "/projects", label: "Projects" },
 ];
@@ -66,6 +67,7 @@ const ADMIN_NAV_ITEMS = [
   { to: "/admin/users", label: "Users" },
   { to: "/admin/customers", label: "Customers" },
   { to: "/admin/projects", label: "Projects" },
+  { to: "/admin/calendar", label: "Calendar" },
 ];
 
 function Navigation({ onNavigate }: { onNavigate?: () => void }) {

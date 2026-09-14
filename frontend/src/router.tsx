@@ -3,6 +3,7 @@ import { createBrowserRouter, Navigate, type RouteObject } from "react-router";
 import { RequireAuth } from "@/auth/RequireAuth";
 import { RequireRole } from "@/auth/RequireRole";
 import { AppLayout } from "@/components/AppLayout";
+import { AdminCalendarPage } from "@/pages/admin/AdminCalendarPage";
 import { AdminCustomersPage } from "@/pages/admin/AdminCustomersPage";
 import { AdminProjectsPage } from "@/pages/admin/AdminProjectsPage";
 import { AdminUsersPage } from "@/pages/admin/AdminUsersPage";
@@ -12,6 +13,7 @@ import { LoginPage } from "@/pages/LoginPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { ProjectDetailsPage } from "@/pages/ProjectDetailsPage";
 import { ProjectsPage } from "@/pages/ProjectsPage";
+import { TimesheetPage } from "@/pages/TimesheetPage";
 
 export const routes: RouteObject[] = [
   { path: "/login", element: <LoginPage /> },
@@ -23,6 +25,7 @@ export const routes: RouteObject[] = [
         element: <AppLayout />,
         children: [
           { index: true, element: <HomePage /> },
+          { path: "timesheet", element: <TimesheetPage /> },
           { path: "projects", element: <ProjectsPage /> },
           { path: "projects/:projectId", element: <ProjectDetailsPage /> },
           { path: "account/password", element: <ChangePasswordPage /> },
@@ -34,6 +37,7 @@ export const routes: RouteObject[] = [
               { path: "users", element: <AdminUsersPage /> },
               { path: "customers", element: <AdminCustomersPage /> },
               { path: "projects", element: <AdminProjectsPage /> },
+              { path: "calendar", element: <AdminCalendarPage /> },
             ],
           },
           { path: "*", element: <NotFoundPage /> },
