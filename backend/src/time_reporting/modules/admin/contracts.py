@@ -29,6 +29,7 @@ class RemovalEffectKind(StrEnum):
 
     PROJECT_MEMBERSHIPS = "project_memberships"
     PROJECT_MEMBERS = "project_members"
+    PROJECT_BILLING_ITEMS = "project_billing_items"
 
 
 # --- DTOs ---

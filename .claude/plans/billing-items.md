@@ -170,12 +170,20 @@ Dependency order: **B1 → B2 → B3 → B4** → **F1 → F2** → **D1**.
 
 - `admin/contracts.py`: `RemovalEffectKind.PROJECT_BILLING_ITEMS`;
   `get_project_removal_impact` counts items via `ListProjectBillingItems(include_inactive=True)`.
-  (Deleting a project already cascades to items.)
-- `seed.py`: demo projects get rates on their defaults (e.g. normal 90.00, overtime 135.00,
-  travel 45.00, per diem 60.00, purchasing markup 10%) and one project gets a custom item
-  ("On-call standby", `hour`). Only applied when the project is newly created, so seeding stays
-  idempotent.
+  (Deleting a project already cascades to items.) Every project has at least the six defaults, so
+  this effect is now never empty — existing tests already index `effects[0]` rather than assert
+  equality, so this didn't need any fixing elsewhere.
+- `seed.py`: all four demo projects get rates on their defaults via a new `DemoProject.billing_rates`
+  flag and a `_apply_demo_billing_rates` helper (normal 90.00, overtime 135.00, travel 45.00, per
+  diem 60.00, purchasing markup 10%; other expenses left unset, like a real project would start
+  out) — including the archived "Legacy Support" project, priced before it's archived. Rates are
+  the same numbers regardless of the customer's currency (EUR/GBP/USD); good enough for demo data,
+  not meant to look like real market rates. "Website Revamp" also gets one custom item ("On-call
+  standby", `hour`, 50.00) via `DemoProject.custom_billing_items` and a new `DemoBillingItem`
+  dataclass. Both only run right after a project is newly created, so re-running stays idempotent.
 - Tests: admin impact includes billing items; `test_seed.py` checks rates and the custom item.
+  Verified by hand against the real dev database too: `seed-demo` prices all defaults and adds the
+  custom item, and a second run changes nothing (still 25 rows: 4 × 6 defaults + 1 custom item).
 
 ### F1. Frontend API layer
 

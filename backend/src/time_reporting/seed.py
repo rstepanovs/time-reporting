@@ -6,6 +6,7 @@ already exist are left untouched.
 
 from dataclasses import dataclass, field
 from datetime import date
+from decimal import Decimal
 from uuid import UUID
 
 from time_reporting.core.cqrs import Bus
@@ -19,12 +20,17 @@ from time_reporting.modules.customers.contracts import (
     UpdateCustomer,
 )
 from time_reporting.modules.projects.contracts import (
+    AddProjectBillingItem,
     AddProjectMember,
+    BillingItemPreset,
+    BillingUnit,
     CreateProject,
+    ListProjectBillingItems,
     ListProjects,
     ProjectCustomerArchivedError,
     ProjectNameAlreadyExistsError,
     UpdateProject,
+    UpdateProjectBillingItem,
 )
 from time_reporting.modules.users.contracts import (
     CreateUser,
@@ -50,12 +56,24 @@ class DemoCustomer:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class DemoBillingItem:
+    """A custom billing item to add to a newly created demo project."""
+
+    name: str
+    unit: BillingUnit
+    unit_rate: Decimal | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class DemoProject:
     customer_name: str
     name: str
     description: str | None = None
     member_emails: tuple[str, ...] = ()
     archived: bool = False
+    # Give the six default billing items the rates in DEMO_BILLING_RATES/DEMO_PURCHASING_MARKUP.
+    billing_rates: bool = False
+    custom_billing_items: tuple[DemoBillingItem, ...] = ()
 
 
 DEMO_USERS: tuple[DemoUser, ...] = (
@@ -130,18 +148,26 @@ DEMO_PROJECTS: tuple[DemoProject, ...] = (
         name="Website Revamp",
         description="Redesign the public marketing site.",
         member_emails=("manager@example.com", "worker@example.com"),
+        billing_rates=True,
+        custom_billing_items=(
+            DemoBillingItem(
+                name="On-call standby", unit=BillingUnit.HOUR, unit_rate=Decimal("50.00")
+            ),
+        ),
     ),
     DemoProject(
         customer_name="Acme Corporation",
         name="Internal Tooling",
         description="Roll out time tracking internally.",
         member_emails=("worker@example.com",),
+        billing_rates=True,
     ),
     DemoProject(
         customer_name="Globex",
         name="Platform Migration",
         description="Move billing to the new platform.",
         member_emails=("manager@example.com",),
+        billing_rates=True,
     ),
     DemoProject(
         customer_name="Initech",
@@ -149,8 +175,21 @@ DEMO_PROJECTS: tuple[DemoProject, ...] = (
         description="Wind-down support after the contract ended.",
         member_emails=("worker@example.com",),
         archived=True,
+        billing_rates=True,
     ),
 )
+
+# Applied to a newly created demo project's default items when DemoProject.billing_rates is set;
+# rates are in whichever currency the project's customer bills in (a demo simplification — see
+# DemoProject.billing_rates). Purchasing expenses get a markup instead of a rate; other expenses
+# are left unset, like a real project would start out.
+DEMO_BILLING_RATES: dict[BillingItemPreset, Decimal] = {
+    BillingItemPreset.NORMAL_HOURS: Decimal("90.00"),
+    BillingItemPreset.OVERTIME_HOURS: Decimal("135.00"),
+    BillingItemPreset.TRAVEL_TIME: Decimal("45.00"),
+    BillingItemPreset.PER_DIEM: Decimal("60.00"),
+}
+DEMO_PURCHASING_MARKUP = Decimal("10.00")
 
 
 @dataclass(slots=True)
@@ -179,6 +218,29 @@ async def _find_customer_id_by_name(bus: Bus, name: str) -> UUID:
         if offset + limit >= page.total:
             raise LookupError(f"No customer named {name!r} found while seeding projects")
         offset += limit
+
+
+async def _apply_demo_billing_rates(bus: Bus, project_id: UUID) -> None:
+    """Give the just-created project's default items their demo rates.
+
+    Only called for a project just created by this run, so it can't yet have been priced.
+    """
+    items = await bus.query(ListProjectBillingItems(project_id=project_id, include_inactive=True))
+    for item in items:
+        if item.preset in DEMO_BILLING_RATES:
+            await bus.execute(
+                UpdateProjectBillingItem(
+                    project_id=project_id,
+                    item_id=item.id,
+                    unit_rate=DEMO_BILLING_RATES[item.preset],
+                )
+            )
+        elif item.preset is BillingItemPreset.PURCHASING_EXPENSES:
+            await bus.execute(
+                UpdateProjectBillingItem(
+                    project_id=project_id, item_id=item.id, markup_percent=DEMO_PURCHASING_MARKUP
+                )
+            )
 
 
 async def _project_exists(bus: Bus, customer_id: UUID, name: str) -> bool:
@@ -250,10 +312,21 @@ async def seed_demo_data(
             report.existing_projects.append(project.name)
             continue
         report.created_projects.append(project.name)
-        # The project was just created, so it cannot already have these members.
+        # The project was just created, so it cannot already have these members or billing items.
         for email in project.member_emails:
             await bus.execute(
                 AddProjectMember(project_id=created_project.id, user_id=user_ids_by_email[email])
+            )
+        if project.billing_rates:
+            await _apply_demo_billing_rates(bus, created_project.id)
+        for demo_item in project.custom_billing_items:
+            await bus.execute(
+                AddProjectBillingItem(
+                    project_id=created_project.id,
+                    name=demo_item.name,
+                    unit=demo_item.unit,
+                    unit_rate=demo_item.unit_rate,
+                )
             )
         if project.archived:
             await bus.execute(UpdateProject(project_id=created_project.id, is_active=False))

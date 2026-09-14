@@ -11,12 +11,19 @@ from time_reporting.cli import main
 from time_reporting.core.cqrs import Bus
 from time_reporting.core.passwords import verify_password
 from time_reporting.modules.customers.contracts import ListCustomers
-from time_reporting.modules.projects.contracts import ListProjectMembers, ListProjects
+from time_reporting.modules.projects.contracts import (
+    BillingItemPreset,
+    ListProjectBillingItems,
+    ListProjectMembers,
+    ListProjects,
+)
 from time_reporting.modules.users.contracts import GetUserById, GetUserCredentialsByEmail, UserRole
 from time_reporting.seed import (
     DEFAULT_DEMO_PASSWORD,
+    DEMO_BILLING_RATES,
     DEMO_CUSTOMERS,
     DEMO_PROJECTS,
+    DEMO_PURCHASING_MARKUP,
     DEMO_USERS,
     DemoCustomer,
     DemoProject,
@@ -100,6 +107,28 @@ async def test_seed_creates_users_customers_and_projects(bus: Bus) -> None:
 
         members = await bus.query(ListProjectMembers(project_id=stored_project.id))
         assert {member.email for member in members} == set(project.member_emails)
+
+        billing_items = await bus.query(
+            ListProjectBillingItems(project_id=stored_project.id, include_inactive=True)
+        )
+        rates_by_preset = {item.preset: item.unit_rate for item in billing_items}
+        markups_by_preset = {item.preset: item.markup_percent for item in billing_items}
+        if project.billing_rates:
+            for preset, rate in DEMO_BILLING_RATES.items():
+                assert rates_by_preset[preset] == rate
+            assert (
+                markups_by_preset[BillingItemPreset.PURCHASING_EXPENSES] == DEMO_PURCHASING_MARKUP
+            )
+            assert rates_by_preset[BillingItemPreset.OTHER_EXPENSES] is None
+        else:
+            assert all(rate is None for rate in rates_by_preset.values())
+
+        custom_names = {item.name for item in billing_items if item.preset is None}
+        assert custom_names == {item.name for item in project.custom_billing_items}
+        for demo_item in project.custom_billing_items:
+            stored_item = next(item for item in billing_items if item.name == demo_item.name)
+            assert stored_item.unit == demo_item.unit
+            assert stored_item.unit_rate == demo_item.unit_rate
 
 
 async def test_seed_is_idempotent(bus: Bus) -> None:

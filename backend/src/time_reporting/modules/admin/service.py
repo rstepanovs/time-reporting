@@ -29,6 +29,7 @@ from time_reporting.modules.customers.contracts import (
 from time_reporting.modules.projects.contracts import (
     DeleteProject,
     GetProjectById,
+    ListProjectBillingItems,
     ListProjectMembers,
     ListProjects,
     ProjectInUseError,
@@ -100,10 +101,19 @@ class AdminRemovalService:
         if project is None:
             return None
         members = await self._bus.query(ListProjectMembers(project_id=project_id))
+        billing_items = await self._bus.query(
+            ListProjectBillingItems(project_id=project_id, include_inactive=True)
+        )
         effects = []
         if members:
             effects.append(
                 RemovalCountDTO(kind=RemovalEffectKind.PROJECT_MEMBERS, count=len(members))
+            )
+        if billing_items:
+            effects.append(
+                RemovalCountDTO(
+                    kind=RemovalEffectKind.PROJECT_BILLING_ITEMS, count=len(billing_items)
+                )
             )
         return RemovalImpactDTO(
             is_active=project.is_active,

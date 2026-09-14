@@ -21,6 +21,7 @@ from time_reporting.modules.admin.contracts import (
 )
 from time_reporting.modules.customers.contracts import GetCustomerById
 from time_reporting.modules.projects.contracts import (
+    DEFAULT_BILLING_ITEMS,
     AddProjectMember,
     GetProjectById,
     ListProjectMembers,
@@ -122,6 +123,22 @@ async def test_project_removal_impact_lists_members_effect(
     assert impact.can_delete_permanently is True
     assert impact.effects[0].kind == RemovalEffectKind.PROJECT_MEMBERS
     assert impact.effects[0].count == 1
+
+
+async def test_project_removal_impact_lists_billing_items_effect(
+    bus: Bus, make_project: ProjectFactory
+) -> None:
+    project = await make_project()
+
+    impact = await bus.query(GetProjectRemovalImpact(project_id=project.id))
+
+    assert impact is not None
+    assert impact.can_delete_permanently is True
+    # Every project has the six default billing items, so this effect is never empty.
+    billing_items_effect = next(
+        e for e in impact.effects if e.kind == RemovalEffectKind.PROJECT_BILLING_ITEMS
+    )
+    assert billing_items_effect.count == len(DEFAULT_BILLING_ITEMS)
 
 
 async def test_project_removal_impact_unknown_returns_none(bus: Bus) -> None:
