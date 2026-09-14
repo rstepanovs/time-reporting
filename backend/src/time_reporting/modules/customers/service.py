@@ -70,6 +70,9 @@ class CustomerService:
         await self._customers.save(customer)
         return customer
 
+    async def delete_customer(self, customer_id: UUID) -> None:
+        await self._customers.delete(await self.get_customer(customer_id))
+
     async def _ensure_name_available(self, name: str) -> None:
         if await self._customers.get_by_name(name) is not None:
             raise CustomerNameAlreadyExistsError(name)

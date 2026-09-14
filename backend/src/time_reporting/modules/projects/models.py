@@ -19,7 +19,8 @@ class Project(TimestampMixin, Base):
     customer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("customers.id", ondelete="RESTRICT"))
     name: Mapped[str] = mapped_column(String(255))
     description: Mapped[str | None] = mapped_column(Text)
-    # Projects are archived rather than deleted: billing data will reference them.
+    # Archived by default (billing data will reference projects); the admin module can permanently
+    # delete one that nothing references yet.
     is_active: Mapped[bool] = mapped_column(default=True, server_default=true())
 
 

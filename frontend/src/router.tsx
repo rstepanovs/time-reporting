@@ -1,7 +1,11 @@
-import { createBrowserRouter, type RouteObject } from "react-router";
+import { createBrowserRouter, Navigate, type RouteObject } from "react-router";
 
 import { RequireAuth } from "@/auth/RequireAuth";
+import { RequireRole } from "@/auth/RequireRole";
 import { AppLayout } from "@/components/AppLayout";
+import { AdminCustomersPage } from "@/pages/admin/AdminCustomersPage";
+import { AdminProjectsPage } from "@/pages/admin/AdminProjectsPage";
+import { AdminUsersPage } from "@/pages/admin/AdminUsersPage";
 import { ChangePasswordPage } from "@/pages/ChangePasswordPage";
 import { HomePage } from "@/pages/HomePage";
 import { LoginPage } from "@/pages/LoginPage";
@@ -22,6 +26,16 @@ export const routes: RouteObject[] = [
           { path: "projects", element: <ProjectsPage /> },
           { path: "projects/:projectId", element: <ProjectDetailsPage /> },
           { path: "account/password", element: <ChangePasswordPage /> },
+          {
+            path: "admin",
+            element: <RequireRole roles={["admin"]} />,
+            children: [
+              { index: true, element: <Navigate to="users" replace /> },
+              { path: "users", element: <AdminUsersPage /> },
+              { path: "customers", element: <AdminCustomersPage /> },
+              { path: "projects", element: <AdminProjectsPage /> },
+            ],
+          },
           { path: "*", element: <NotFoundPage /> },
         ],
       },

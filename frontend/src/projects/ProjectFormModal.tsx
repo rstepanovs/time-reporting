@@ -15,7 +15,14 @@ type FormValues = {
 };
 
 type Props =
-  | { mode: "create"; opened: boolean; onClose: () => void; defaultCustomerId?: string }
+  | {
+      mode: "create";
+      opened: boolean;
+      onClose: () => void;
+      defaultCustomerId?: string;
+      /** Called instead of navigating to the new project's page, e.g. from the admin list. */
+      onCreated?: (project: Project) => void;
+    }
   | { mode: "edit"; opened: boolean; onClose: () => void; project: Project };
 
 export function ProjectFormModal(props: Props) {
@@ -53,7 +60,11 @@ export function ProjectFormModal(props: Props) {
         });
         onClose();
         notifications.show({ title: "Project created", message: created.name });
-        await navigate(`/projects/${created.id}`);
+        if (props.onCreated) {
+          props.onCreated(created);
+        } else {
+          await navigate(`/projects/${created.id}`);
+        }
       } else {
         const original = props.project;
         const body: { name?: string; description?: string | null } = {};

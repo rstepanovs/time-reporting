@@ -10,3 +10,8 @@ export const roleLabels: Record<UserRole, string> = {
 export function canManage(role: UserRole): boolean {
   return role === "admin" || role === "project_manager";
 }
+
+/** Only administrators can manage users and permanently delete records (the Administration area). */
+export function isAdmin(role: UserRole): boolean {
+  return role === "admin";
+}

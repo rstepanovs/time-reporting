@@ -4,6 +4,7 @@ from time_reporting.core.cqrs import HandlerRegistry
 from time_reporting.modules.users.contracts import (
     ChangeOwnPassword,
     CreateUser,
+    DeleteUser,
     GetUserById,
     GetUserCredentialsByEmail,
     GetUsersByIds,
@@ -15,6 +16,7 @@ from time_reporting.modules.users.contracts import (
 from time_reporting.modules.users.handlers import (
     ChangeOwnPasswordHandler,
     CreateUserHandler,
+    DeleteUserHandler,
     GetUserByIdHandler,
     GetUserCredentialsByEmailHandler,
     GetUsersByIdsHandler,
@@ -36,3 +38,4 @@ def register(registry: HandlerRegistry) -> None:
     registry.command(ResetUserPassword, ResetUserPasswordHandler)
     registry.command(ChangeOwnPassword, ChangeOwnPasswordHandler)
     registry.command(RecordSuccessfulLogin, RecordSuccessfulLoginHandler)
+    registry.command(DeleteUser, DeleteUserHandler)

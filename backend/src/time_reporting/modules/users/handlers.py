@@ -7,6 +7,7 @@ from time_reporting.core.cqrs import Bus
 from time_reporting.modules.users.contracts import (
     ChangeOwnPassword,
     CreateUser,
+    DeleteUser,
     GetUserById,
     GetUserCredentialsByEmail,
     GetUsersByIds,
@@ -136,3 +137,8 @@ class RecordSuccessfulLoginHandler(_CommandHandler):
         await self._service.record_login(
             command.user_id, rehashed_password_hash=command.rehashed_password_hash
         )
+
+
+class DeleteUserHandler(_CommandHandler):
+    async def handle(self, command: DeleteUser) -> None:
+        await self._service.delete_user(command.user_id, acting_user_id=command.acting_user_id)

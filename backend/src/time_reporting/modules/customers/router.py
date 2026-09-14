@@ -50,9 +50,10 @@ async def list_customers(
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
     include_inactive: bool = False,
+    search: Annotated[str | None, Query(max_length=255)] = None,
 ) -> CustomerPageResponse:
     page = await bus.query(
-        ListCustomers(limit=limit, offset=offset, include_inactive=include_inactive)
+        ListCustomers(limit=limit, offset=offset, include_inactive=include_inactive, search=search)
     )
     return CustomerPageResponse.model_validate(page)
 

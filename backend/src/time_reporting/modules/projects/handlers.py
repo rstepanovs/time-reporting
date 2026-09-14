@@ -10,6 +10,7 @@ from time_reporting.modules.customers.contracts import CustomerDTO, GetCustomers
 from time_reporting.modules.projects.contracts import (
     AddProjectMember,
     CreateProject,
+    DeleteProject,
     GetProjectById,
     ListProjectMembers,
     ListProjects,
@@ -19,6 +20,7 @@ from time_reporting.modules.projects.contracts import (
     ProjectNotFoundError,
     ProjectPageDTO,
     RemoveProjectMember,
+    RemoveUserFromAllProjects,
     UpdateProject,
 )
 from time_reporting.modules.projects.models import Project
@@ -176,3 +178,19 @@ class RemoveProjectMemberHandler:
 
     async def handle(self, command: RemoveProjectMember) -> None:
         await self._service.remove_member(project_id=command.project_id, user_id=command.user_id)
+
+
+class DeleteProjectHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._service = ProjectService(bus)
+
+    async def handle(self, command: DeleteProject) -> None:
+        await self._service.delete_project(command.project_id)
+
+
+class RemoveUserFromAllProjectsHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._service = ProjectService(bus)
+
+    async def handle(self, command: RemoveUserFromAllProjects) -> int:
+        return await self._service.remove_user_from_all_projects(command.user_id)

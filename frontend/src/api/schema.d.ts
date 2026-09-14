@@ -305,6 +305,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/users/{user_id}/removal-impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get User Removal Impact */
+        get: operations["get_user_removal_impact_api_v1_admin_users__user_id__removal_impact_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove User */
+        delete: operations["remove_user_api_v1_admin_users__user_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/customers/{customer_id}/removal-impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Customer Removal Impact */
+        get: operations["get_customer_removal_impact_api_v1_admin_customers__customer_id__removal_impact_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/customers/{customer_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Customer */
+        delete: operations["remove_customer_api_v1_admin_customers__customer_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/projects/{project_id}/removal-impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Project Removal Impact */
+        get: operations["get_project_removal_impact_api_v1_admin_projects__project_id__removal_impact_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/projects/{project_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Project */
+        delete: operations["remove_project_api_v1_admin_projects__project_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -624,6 +726,45 @@ export interface components {
             description?: string | null;
             /** Is Active */
             is_active?: boolean | null;
+        };
+        /**
+         * RemovalBlockerKind
+         * @description What prevents a permanent delete. More kinds arrive with time entries and invoices.
+         * @enum {string}
+         */
+        RemovalBlockerKind: "self" | "projects";
+        /** RemovalCountResponse */
+        RemovalCountResponse: {
+            /** Kind */
+            kind: components["schemas"]["RemovalBlockerKind"] | components["schemas"]["RemovalEffectKind"];
+            /** Count */
+            count: number;
+        };
+        /**
+         * RemovalEffectKind
+         * @description What a permanent delete also removes, in addition to the record itself.
+         * @enum {string}
+         */
+        RemovalEffectKind: "project_memberships" | "project_members";
+        /** RemovalImpactResponse */
+        RemovalImpactResponse: {
+            /** Is Active */
+            is_active: boolean;
+            /** Can Delete Permanently */
+            can_delete_permanently: boolean;
+            /** Blockers */
+            blockers: components["schemas"]["RemovalCountResponse"][];
+            /** Effects */
+            effects: components["schemas"]["RemovalCountResponse"][];
+        };
+        /**
+         * RemovalOutcome
+         * @enum {string}
+         */
+        RemovalOutcome: "archived" | "deleted";
+        /** RemovalResponse */
+        RemovalResponse: {
+            outcome: components["schemas"]["RemovalOutcome"];
         };
         /** SessionCreateRequest */
         SessionCreateRequest: {
@@ -1212,6 +1353,7 @@ export interface operations {
                 limit?: number;
                 offset?: number;
                 include_inactive?: boolean;
+                search?: string | null;
             };
             header?: never;
             path?: never;
@@ -1658,6 +1800,268 @@ export interface operations {
             };
             /** @description Project not found, or the user is not a member */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_user_removal_impact_api_v1_admin_users__user_id__removal_impact_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemovalImpactResponse"];
+                };
+            };
+            /** @description Record not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_user_api_v1_admin_users__user_id__delete: {
+        parameters: {
+            query?: {
+                permanent?: boolean;
+            };
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemovalResponse"];
+                };
+            };
+            /** @description You cannot archive or delete your own account */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Record not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Referenced by other data; cannot be deleted */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_customer_removal_impact_api_v1_admin_customers__customer_id__removal_impact_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemovalImpactResponse"];
+                };
+            };
+            /** @description Record not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_customer_api_v1_admin_customers__customer_id__delete: {
+        parameters: {
+            query?: {
+                permanent?: boolean;
+            };
+            header?: never;
+            path: {
+                customer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemovalResponse"];
+                };
+            };
+            /** @description Record not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Referenced by other data; cannot be deleted */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_project_removal_impact_api_v1_admin_projects__project_id__removal_impact_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemovalImpactResponse"];
+                };
+            };
+            /** @description Record not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_project_api_v1_admin_projects__project_id__delete: {
+        parameters: {
+            query?: {
+                permanent?: boolean;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemovalResponse"];
+                };
+            };
+            /** @description Record not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Referenced by other data; cannot be deleted */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

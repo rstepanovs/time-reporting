@@ -4,15 +4,17 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from support import DEFAULT_BILLING_ADDRESS, DEFAULT_BILLING_PERIOD, CustomerFactory
+from support import DEFAULT_BILLING_ADDRESS, DEFAULT_BILLING_PERIOD, CustomerFactory, ProjectFactory
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.customers.contracts import (
     BillingAddressDTO,
     BillingIntervalUnit,
     BillingPeriodDTO,
     CreateCustomer,
+    CustomerInUseError,
     CustomerNameAlreadyExistsError,
     CustomerNotFoundError,
+    DeleteCustomer,
     GetCustomerById,
     GetCustomersByIds,
     ListCustomers,
@@ -156,6 +158,37 @@ async def test_list_customers_is_paginated_and_ordered_by_name(
     ]
 
 
+async def test_list_customers_filters_by_search_against_name_and_legal_name(
+    bus: Bus, make_customer: CustomerFactory
+) -> None:
+    by_name = await make_customer(name="Searchable Customer")
+    by_legal_name = await bus.execute(
+        CreateCustomer(
+            name="Other Name",
+            legal_name="Searchable Legal Entity Ltd.",
+            billing_address=DEFAULT_BILLING_ADDRESS,
+            billing_period=DEFAULT_BILLING_PERIOD,
+            currency="EUR",
+        )
+    )
+    await make_customer(name="Unrelated")
+
+    page = await bus.query(ListCustomers(limit=100, offset=0, search="Searchable"))
+
+    assert {c.id for c in page.items} == {by_name.id, by_legal_name.id}
+
+
+async def test_list_customers_search_treats_wildcards_as_literal(
+    bus: Bus, make_customer: CustomerFactory
+) -> None:
+    await make_customer(name="100% Match")
+    await make_customer(name="Other")
+
+    page = await bus.query(ListCustomers(limit=100, offset=0, search="100% Match"))
+
+    assert [c.name for c in page.items] == ["100% Match"]
+
+
 async def test_database_rejects_non_positive_billing_interval(bus: Bus) -> None:
     period = BillingPeriodDTO(
         interval_count=0, interval_unit=BillingIntervalUnit.DAY, anchor_date=date(2026, 1, 1)
@@ -187,3 +220,28 @@ async def test_get_customers_by_ids_orders_by_name_and_includes_archived(
 
 async def test_get_customers_by_ids_with_empty_set_returns_empty(bus: Bus) -> None:
     assert await bus.query(GetCustomersByIds(customer_ids=frozenset())) == ()
+
+
+async def test_delete_customer_removes_the_row(bus: Bus, make_customer: CustomerFactory) -> None:
+    customer = await make_customer()
+
+    await bus.execute(DeleteCustomer(customer_id=customer.id))
+
+    assert await bus.query(GetCustomerById(customer_id=customer.id)) is None
+
+
+async def test_delete_unknown_customer_raises(bus: Bus) -> None:
+    with pytest.raises(CustomerNotFoundError):
+        await bus.execute(DeleteCustomer(customer_id=uuid4()))
+
+
+async def test_delete_customer_blocked_by_project(
+    bus: Bus, make_customer: CustomerFactory, make_project: ProjectFactory
+) -> None:
+    customer = await make_customer()
+    await make_project(customer_id=customer.id)
+
+    with pytest.raises(CustomerInUseError):
+        await bus.execute(DeleteCustomer(customer_id=customer.id))
+
+    assert await bus.query(GetCustomerById(customer_id=customer.id)) is not None

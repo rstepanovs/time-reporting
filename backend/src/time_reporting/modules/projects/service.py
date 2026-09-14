@@ -86,6 +86,12 @@ class ProjectService:
             raise ProjectMemberNotFoundError(project_id, user_id)
         await self._members.delete(member)
 
+    async def delete_project(self, project_id: UUID) -> None:
+        await self._projects.delete(await self.get_project(project_id))
+
+    async def remove_user_from_all_projects(self, user_id: UUID) -> int:
+        return await self._members.delete_all_for_user(user_id)
+
     async def _ensure_customer_active(self, customer_id: UUID) -> None:
         customer = await self._bus.query(GetCustomerById(customer_id=customer_id))
         if customer is None:

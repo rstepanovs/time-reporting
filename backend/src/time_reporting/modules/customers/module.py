@@ -3,6 +3,7 @@
 from time_reporting.core.cqrs import HandlerRegistry
 from time_reporting.modules.customers.contracts import (
     CreateCustomer,
+    DeleteCustomer,
     GetCustomerById,
     GetCustomersByIds,
     ListCustomers,
@@ -10,6 +11,7 @@ from time_reporting.modules.customers.contracts import (
 )
 from time_reporting.modules.customers.handlers import (
     CreateCustomerHandler,
+    DeleteCustomerHandler,
     GetCustomerByIdHandler,
     GetCustomersByIdsHandler,
     ListCustomersHandler,
@@ -24,3 +26,4 @@ def register(registry: HandlerRegistry) -> None:
 
     registry.command(CreateCustomer, CreateCustomerHandler)
     registry.command(UpdateCustomer, UpdateCustomerHandler)
+    registry.command(DeleteCustomer, DeleteCustomerHandler)

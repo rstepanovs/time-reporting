@@ -79,6 +79,12 @@ class UserService:
             raise InvalidCurrentPasswordError()
         await self._set_password(user, new_password)
 
+    async def delete_user(self, user_id: UUID, *, acting_user_id: UUID) -> None:
+        user = await self.get_user(user_id)
+        if user.id == acting_user_id:
+            raise SelfModificationError()
+        await self._users.delete(user)
+
     async def record_login(self, user_id: UUID, *, rehashed_password_hash: str | None) -> None:
         user = await self.get_user(user_id)
         user.last_login_at = utc_now()
