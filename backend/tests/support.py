@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from datetime import date
 from typing import Protocol
+from uuid import UUID
 
 from time_reporting.modules.customers.contracts import (
     BillingAddressDTO,
@@ -10,6 +11,7 @@ from time_reporting.modules.customers.contracts import (
     BillingPeriodDTO,
     CustomerDTO,
 )
+from time_reporting.modules.projects.contracts import ProjectDTO
 from time_reporting.modules.users.contracts import UserDTO, UserRole
 
 DEFAULT_PASSWORD = "correct-horse-battery"
@@ -36,3 +38,13 @@ class UserFactory(Protocol):
 
 class CustomerFactory(Protocol):
     async def __call__(self, *, name: str | None = None) -> CustomerDTO: ...
+
+
+class ProjectFactory(Protocol):
+    async def __call__(
+        self,
+        *,
+        customer_id: UUID | None = None,
+        name: str | None = None,
+        description: str | None = None,
+    ) -> ProjectDTO: ...
