@@ -196,6 +196,12 @@ Dependency order: **B1 → B2 → B3 → B4** → **F1 → F2** → **D1**.
   `useProjectBillingItems`, `useAddProjectBillingItem`, `useUpdateProjectBillingItem`,
   `useDeleteProjectBillingItem` (invalidate `projectKeys.all`).
 - `admin/RemoveEntityModal.tsx`: label for the `project_billing_items` effect.
+- `test/fixtures.ts`: `testProject.customer` needed a `currency` once the schema was regenerated
+  (`ProjectCustomerResponse` gained it in B3) — `tsc -b` caught the now-missing field.
+- A billing item's 409 means two different things depending on the route (name conflict on
+  create/update, "still in use" on delete), unlike a project's single 409 meaning; `api.ts` gets
+  two small error mappers (`billingItemWriteError`, `billingItemDeleteError`) instead of reusing
+  the generic `ruleAwareError` for writes.
 
 ### F2. Billing items on the project page
 

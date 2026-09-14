@@ -54,7 +54,12 @@ export const testCustomer: Customer = {
 
 export const testProject: Project = {
   id: "p1a1a1a1-1111-1111-1111-111111111111",
-  customer: { id: testCustomer.id, name: testCustomer.name, is_active: true },
+  customer: {
+    id: testCustomer.id,
+    name: testCustomer.name,
+    is_active: true,
+    currency: testCustomer.currency,
+  },
   name: "Website Revamp",
   description: "Redesign the public marketing site.",
   is_active: true,

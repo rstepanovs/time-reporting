@@ -305,6 +305,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/billing-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Project Billing Items */
+        get: operations["list_project_billing_items_api_v1_projects__project_id__billing_items_get"];
+        put?: never;
+        /** Add Project Billing Item */
+        post: operations["add_project_billing_item_api_v1_projects__project_id__billing_items_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/billing-items/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Project Billing Item */
+        delete: operations["delete_project_billing_item_api_v1_projects__project_id__billing_items__item_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Project Billing Item */
+        patch: operations["update_project_billing_item_api_v1_projects__project_id__billing_items__item_id__patch"];
+        trace?: never;
+    };
     "/api/v1/admin/users/{user_id}/removal-impact": {
         parameters: {
             query?: never;
@@ -451,6 +487,48 @@ export interface components {
          */
         BillingIntervalUnit: "day" | "week" | "month" | "year";
         /**
+         * BillingItemCreateRequest
+         * @description A custom item; ``preset`` is not accepted here — only ``AddProjectBillingItem`` sets it,
+         *     and only for the six items a project is created with.
+         */
+        BillingItemCreateRequest: {
+            /** Name */
+            name: string;
+            unit: components["schemas"]["BillingUnit"];
+            /** Description */
+            description?: string | null;
+            /** Unit Rate */
+            unit_rate?: number | string | null;
+            /** Markup Percent */
+            markup_percent?: number | string | null;
+        };
+        /**
+         * BillingItemPreset
+         * @description Identifies a billing item created from ``DEFAULT_BILLING_ITEMS``; custom items have none.
+         * @enum {string}
+         */
+        BillingItemPreset: "normal_hours" | "overtime_hours" | "travel_time" | "per_diem" | "purchasing_expenses" | "other_expenses";
+        /**
+         * BillingItemUpdateRequest
+         * @description Partial update: omitted fields are left unchanged.
+         *
+         *     ``unit`` and ``preset`` are immutable and not part of this request. ``null`` clears
+         *     ``description``, ``unit_rate`` and ``markup_percent``; it is rejected for ``name`` and
+         *     ``is_active``.
+         */
+        BillingItemUpdateRequest: {
+            /** Name */
+            name?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Unit Rate */
+            unit_rate?: number | string | null;
+            /** Markup Percent */
+            markup_percent?: number | string | null;
+            /** Is Active */
+            is_active?: boolean | null;
+        };
+        /**
          * BillingPeriodRequest
          * @description Consecutive billing periods of ``interval_count`` ``interval_unit``s from ``anchor_date``.
          */
@@ -475,6 +553,12 @@ export interface components {
              */
             anchor_date: string;
         };
+        /**
+         * BillingUnit
+         * @description What a billing item's quantity is measured in. Immutable once the item exists.
+         * @enum {string}
+         */
+        BillingUnit: "hour" | "day" | "amount";
         /** Body_login_api_v1_auth_login_post */
         Body_login_api_v1_auth_login_post: {
             /** Grant Type */
@@ -624,6 +708,43 @@ export interface components {
             /** New Password */
             new_password: string;
         };
+        /** ProjectBillingItemResponse */
+        ProjectBillingItemResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            preset: components["schemas"]["BillingItemPreset"] | null;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string | null;
+            unit: components["schemas"]["BillingUnit"];
+            /** Unit Rate */
+            unit_rate: string | null;
+            /** Markup Percent */
+            markup_percent: string | null;
+            /** Position */
+            position: number;
+            /** Is Active */
+            is_active: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /** ProjectCreateRequest */
         ProjectCreateRequest: {
             /**
@@ -647,6 +768,8 @@ export interface components {
             name: string;
             /** Is Active */
             is_active: boolean;
+            /** Currency */
+            currency: string;
         };
         /** ProjectMemberAddRequest */
         ProjectMemberAddRequest: {
@@ -745,7 +868,7 @@ export interface components {
          * @description What a permanent delete also removes, in addition to the record itself.
          * @enum {string}
          */
-        RemovalEffectKind: "project_memberships" | "project_members";
+        RemovalEffectKind: "project_memberships" | "project_members" | "project_billing_items";
         /** RemovalImpactResponse */
         RemovalImpactResponse: {
             /** Is Active */
@@ -1800,6 +1923,203 @@ export interface operations {
             };
             /** @description Project not found, or the user is not a member */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_project_billing_items_api_v1_projects__project_id__billing_items_get: {
+        parameters: {
+            query?: {
+                include_inactive?: boolean;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectBillingItemResponse"][];
+                };
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_project_billing_item_api_v1_projects__project_id__billing_items_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BillingItemCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectBillingItemResponse"];
+                };
+            };
+            /** @description The project is archived, or the pricing doesn't match the unit */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A billing item with this name already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_project_billing_item_api_v1_projects__project_id__billing_items__item_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The billing item is referenced by other data and cannot be deleted */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_project_billing_item_api_v1_projects__project_id__billing_items__item_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BillingItemUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectBillingItemResponse"];
+                };
+            };
+            /** @description The pricing doesn't match the unit, or the project is archived */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Project not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A billing item with this name already exists */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

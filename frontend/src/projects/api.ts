@@ -5,6 +5,9 @@ import type { components } from "@/api/schema";
 export type Project = components["schemas"]["ProjectResponse"];
 export type ProjectPage = components["schemas"]["ProjectPageResponse"];
 export type ProjectMember = components["schemas"]["ProjectMemberResponse"];
+export type BillingItem = components["schemas"]["ProjectBillingItemResponse"];
+export type BillingUnit = components["schemas"]["BillingUnit"];
+export type BillingItemPreset = components["schemas"]["BillingItemPreset"];
 
 /** A project name is already taken for that customer (409). */
 export class ProjectConflictError extends Error {
@@ -30,6 +33,22 @@ export class ProjectNotFoundError extends Error {
   }
 }
 
+/** A billing item with this name already exists for the project (409). */
+export class BillingItemConflictError extends Error {
+  constructor() {
+    super("A billing item with this name already exists for this project");
+    this.name = "BillingItemConflictError";
+  }
+}
+
+/** The billing item is referenced by other data and cannot be permanently deleted (409). */
+export class BillingItemInUseError extends Error {
+  constructor() {
+    super("This billing item is referenced by other data and cannot be deleted");
+    this.name = "BillingItemInUseError";
+  }
+}
+
 async function ruleAwareError(response: Response): Promise<Error> {
   if (response.status === 409) return new ProjectConflictError();
   if (response.status === 404) return new ProjectNotFoundError();
@@ -37,6 +56,25 @@ async function ruleAwareError(response: Response): Promise<Error> {
     const body = (await response.clone().json().catch(() => null)) as { detail?: string } | null;
     return new ProjectRuleError(body?.detail ?? "This action is not allowed");
   }
+  return new ApiError(response);
+}
+
+// A billing item's 409 means two different things depending on the route (a name conflict on
+// create/update, "still in use" on delete), so each gets its own mapping instead of reusing
+// ruleAwareError's single 409 case.
+async function billingItemWriteError(response: Response): Promise<Error> {
+  if (response.status === 409) return new BillingItemConflictError();
+  if (response.status === 404) return new ProjectNotFoundError();
+  if (response.status === 400) {
+    const body = (await response.clone().json().catch(() => null)) as { detail?: string } | null;
+    return new ProjectRuleError(body?.detail ?? "This action is not allowed");
+  }
+  return new ApiError(response);
+}
+
+async function billingItemDeleteError(response: Response): Promise<Error> {
+  if (response.status === 409) return new BillingItemInUseError();
+  if (response.status === 404) return new ProjectNotFoundError();
   return new ApiError(response);
 }
 
@@ -121,4 +159,59 @@ export async function removeProjectMember(projectId: string, userId: string): Pr
     params: { path: { project_id: projectId, user_id: userId } },
   });
   if (!response.ok) throw await ruleAwareError(response);
+}
+
+export async function listProjectBillingItems(
+  projectId: string,
+  includeInactive = false,
+): Promise<BillingItem[]> {
+  const { data, response } = await api.GET("/api/v1/projects/{project_id}/billing-items", {
+    params: { path: { project_id: projectId }, query: { include_inactive: includeInactive } },
+  });
+  if (!data) throw await ruleAwareError(response);
+  return data;
+}
+
+export async function addProjectBillingItem(
+  projectId: string,
+  body: {
+    name: string;
+    unit: BillingUnit;
+    description?: string | null;
+    unit_rate?: string | null;
+    markup_percent?: string | null;
+  },
+): Promise<BillingItem> {
+  const { data, response } = await api.POST("/api/v1/projects/{project_id}/billing-items", {
+    params: { path: { project_id: projectId } },
+    body,
+  });
+  if (!data) throw await billingItemWriteError(response);
+  return data;
+}
+
+export async function updateProjectBillingItem(
+  projectId: string,
+  itemId: string,
+  body: {
+    name?: string;
+    description?: string | null;
+    unit_rate?: string | null;
+    markup_percent?: string | null;
+    is_active?: boolean;
+  },
+): Promise<BillingItem> {
+  const { data, response } = await api.PATCH(
+    "/api/v1/projects/{project_id}/billing-items/{item_id}",
+    { params: { path: { project_id: projectId, item_id: itemId } }, body },
+  );
+  if (!data) throw await billingItemWriteError(response);
+  return data;
+}
+
+export async function deleteProjectBillingItem(projectId: string, itemId: string): Promise<void> {
+  const { response } = await api.DELETE("/api/v1/projects/{project_id}/billing-items/{item_id}", {
+    params: { path: { project_id: projectId, item_id: itemId } },
+  });
+  if (!response.ok) throw await billingItemDeleteError(response);
 }

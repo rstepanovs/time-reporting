@@ -38,6 +38,8 @@ function effectPhrase(kind: RemovalCount["kind"], count: number): string {
       return `${count} project membership${count === 1 ? "" : "s"}`;
     case "project_members":
       return `${count} project member${count === 1 ? "" : "s"}`;
+    case "project_billing_items":
+      return `${count} billing item${count === 1 ? "" : "s"}`;
     default:
       return `${count} related record${count === 1 ? "" : "s"}`;
   }
