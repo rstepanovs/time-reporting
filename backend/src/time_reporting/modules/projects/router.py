@@ -6,12 +6,20 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query, status
 
 from time_reporting.api.deps import BusDep
-from time_reporting.modules.auth.dependencies import CurrentUserDep, ManagerDep
+from time_reporting.modules.auth.dependencies import AdminDep, CurrentUserDep, ManagerDep
 from time_reporting.modules.projects.contracts import (
+    CLEARABLE_BILLING_ITEM_FIELDS,
     CLEARABLE_PROJECT_FIELDS,
+    AddProjectBillingItem,
     AddProjectMember,
+    BillingItemInUseError,
+    BillingItemNameAlreadyExistsError,
+    BillingItemNotFoundError,
+    BillingItemPricingError,
     CreateProject,
+    DeleteProjectBillingItem,
     GetProjectById,
+    ListProjectBillingItems,
     ListProjectMembers,
     ListProjects,
     MemberUserInactiveError,
@@ -25,8 +33,12 @@ from time_reporting.modules.projects.contracts import (
     ProjectNotFoundError,
     RemoveProjectMember,
     UpdateProject,
+    UpdateProjectBillingItem,
 )
 from time_reporting.modules.projects.schemas import (
+    BillingItemCreateRequest,
+    BillingItemUpdateRequest,
+    ProjectBillingItemResponse,
     ProjectCreateRequest,
     ProjectMemberAddRequest,
     ProjectMemberResponse,
@@ -46,10 +58,17 @@ _NAME_CONFLICT_RESPONSE: dict[int | str, dict[str, Any]] = {
 _CUSTOMER_RULE_RESPONSE: dict[int | str, dict[str, Any]] = {
     status.HTTP_400_BAD_REQUEST: {"description": "The customer does not exist or is archived"}
 }
+_BILLING_ITEM_NAME_CONFLICT_RESPONSE: dict[int | str, dict[str, Any]] = {
+    status.HTTP_409_CONFLICT: {"description": "A billing item with this name already exists"}
+}
 
 
 def _not_found() -> HTTPException:
     return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+
+
+def _billing_item_not_found(exc: BillingItemNotFoundError) -> HTTPException:
+    return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
 
 def _name_conflict(detail: str) -> HTTPException:
@@ -194,3 +213,122 @@ async def remove_project_member(
         await bus.execute(RemoveProjectMember(project_id=project_id, user_id=user_id))
     except (ProjectNotFoundError, ProjectMemberNotFoundError) as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get("/{project_id}/billing-items", responses=_NOT_FOUND_RESPONSE)
+async def list_project_billing_items(
+    project_id: UUID,
+    _user: CurrentUserDep,
+    bus: BusDep,
+    include_inactive: bool = False,
+) -> list[ProjectBillingItemResponse]:
+    try:
+        items = await bus.query(
+            ListProjectBillingItems(project_id=project_id, include_inactive=include_inactive)
+        )
+    except ProjectNotFoundError as exc:
+        raise _not_found() from exc
+    return [ProjectBillingItemResponse.model_validate(item) for item in items]
+
+
+@router.post(
+    "/{project_id}/billing-items",
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        **_NOT_FOUND_RESPONSE,
+        **_BILLING_ITEM_NAME_CONFLICT_RESPONSE,
+        status.HTTP_400_BAD_REQUEST: {
+            "description": "The project is archived, or the pricing doesn't match the unit"
+        },
+    },
+)
+async def add_project_billing_item(
+    project_id: UUID, body: BillingItemCreateRequest, _manager: ManagerDep, bus: BusDep
+) -> ProjectBillingItemResponse:
+    try:
+        item = await bus.execute(
+            AddProjectBillingItem(
+                project_id=project_id,
+                name=body.name,
+                unit=body.unit,
+                description=body.description,
+                unit_rate=body.unit_rate,
+                markup_percent=body.markup_percent,
+            )
+        )
+    except ProjectNotFoundError as exc:
+        raise _not_found() from exc
+    except (ProjectArchivedError, BillingItemPricingError) as exc:
+        raise _bad_request(str(exc)) from exc
+    except BillingItemNameAlreadyExistsError as exc:
+        raise _name_conflict(str(exc)) from exc
+    return ProjectBillingItemResponse.model_validate(item)
+
+
+@router.patch(
+    "/{project_id}/billing-items/{item_id}",
+    responses={
+        **_NOT_FOUND_RESPONSE,
+        **_BILLING_ITEM_NAME_CONFLICT_RESPONSE,
+        status.HTTP_400_BAD_REQUEST: {
+            "description": "The pricing doesn't match the unit, or the project is archived"
+        },
+    },
+)
+async def update_project_billing_item(
+    project_id: UUID,
+    item_id: UUID,
+    body: BillingItemUpdateRequest,
+    _manager: ManagerDep,
+    bus: BusDep,
+) -> ProjectBillingItemResponse:
+    clear_fields = frozenset(
+        name
+        for name in CLEARABLE_BILLING_ITEM_FIELDS
+        if name in body.model_fields_set and getattr(body, name) is None
+    )
+    try:
+        item = await bus.execute(
+            UpdateProjectBillingItem(
+                project_id=project_id,
+                item_id=item_id,
+                name=body.name,
+                description=body.description,
+                unit_rate=body.unit_rate,
+                markup_percent=body.markup_percent,
+                is_active=body.is_active,
+                clear_fields=clear_fields,
+            )
+        )
+    except ProjectNotFoundError as exc:
+        raise _not_found() from exc
+    except BillingItemNotFoundError as exc:
+        raise _billing_item_not_found(exc) from exc
+    except (ProjectArchivedError, BillingItemPricingError) as exc:
+        raise _bad_request(str(exc)) from exc
+    except BillingItemNameAlreadyExistsError as exc:
+        raise _name_conflict(str(exc)) from exc
+    return ProjectBillingItemResponse.model_validate(item)
+
+
+@router.delete(
+    "/{project_id}/billing-items/{item_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        **_NOT_FOUND_RESPONSE,
+        status.HTTP_409_CONFLICT: {
+            "description": "The billing item is referenced by other data and cannot be deleted"
+        },
+    },
+)
+async def delete_project_billing_item(
+    project_id: UUID, item_id: UUID, _admin: AdminDep, bus: BusDep
+) -> None:
+    try:
+        await bus.execute(DeleteProjectBillingItem(project_id=project_id, item_id=item_id))
+    except ProjectNotFoundError as exc:
+        raise _not_found() from exc
+    except BillingItemNotFoundError as exc:
+        raise _billing_item_not_found(exc) from exc
+    except BillingItemInUseError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc

@@ -1,15 +1,21 @@
 """HTTP request/response models of the projects API."""
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Annotated, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
+from time_reporting.modules.projects.contracts import BillingItemPreset, BillingUnit
 from time_reporting.modules.users.contracts import UserRole
 
 ShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
 Description = Annotated[str, StringConstraints(strip_whitespace=True, max_length=10_000)]
+# Matches the ``project_billing_items`` check constraints; the service checks the value against
+# the item's unit (a rate for an ``amount`` item, say), which is a business rule, not a shape one.
+Rate = Annotated[Decimal, Field(ge=0, max_digits=12, decimal_places=2)]
+Markup = Annotated[Decimal, Field(ge=0, le=1000, max_digits=6, decimal_places=2)]
 
 
 class ProjectCreateRequest(BaseModel):
@@ -51,12 +57,55 @@ class ProjectMemberAddRequest(BaseModel):
     user_id: UUID
 
 
+class BillingItemCreateRequest(BaseModel):
+    """A custom item; ``preset`` is not accepted here — only ``AddProjectBillingItem`` sets it,
+    and only for the six items a project is created with."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: ShortText
+    unit: BillingUnit
+    description: Description | None = None
+    unit_rate: Rate | None = None
+    markup_percent: Markup | None = None
+
+
+class BillingItemUpdateRequest(BaseModel):
+    """Partial update: omitted fields are left unchanged.
+
+    ``unit`` and ``preset`` are immutable and not part of this request. ``null`` clears
+    ``description``, ``unit_rate`` and ``markup_percent``; it is rejected for ``name`` and
+    ``is_active``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: ShortText | None = None
+    description: Description | None = None
+    unit_rate: Rate | None = None
+    markup_percent: Markup | None = None
+    is_active: bool | None = None
+
+    @model_validator(mode="after")
+    def _reject_null_for_required_fields(self) -> Self:
+        nulls = [
+            name
+            for name in ("name", "is_active")
+            if name in self.model_fields_set and getattr(self, name) is None
+        ]
+        if nulls:
+            raise ValueError(f"These fields cannot be null: {', '.join(nulls)}")
+        return self
+
+
 class ProjectCustomerResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     name: str
     is_active: bool
+    # ISO 4217 code; billing item rates below are in this currency.
+    currency: str
 
 
 class ProjectResponse(BaseModel):
@@ -89,3 +138,20 @@ class ProjectMemberResponse(BaseModel):
     role: UserRole
     is_active: bool
     added_at: datetime
+
+
+class ProjectBillingItemResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    project_id: UUID
+    preset: BillingItemPreset | None
+    name: str
+    description: str | None
+    unit: BillingUnit
+    unit_rate: Decimal | None
+    markup_percent: Decimal | None
+    position: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime

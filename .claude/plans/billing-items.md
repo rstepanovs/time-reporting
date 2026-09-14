@@ -154,9 +154,14 @@ Dependency order: **B1 → B2 → B3 → B4** → **F1 → F2** → **D1**.
 
 - `projects/schemas.py`: `BillingItemCreateRequest`, `BillingItemUpdateRequest`,
   `ProjectBillingItemResponse`; `Rate = Annotated[Decimal, Field(ge=0, max_digits=12,
-  decimal_places=2)]`, `Markup = Annotated[Decimal, Field(ge=0, le=1000, decimal_places=2)]`;
-  `ProjectCustomerResponse.currency`.
+  decimal_places=2)]`, `Markup = Annotated[Decimal, Field(ge=0, le=1000, max_digits=6,
+  decimal_places=2)]` (matching the `numeric(6, 2)` column); `ProjectCustomerResponse.currency`.
+  Confirmed: Pydantic's default JSON encoding renders `Decimal` as a string, so rates round-trip
+  without float rounding with no extra serializer needed.
 - `projects/router.py`: the four routes and the error mapping from the table above.
+  `BillingItemNotFoundError` (item missing or belongs to a different project) gets its own 404
+  helper carrying the exception's own message, distinct from the generic "Project not found" used
+  when `project_id` itself doesn't exist.
 - Tests (`test_projects_api.py`): status codes and guards per route (worker reads but gets 403 on
   writes, project manager gets 403 on DELETE), `null` clearing, `unit`/`preset` rejected in PATCH,
   decimals round-trip as strings.

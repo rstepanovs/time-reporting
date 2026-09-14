@@ -237,3 +237,335 @@ async def test_member_id_filter_returns_only_that_members_projects(
     assert response.status_code == 200
     ids = {item["id"] for item in response.json()["items"]}
     assert ids == {str(project_with_member.id)}
+
+
+# --- Billing items ---
+
+
+async def test_list_billing_items_returns_the_six_defaults(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    headers = auth_headers(await make_user(role=UserRole.WORKER))
+    project = await make_project()
+
+    response = await client.get(f"/api/v1/projects/{project.id}/billing-items", headers=headers)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 6
+    assert body[0]["name"] == "Normal working hours"
+    assert body[0]["preset"] == "normal_hours"
+    assert body[0]["unit"] == "hour"
+    assert body[0]["unit_rate"] is None
+    assert body[0]["is_active"] is True
+
+
+@pytest.mark.parametrize("role", [UserRole.ADMIN, UserRole.PROJECT_MANAGER])
+async def test_manager_can_add_and_update_a_billing_item(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+    role: UserRole,
+) -> None:
+    headers = auth_headers(await make_user(role=role))
+    project = await make_project()
+
+    created = await client.post(
+        f"/api/v1/projects/{project.id}/billing-items",
+        headers=headers,
+        json={
+            "name": "On-call standby",
+            "unit": "hour",
+            "description": "Weekend on-call",
+            "unit_rate": "50.00",
+        },
+    )
+    assert created.status_code == 201
+    body = created.json()
+    assert body["preset"] is None
+    assert body["position"] == 7
+    # Decimals round-trip as JSON strings, not floats, so the rate isn't rounded in transit.
+    assert body["unit_rate"] == "50.00"
+    assert isinstance(body["unit_rate"], str)
+    item_id = body["id"]
+
+    patched = await client.patch(
+        f"/api/v1/projects/{project.id}/billing-items/{item_id}",
+        headers=headers,
+        json={"name": "On-call", "unit_rate": "60.00"},
+    )
+    assert patched.status_code == 200
+    assert patched.json()["name"] == "On-call"
+    assert patched.json()["unit_rate"] == "60.00"
+    assert patched.json()["unit"] == "hour"
+
+
+async def test_worker_can_read_but_not_write_billing_items(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    headers = auth_headers(await make_user(role=UserRole.WORKER))
+    project = await make_project()
+    url = f"/api/v1/projects/{project.id}/billing-items"
+
+    listed = await client.get(url, headers=headers)
+    created = await client.post(url, headers=headers, json={"name": "Extra", "unit": "hour"})
+    patched = await client.patch(f"{url}/{uuid4()}", headers=headers, json={"name": "X"})
+    deleted = await client.delete(f"{url}/{uuid4()}", headers=headers)
+
+    assert listed.status_code == 200
+    assert created.status_code == 403
+    assert patched.status_code == 403
+    assert deleted.status_code == 403
+
+
+async def test_project_manager_cannot_permanently_delete_a_billing_item(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    manager_headers = auth_headers(await make_user(role=UserRole.PROJECT_MANAGER))
+    admin_headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    project = await make_project()
+    created = await client.post(
+        f"/api/v1/projects/{project.id}/billing-items",
+        headers=admin_headers,
+        json={"name": "Extra", "unit": "hour"},
+    )
+    item_id = created.json()["id"]
+    url = f"/api/v1/projects/{project.id}/billing-items/{item_id}"
+
+    forbidden = await client.delete(url, headers=manager_headers)
+    assert forbidden.status_code == 403
+
+    allowed = await client.delete(url, headers=admin_headers)
+    assert allowed.status_code == 204
+
+
+async def test_billing_items_require_authentication(
+    client: AsyncClient, make_project: ProjectFactory
+) -> None:
+    project = await make_project()
+    url = f"/api/v1/projects/{project.id}/billing-items"
+
+    assert (await client.get(url)).status_code == 401
+    assert (await client.post(url, json={"name": "Extra", "unit": "hour"})).status_code == 401
+
+
+async def test_unknown_project_returns_404_for_billing_item_routes(
+    client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
+) -> None:
+    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    url = f"/api/v1/projects/{uuid4()}/billing-items"
+
+    assert (await client.get(url, headers=headers)).status_code == 404
+    assert (
+        await client.post(url, headers=headers, json={"name": "Extra", "unit": "hour"})
+    ).status_code == 404
+    assert (
+        await client.patch(f"{url}/{uuid4()}", headers=headers, json={"name": "X"})
+    ).status_code == 404
+    assert (await client.delete(f"{url}/{uuid4()}", headers=headers)).status_code == 404
+
+
+async def test_unknown_billing_item_for_a_real_project_returns_404(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    project = await make_project()
+    url = f"/api/v1/projects/{project.id}/billing-items/{uuid4()}"
+
+    assert (await client.patch(url, headers=headers, json={"name": "X"})).status_code == 404
+    assert (await client.delete(url, headers=headers)).status_code == 404
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"name": "Expense", "unit": "amount", "unit_rate": "10.00"},
+        {"name": "Hours", "unit": "hour", "markup_percent": "10.00"},
+    ],
+)
+async def test_add_billing_item_with_pricing_for_the_wrong_unit_returns_400(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+    payload: dict[str, Any],
+) -> None:
+    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    project = await make_project()
+
+    response = await client.post(
+        f"/api/v1/projects/{project.id}/billing-items", headers=headers, json=payload
+    )
+
+    assert response.status_code == 400
+
+
+async def test_add_billing_item_to_archived_project_returns_400(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    project = await make_project()
+    await client.patch(f"/api/v1/projects/{project.id}", headers=headers, json={"is_active": False})
+
+    response = await client.post(
+        f"/api/v1/projects/{project.id}/billing-items",
+        headers=headers,
+        json={"name": "Extra", "unit": "hour"},
+    )
+
+    assert response.status_code == 400
+
+
+async def test_duplicate_billing_item_name_returns_409(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    project = await make_project()
+    payload = {"name": "Normal working hours", "unit": "hour"}
+
+    response = await client.post(
+        f"/api/v1/projects/{project.id}/billing-items", headers=headers, json=payload
+    )
+
+    assert response.status_code == 409
+
+
+async def test_update_billing_item_rejects_null_for_name_and_is_active(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    project = await make_project()
+    created = await client.post(
+        f"/api/v1/projects/{project.id}/billing-items",
+        headers=headers,
+        json={"name": "Extra", "unit": "hour"},
+    )
+    item_id = created.json()["id"]
+
+    for field in ("name", "is_active"):
+        response = await client.patch(
+            f"/api/v1/projects/{project.id}/billing-items/{item_id}",
+            headers=headers,
+            json={field: None},
+        )
+        assert response.status_code == 422
+
+
+async def test_update_rejects_unit_and_preset(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    project = await make_project()
+    created = await client.post(
+        f"/api/v1/projects/{project.id}/billing-items",
+        headers=headers,
+        json={"name": "Extra", "unit": "hour"},
+    )
+    item_id = created.json()["id"]
+
+    for field, value in (("unit", "day"), ("preset", "per_diem")):
+        response = await client.patch(
+            f"/api/v1/projects/{project.id}/billing-items/{item_id}",
+            headers=headers,
+            json={field: value},
+        )
+        assert response.status_code == 422
+
+
+async def test_update_clears_description_and_unit_rate(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    project = await make_project()
+    created = await client.post(
+        f"/api/v1/projects/{project.id}/billing-items",
+        headers=headers,
+        json={"name": "Extra", "unit": "hour", "description": "Notes", "unit_rate": "50.00"},
+    )
+    item_id = created.json()["id"]
+
+    response = await client.patch(
+        f"/api/v1/projects/{project.id}/billing-items/{item_id}",
+        headers=headers,
+        json={"description": None, "unit_rate": None},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["description"] is None
+    assert response.json()["unit_rate"] is None
+
+
+async def test_include_inactive_query_param(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    project = await make_project()
+    created = await client.post(
+        f"/api/v1/projects/{project.id}/billing-items",
+        headers=headers,
+        json={"name": "Extra", "unit": "hour"},
+    )
+    item_id = created.json()["id"]
+    await client.patch(
+        f"/api/v1/projects/{project.id}/billing-items/{item_id}",
+        headers=headers,
+        json={"is_active": False},
+    )
+
+    default_listing = await client.get(
+        f"/api/v1/projects/{project.id}/billing-items", headers=headers
+    )
+    assert "Extra" not in {i["name"] for i in default_listing.json()}
+
+    full_listing = await client.get(
+        f"/api/v1/projects/{project.id}/billing-items",
+        headers=headers,
+        params={"include_inactive": True},
+    )
+    assert "Extra" in {i["name"] for i in full_listing.json()}
+
+
+async def test_project_customer_response_includes_currency(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    headers = auth_headers(await make_user(role=UserRole.WORKER))
+    project = await make_project()
+
+    response = await client.get(f"/api/v1/projects/{project.id}", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json()["customer"]["currency"]
