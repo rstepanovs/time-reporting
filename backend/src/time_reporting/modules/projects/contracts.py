@@ -140,12 +140,48 @@ class ProjectBillingItemDTO:
     updated_at: datetime
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ProjectOptionDTO:
+    """A project the caller is a member of, with its active billing items.
+
+    Used to build a "which project/billing item" picker (e.g. adding a timesheet row) and to
+    validate that a write against a given project/billing item is allowed for that user.
+    """
+
+    project: ProjectDTO
+    billing_items: tuple[ProjectBillingItemDTO, ...]
+
+
 # --- Queries ---
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class GetProjectById(Query[ProjectDTO | None]):
     project_id: UUID
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetProjectsByIds(Query[tuple[ProjectDTO, ...]]):
+    """Projects matching ``project_ids``, ordered by name then id. Unknown ids are silently
+    omitted."""
+
+    project_ids: frozenset[UUID]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetProjectBillingItemsByIds(Query[tuple[ProjectBillingItemDTO, ...]]):
+    """Billing items matching ``billing_item_ids``, ordered by project then position then name.
+    Unknown ids are silently omitted."""
+
+    billing_item_ids: frozenset[UUID]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ListMemberProjectsWithBillingItems(Query[tuple[ProjectOptionDTO, ...]]):
+    """Active projects ``user_id`` is a member of, each with its active billing items, ordered by
+    project name. Used to build a timesheet row picker and to validate timesheet writes."""
+
+    user_id: UUID
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

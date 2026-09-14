@@ -20,7 +20,10 @@ from time_reporting.modules.projects.contracts import (
     CreateProject,
     DeleteProject,
     DeleteProjectBillingItem,
+    GetProjectBillingItemsByIds,
     GetProjectById,
+    GetProjectsByIds,
+    ListMemberProjectsWithBillingItems,
     ListProjectBillingItems,
     ListProjectMembers,
     ListProjects,
@@ -626,3 +629,98 @@ async def test_delete_unknown_billing_item_raises(bus: Bus, make_project: Projec
 
     with pytest.raises(BillingItemNotFoundError):
         await bus.execute(DeleteProjectBillingItem(project_id=project.id, item_id=uuid4()))
+
+
+# --- Batch queries (GetProjectsByIds, GetProjectBillingItemsByIds,
+# ListMemberProjectsWithBillingItems) ---
+
+
+async def test_get_projects_by_ids_orders_by_name_and_omits_unknown_ids(
+    bus: Bus, make_project: ProjectFactory
+) -> None:
+    zed = await make_project(name="Zed Project")
+    ann = await make_project(name="Ann Project")
+
+    result = await bus.query(GetProjectsByIds(project_ids=frozenset({zed.id, ann.id, uuid4()})))
+
+    assert [p.id for p in result] == [ann.id, zed.id]
+
+
+async def test_get_projects_by_ids_with_empty_set_returns_empty(bus: Bus) -> None:
+    assert await bus.query(GetProjectsByIds(project_ids=frozenset())) == ()
+
+
+async def test_get_project_billing_items_by_ids_omits_unknown_ids(
+    bus: Bus, make_project: ProjectFactory
+) -> None:
+    project = await make_project()
+    item = await bus.execute(
+        AddProjectBillingItem(project_id=project.id, name="Extra", unit=BillingUnit.HOUR)
+    )
+
+    result = await bus.query(
+        GetProjectBillingItemsByIds(billing_item_ids=frozenset({item.id, uuid4()}))
+    )
+
+    assert [i.id for i in result] == [item.id]
+
+
+async def test_get_project_billing_items_by_ids_with_empty_set_returns_empty(bus: Bus) -> None:
+    assert await bus.query(GetProjectBillingItemsByIds(billing_item_ids=frozenset())) == ()
+
+
+async def test_list_member_projects_with_billing_items_orders_by_name(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    user = await make_user()
+    zed = await make_project(name="Zed Project")
+    ann = await make_project(name="Ann Project")
+    await bus.execute(AddProjectMember(project_id=zed.id, user_id=user.id))
+    await bus.execute(AddProjectMember(project_id=ann.id, user_id=user.id))
+
+    options = await bus.query(ListMemberProjectsWithBillingItems(user_id=user.id))
+
+    assert [option.project.id for option in options] == [ann.id, zed.id]
+    for option in options:
+        assert len(option.billing_items) == len(DEFAULT_BILLING_ITEMS)
+
+
+async def test_list_member_projects_with_billing_items_excludes_non_member_projects(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    user = await make_user()
+    await make_project()
+
+    assert await bus.query(ListMemberProjectsWithBillingItems(user_id=user.id)) == ()
+
+
+async def test_list_member_projects_with_billing_items_excludes_archived_project(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    user = await make_user()
+    project = await make_project()
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=user.id))
+    await bus.execute(UpdateProject(project_id=project.id, is_active=False))
+
+    assert await bus.query(ListMemberProjectsWithBillingItems(user_id=user.id)) == ()
+
+
+async def test_list_member_projects_with_billing_items_excludes_archived_billing_items(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    user = await make_user()
+    project = await make_project()
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=user.id))
+    item = await bus.execute(
+        AddProjectBillingItem(project_id=project.id, name="Extra", unit=BillingUnit.HOUR)
+    )
+    await bus.execute(
+        UpdateProjectBillingItem(project_id=project.id, item_id=item.id, is_active=False)
+    )
+
+    options = await bus.query(ListMemberProjectsWithBillingItems(user_id=user.id))
+
+    assert len(options) == 1
+    item_ids = {i.id for i in options[0].billing_items}
+    assert item.id not in item_ids
+    assert len(item_ids) == len(DEFAULT_BILLING_ITEMS)

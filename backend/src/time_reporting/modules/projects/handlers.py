@@ -3,7 +3,10 @@
 Handlers translate between bus messages and the service/repository and never return ORM entities.
 """
 
+from collections import defaultdict
+from collections.abc import Sequence
 from datetime import datetime
+from uuid import UUID
 
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.customers.contracts import CustomerDTO, GetCustomersByIds
@@ -13,7 +16,10 @@ from time_reporting.modules.projects.contracts import (
     CreateProject,
     DeleteProject,
     DeleteProjectBillingItem,
+    GetProjectBillingItemsByIds,
     GetProjectById,
+    GetProjectsByIds,
+    ListMemberProjectsWithBillingItems,
     ListProjectBillingItems,
     ListProjectMembers,
     ListProjects,
@@ -22,6 +28,7 @@ from time_reporting.modules.projects.contracts import (
     ProjectDTO,
     ProjectMemberDTO,
     ProjectNotFoundError,
+    ProjectOptionDTO,
     ProjectPageDTO,
     RemoveProjectMember,
     RemoveUserFromAllProjects,
@@ -95,6 +102,11 @@ class _BaseHandler:
         )
         return _to_dto(project, _customer_dto(customers[0]))
 
+    async def _customers_by_id(self, projects: Sequence[Project]) -> dict[UUID, CustomerDTO]:
+        customer_ids = frozenset(project.customer_id for project in projects)
+        customers = await self._bus.query(GetCustomersByIds(customer_ids=customer_ids))
+        return {customer.id: customer for customer in customers}
+
 
 # --- Queries ---
 
@@ -105,6 +117,56 @@ class GetProjectByIdHandler(_BaseHandler):
         if project is None:
             return None
         return await self._project_dto(project)
+
+
+class GetProjectsByIdsHandler(_BaseHandler):
+    async def handle(self, query: GetProjectsByIds) -> tuple[ProjectDTO, ...]:
+        projects = await self._projects.get_by_ids(query.project_ids)
+        if not projects:
+            return ()
+        customers_by_id = await self._customers_by_id(projects)
+        return tuple(
+            _to_dto(project, _customer_dto(customers_by_id[project.customer_id]))
+            for project in projects
+        )
+
+
+class GetProjectBillingItemsByIdsHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._billing_items = ProjectBillingItemRepository(bus.session)
+
+    async def handle(self, query: GetProjectBillingItemsByIds) -> tuple[ProjectBillingItemDTO, ...]:
+        items = await self._billing_items.get_by_ids(query.billing_item_ids)
+        return tuple(_billing_item_dto(item) for item in items)
+
+
+class ListMemberProjectsWithBillingItemsHandler(_BaseHandler):
+    def __init__(self, bus: Bus) -> None:
+        super().__init__(bus)
+        self._billing_items = ProjectBillingItemRepository(bus.session)
+
+    async def handle(
+        self, query: ListMemberProjectsWithBillingItems
+    ) -> tuple[ProjectOptionDTO, ...]:
+        projects = await self._projects.list_active_for_member(query.user_id)
+        if not projects:
+            return ()
+
+        customers_by_id = await self._customers_by_id(projects)
+        items_by_project: dict[UUID, list[ProjectBillingItemDTO]] = defaultdict(list)
+        project_ids = frozenset(project.id for project in projects)
+        for item in await self._billing_items.list_for_projects(
+            project_ids, include_inactive=False
+        ):
+            items_by_project[item.project_id].append(_billing_item_dto(item))
+
+        return tuple(
+            ProjectOptionDTO(
+                project=_to_dto(project, _customer_dto(customers_by_id[project.customer_id])),
+                billing_items=tuple(items_by_project[project.id]),
+            )
+            for project in projects
+        )
 
 
 class ListProjectsHandler(_BaseHandler):
@@ -123,11 +185,7 @@ class ListProjectsHandler(_BaseHandler):
             member_id=query.member_id,
             search=query.search,
         )
-        customer_ids = frozenset(project.customer_id for project in projects)
-        customers_by_id = {
-            customer.id: customer
-            for customer in await self._bus.query(GetCustomersByIds(customer_ids=customer_ids))
-        }
+        customers_by_id = await self._customers_by_id(projects)
         items = tuple(
             _to_dto(project, _customer_dto(customers_by_id[project.customer_id]))
             for project in projects

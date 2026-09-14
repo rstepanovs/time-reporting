@@ -33,6 +33,24 @@ class ProjectRepository:
     async def get_by_id(self, project_id: UUID) -> Project | None:
         return await self._session.get(Project, project_id)
 
+    async def get_by_ids(self, project_ids: frozenset[UUID]) -> Sequence[Project]:
+        if not project_ids:
+            return ()
+        result = await self._session.scalars(
+            select(Project).where(Project.id.in_(project_ids)).order_by(Project.name, Project.id)
+        )
+        return result.all()
+
+    async def list_active_for_member(self, user_id: UUID) -> Sequence[Project]:
+        """Active projects ``user_id`` is a member of, ordered by name."""
+        result = await self._session.scalars(
+            select(Project)
+            .join(ProjectMember, ProjectMember.project_id == Project.id)
+            .where(ProjectMember.user_id == user_id, Project.is_active.is_(True))
+            .order_by(Project.name, Project.id)
+        )
+        return result.all()
+
     async def get_by_customer_and_name(self, customer_id: UUID, name: str) -> Project | None:
         result = await self._session.scalars(
             select(Project).where(Project.customer_id == customer_id, Project.name == name)
@@ -199,6 +217,34 @@ class ProjectBillingItemRepository:
             statement = statement.where(ProjectBillingItem.is_active.is_(True))
         statement = statement.order_by(ProjectBillingItem.position, ProjectBillingItem.name)
         result = await self._session.scalars(statement)
+        return result.all()
+
+    async def list_for_projects(
+        self, project_ids: frozenset[UUID], *, include_inactive: bool
+    ) -> Sequence[ProjectBillingItem]:
+        """Billing items of several projects in one query, ordered by project then position then
+        name."""
+        if not project_ids:
+            return ()
+        statement = select(ProjectBillingItem).where(ProjectBillingItem.project_id.in_(project_ids))
+        if not include_inactive:
+            statement = statement.where(ProjectBillingItem.is_active.is_(True))
+        statement = statement.order_by(
+            ProjectBillingItem.project_id, ProjectBillingItem.position, ProjectBillingItem.name
+        )
+        result = await self._session.scalars(statement)
+        return result.all()
+
+    async def get_by_ids(self, item_ids: frozenset[UUID]) -> Sequence[ProjectBillingItem]:
+        if not item_ids:
+            return ()
+        result = await self._session.scalars(
+            select(ProjectBillingItem)
+            .where(ProjectBillingItem.id.in_(item_ids))
+            .order_by(
+                ProjectBillingItem.project_id, ProjectBillingItem.position, ProjectBillingItem.name
+            )
+        )
         return result.all()
 
     async def next_position(self, project_id: UUID) -> int:
