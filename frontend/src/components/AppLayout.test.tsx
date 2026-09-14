@@ -1,21 +1,27 @@
-import { MantineProvider } from "@mantine/core";
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
-import { describe, expect, it } from "vitest";
+import { screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AppLayout } from "@/components/AppLayout";
-import { theme } from "@/theme";
+import { fetchCurrentUser } from "@/auth/api";
+import { testUser } from "@/test/fixtures";
+import { renderApp } from "@/test/renderApp";
 
-describe("AppLayout", () => {
-  it("renders the application title", () => {
-    render(
-      <MantineProvider theme={theme}>
-        <MemoryRouter>
-          <AppLayout />
-        </MemoryRouter>
-      </MantineProvider>,
-    );
+vi.mock("@/auth/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/auth/api")>()),
+  fetchCurrentUser: vi.fn(),
+}));
 
-    expect(screen.getByRole("heading", { name: "Time Reporting" })).toBeTruthy();
+beforeEach(() => {
+  vi.resetAllMocks();
+});
+
+describe("navigation", () => {
+  it("shows links to Home and Projects", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    renderApp("/");
+
+    await screen.findByRole("heading", { name: "Time Reporting" });
+
+    expect(screen.getByRole("link", { name: "Home" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Projects" })).toBeTruthy();
   });
 });

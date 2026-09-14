@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from time_reporting.api.router import api_router
 from time_reporting.core.config import get_settings
 from time_reporting.db.session import engine
+from time_reporting.modules.registry import build_registry
 
 
 @asynccontextmanager
@@ -37,6 +38,9 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.include_router(api_router)
+    # Built once per app instance; api/deps.get_bus hands out a Bus scoped to each
+    # request's session.
+    app.state.handlers = build_registry()
     return app
 
 

@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,6 +18,14 @@ class Settings(BaseSettings):
     database_echo: bool = False
 
     cors_origins: list[str] = ["http://localhost:5173"]
+
+    # Signs and verifies JWT access tokens; generate with `openssl rand -hex 32`.
+    jwt_secret_key: SecretStr = Field(min_length=32)
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 60
+    # Browsers send `Secure` cookies only over HTTPS and to http://localhost; disable only when the
+    # web client is served over plain HTTP from another host.
+    auth_cookie_secure: bool = True
 
 
 @lru_cache

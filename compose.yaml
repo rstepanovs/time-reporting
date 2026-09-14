@@ -3,6 +3,7 @@ name: time-reporting
 x-backend-env: &backend-env
   DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-time_reporting}:${POSTGRES_PASSWORD:-time_reporting}@db:5432/${POSTGRES_DB:-time_reporting}
   CORS_ORIGINS: '["http://localhost:8080"]'
+  JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set JWT_SECRET_KEY in .env}
 
 services:
   db:

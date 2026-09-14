@@ -2,7 +2,8 @@ import { MantineProvider } from "@mantine/core";
 import { DatesProvider } from "@mantine/dates";
 import { Notifications } from "@mantine/notifications";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { RouterProvider } from "react-router";
+// The react-dom flavour supports `navigate(..., { flushSync: true })`, which the auth hooks rely on.
+import { RouterProvider } from "react-router/dom";
 
 import { queryClient } from "@/api/queryClient";
 import { router } from "@/router";

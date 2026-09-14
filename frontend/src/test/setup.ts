@@ -27,3 +27,14 @@ class ResizeObserverStub implements ResizeObserver {
 }
 
 window.ResizeObserver = ResizeObserverStub;
+
+// Mantine's autosizing Textarea listens for font-loading to re-measure; jsdom has no FontFaceSet.
+if (!document.fonts) {
+  Object.defineProperty(document, "fonts", {
+    writable: true,
+    value: {
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    },
+  });
+}

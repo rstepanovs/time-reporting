@@ -27,18 +27,18 @@ Time tracking with subsequent billing. Monorepo containing a Python API and a Re
 │   ├── migrations/         # Alembic environment and revisions
 │   ├── src/time_reporting/
 │   │   ├── main.py         # FastAPI app factory
-│   │   ├── core/           # settings
+│   │   ├── cli.py          # `time-reporting` console script (e.g. create-admin)
+│   │   ├── core/           # settings, CQRS bus, password hashing
 │   │   ├── db/             # declarative base, engine, sessions
-│   │   ├── api/            # routers and dependencies (all routes under /api/v1)
-│   │   ├── models/         # SQLAlchemy models
-│   │   ├── schemas/        # Pydantic schemas
-│   │   └── services/       # business logic
+│   │   ├── api/            # root router and shared dependencies (all routes under /api/v1)
+│   │   └── modules/        # feature modules (users, auth, customers, projects), via the CQRS bus
 │   └── tests/
 └── frontend/
     ├── package.json
     ├── vite.config.ts      # dev server proxies /api to the backend
     └── src/
         ├── api/            # typed client, generated schema, query client
+        ├── auth/           # session (httpOnly cookie), sign-in / sign-out hooks, route guard
         ├── components/
         ├── pages/
         └── test/
@@ -61,6 +61,8 @@ docker compose up -d db
 # Backend (from the repository root)
 uv sync
 uv run alembic -c backend/alembic.ini upgrade head
+uv run time-reporting create-admin --email you@example.com --name "You"   # first admin account
+uv run time-reporting seed-demo   # optional: demo users admin@/manager@/worker@example.com (password demo-password), customers and projects
 uv run uvicorn time_reporting.main:app --reload
 # API docs: http://localhost:8000/api/docs
 
