@@ -14,6 +14,7 @@ from time_reporting.modules.customers.contracts import (
     CustomerNameAlreadyExistsError,
     CustomerNotFoundError,
     GetCustomerById,
+    GetCustomersByIds,
     ListCustomers,
     UpdateCustomer,
 )
@@ -169,3 +170,20 @@ async def test_database_rejects_non_positive_billing_interval(bus: Bus) -> None:
                 currency="EUR",
             )
         )
+
+
+async def test_get_customers_by_ids_orders_by_name_and_includes_archived(
+    bus: Bus, make_customer: CustomerFactory
+) -> None:
+    zed = await make_customer(name="Zed Customer")
+    ann = await make_customer(name="Ann Customer")
+    await bus.execute(UpdateCustomer(customer_id=ann.id, is_active=False))
+
+    result = await bus.query(GetCustomersByIds(customer_ids=frozenset({zed.id, ann.id, uuid4()})))
+
+    assert [c.id for c in result] == [ann.id, zed.id]
+    assert next(c for c in result if c.id == ann.id).is_active is False
+
+
+async def test_get_customers_by_ids_with_empty_set_returns_empty(bus: Bus) -> None:
+    assert await bus.query(GetCustomersByIds(customer_ids=frozenset())) == ()

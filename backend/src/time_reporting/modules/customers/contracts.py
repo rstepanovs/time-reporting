@@ -94,6 +94,16 @@ class ListCustomers(Query[CustomerPageDTO]):
     include_inactive: bool = False
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetCustomersByIds(Query[tuple[CustomerDTO, ...]]):
+    """Customers matching ``customer_ids`` (active or archived), ordered by name then id.
+
+    Unknown ids are silently omitted.
+    """
+
+    customer_ids: frozenset[UUID]
+
+
 # --- Commands ---
 
 

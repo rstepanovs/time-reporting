@@ -11,6 +11,7 @@ from time_reporting.modules.customers.contracts import (
     CustomerDTO,
     CustomerPageDTO,
     GetCustomerById,
+    GetCustomersByIds,
     ListCustomers,
     UpdateCustomer,
 )
@@ -60,6 +61,12 @@ class GetCustomerByIdHandler(_QueryHandler):
     async def handle(self, query: GetCustomerById) -> CustomerDTO | None:
         customer = await self._customers.get_by_id(query.customer_id)
         return None if customer is None else to_dto(customer)
+
+
+class GetCustomersByIdsHandler(_QueryHandler):
+    async def handle(self, query: GetCustomersByIds) -> tuple[CustomerDTO, ...]:
+        customers = await self._customers.get_by_ids(query.customer_ids)
+        return tuple(to_dto(customer) for customer in customers)
 
 
 class ListCustomersHandler(_QueryHandler):

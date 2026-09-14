@@ -11,6 +11,7 @@ from time_reporting.modules.users.contracts import (
     EmailAlreadyExistsError,
     GetUserById,
     GetUserCredentialsByEmail,
+    GetUsersByIds,
     InvalidCurrentPasswordError,
     ListUsers,
     RecordSuccessfulLogin,
@@ -183,3 +184,54 @@ async def test_list_users_is_paginated(bus: Bus, make_user: UserFactory) -> None
     assert page.total == total_before + 3
     assert len(page.items) == 2
     assert (page.limit, page.offset) == (2, 0)
+
+
+async def test_list_users_filters_by_search_and_active_status(
+    bus: Bus, make_user: UserFactory
+) -> None:
+    match = await make_user(name="Searchable Match", email="searchable-match@example.com")
+    await make_user(name="Someone Else", email="someone-else@example.com")
+    inactive = await make_user(name="Searchable Inactive", email="searchable-inactive@example.com")
+    await bus.execute(UpdateUser(user_id=inactive.id, acting_user_id=match.id, is_active=False))
+
+    by_name = await bus.query(ListUsers(limit=100, offset=0, search="Searchable Match"))
+    assert {u.id for u in by_name.items} == {match.id}
+
+    by_email = await bus.query(ListUsers(limit=100, offset=0, search="SEARCHABLE-match@EXAMPLE"))
+    assert {u.id for u in by_email.items} == {match.id}
+
+    all_active_only = await bus.query(
+        ListUsers(limit=100, offset=0, search="Searchable", include_inactive=False)
+    )
+    assert {u.id for u in all_active_only.items} == {match.id}
+
+    all_including_inactive = await bus.query(
+        ListUsers(limit=100, offset=0, search="Searchable", include_inactive=True)
+    )
+    assert {u.id for u in all_including_inactive.items} == {match.id, inactive.id}
+
+
+async def test_list_users_search_treats_wildcards_as_literal(
+    bus: Bus, make_user: UserFactory
+) -> None:
+    await make_user(name="100% Match", email="literal-percent@example.com")
+    await make_user(name="Other", email="other-literal@example.com")
+
+    page = await bus.query(ListUsers(limit=100, offset=0, search="100% Match"))
+
+    assert {u.email for u in page.items} == {"literal-percent@example.com"}
+
+
+async def test_get_users_by_ids_orders_by_name_and_omits_unknown(
+    bus: Bus, make_user: UserFactory
+) -> None:
+    zed = await make_user(name="Zed")
+    ann = await make_user(name="Ann")
+
+    result = await bus.query(GetUsersByIds(user_ids=frozenset({zed.id, ann.id, uuid4()})))
+
+    assert [user.id for user in result] == [ann.id, zed.id]
+
+
+async def test_get_users_by_ids_with_empty_set_returns_empty(bus: Bus) -> None:
+    assert await bus.query(GetUsersByIds(user_ids=frozenset())) == ()

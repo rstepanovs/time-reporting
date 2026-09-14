@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query, status
 
 from time_reporting.api.deps import BusDep
-from time_reporting.modules.auth.dependencies import AdminDep, CurrentUserDep
+from time_reporting.modules.auth.dependencies import AdminDep, CurrentUserDep, ManagerDep
 from time_reporting.modules.users.contracts import (
     ChangeOwnPassword,
     CreateUser,
@@ -25,6 +25,7 @@ from time_reporting.modules.users.schemas import (
     UserCreateRequest,
     UserPageResponse,
     UserResponse,
+    UserSummaryResponse,
     UserUpdateRequest,
 )
 
@@ -48,7 +49,8 @@ def _email_conflict() -> HTTPException:
     )
 
 
-# /me routes are declared before /{user_id} so that "me" is never parsed as an id.
+# /me and /directory routes are declared before /{user_id} so their literal segment is never
+# parsed as an id.
 
 
 @router.get("/me")
@@ -85,9 +87,25 @@ async def list_users(
     bus: BusDep,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
+    search: Annotated[str | None, Query(max_length=255)] = None,
+    include_inactive: bool = True,
 ) -> UserPageResponse:
-    page = await bus.query(ListUsers(limit=limit, offset=offset))
+    page = await bus.query(
+        ListUsers(limit=limit, offset=offset, search=search, include_inactive=include_inactive)
+    )
     return UserPageResponse.model_validate(page)
+
+
+@router.get("/directory")
+async def search_user_directory(
+    _manager: ManagerDep,
+    bus: BusDep,
+    search: Annotated[str | None, Query(max_length=255)] = None,
+    limit: Annotated[int, Query(ge=1, le=50)] = 20,
+) -> list[UserSummaryResponse]:
+    """Minimal, active-only user list for pickers (e.g. adding a project member)."""
+    page = await bus.query(ListUsers(limit=limit, offset=0, search=search, include_inactive=False))
+    return [UserSummaryResponse.model_validate(user) for user in page.items]
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, responses=_EMAIL_CONFLICT_RESPONSE)

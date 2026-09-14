@@ -24,6 +24,16 @@ class CustomerRepository:
         result = await self._session.scalars(select(Customer).where(Customer.name == name))
         return result.one_or_none()
 
+    async def get_by_ids(self, customer_ids: frozenset[UUID]) -> Sequence[Customer]:
+        if not customer_ids:
+            return ()
+        result = await self._session.scalars(
+            select(Customer)
+            .where(Customer.id.in_(customer_ids))
+            .order_by(Customer.name, Customer.id)
+        )
+        return result.all()
+
     async def get_page(
         self, *, limit: int, offset: int, include_inactive: bool
     ) -> Sequence[Customer]:
