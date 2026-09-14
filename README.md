@@ -31,7 +31,7 @@ Time tracking with subsequent billing. Monorepo containing a Python API and a Re
 │   │   ├── core/           # settings, CQRS bus, password hashing
 │   │   ├── db/             # declarative base, engine, sessions
 │   │   ├── api/            # root router and shared dependencies (all routes under /api/v1)
-│   │   └── modules/        # feature modules (users, auth), talking to each other via the CQRS bus
+│   │   └── modules/        # feature modules (users, auth, customers, projects), via the CQRS bus
 │   └── tests/
 └── frontend/
     ├── package.json
@@ -62,7 +62,7 @@ docker compose up -d db
 uv sync
 uv run alembic -c backend/alembic.ini upgrade head
 uv run time-reporting create-admin --email you@example.com --name "You"   # first admin account
-uv run time-reporting seed-demo   # optional: demo users admin@/manager@/worker@example.com (password demo-password) and customers
+uv run time-reporting seed-demo   # optional: demo users admin@/manager@/worker@example.com (password demo-password), customers and projects
 uv run uvicorn time_reporting.main:app --reload
 # API docs: http://localhost:8000/api/docs
 

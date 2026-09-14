@@ -11,12 +11,15 @@ from time_reporting.cli import main
 from time_reporting.core.cqrs import Bus
 from time_reporting.core.passwords import verify_password
 from time_reporting.modules.customers.contracts import ListCustomers
+from time_reporting.modules.projects.contracts import ListProjectMembers, ListProjects
 from time_reporting.modules.users.contracts import GetUserById, GetUserCredentialsByEmail, UserRole
 from time_reporting.seed import (
     DEFAULT_DEMO_PASSWORD,
     DEMO_CUSTOMERS,
+    DEMO_PROJECTS,
     DEMO_USERS,
     DemoCustomer,
+    DemoProject,
     DemoUser,
     SeedReport,
     seed_demo_data,
@@ -26,32 +29,54 @@ from time_reporting.seed import (
 # the seed runs against uniquely renamed copies of them.
 
 
-def _unique_users() -> tuple[DemoUser, ...]:
-    suffix = uuid4().hex[:8]
+def _unique_users(suffix: str) -> tuple[DemoUser, ...]:
     return tuple(replace(user, email=f"{suffix}.{user.email}") for user in DEMO_USERS)
 
 
-def _unique_customers() -> tuple[DemoCustomer, ...]:
-    suffix = uuid4().hex[:8]
+def _unique_customers(suffix: str) -> tuple[DemoCustomer, ...]:
     return tuple(
         replace(customer, create=replace(customer.create, name=f"{customer.create.name} {suffix}"))
         for customer in DEMO_CUSTOMERS
     )
 
 
+def _unique_projects(suffix: str) -> tuple[DemoProject, ...]:
+    return tuple(
+        replace(
+            project,
+            customer_name=f"{project.customer_name} {suffix}",
+            name=f"{project.name} {suffix}",
+            member_emails=tuple(f"{suffix}.{email}" for email in project.member_emails),
+        )
+        for project in DEMO_PROJECTS
+    )
+
+
 def test_demo_data_covers_every_role_and_an_archived_customer() -> None:
     assert {user.role for user in DEMO_USERS} == set(UserRole)
     assert {customer.archived for customer in DEMO_CUSTOMERS} == {True, False}
+    assert {project.archived for project in DEMO_PROJECTS} == {True, False}
+
+    customer_names = {customer.create.name for customer in DEMO_CUSTOMERS}
+    assert {project.customer_name for project in DEMO_PROJECTS} <= customer_names
+    user_emails = {user.email for user in DEMO_USERS}
+    assert all(email in user_emails for project in DEMO_PROJECTS for email in project.member_emails)
 
 
-async def test_seed_creates_users_and_customers(bus: Bus) -> None:
-    users, customers = _unique_users(), _unique_customers()
+async def test_seed_creates_users_customers_and_projects(bus: Bus) -> None:
+    suffix = uuid4().hex[:8]
+    users, customers, projects = (
+        _unique_users(suffix),
+        _unique_customers(suffix),
+        _unique_projects(suffix),
+    )
 
-    report = await seed_demo_data(bus, users=users, customers=customers)
+    report = await seed_demo_data(bus, users=users, customers=customers, projects=projects)
 
     assert report == SeedReport(
         created_users=[user.email for user in users],
         created_customers=[customer.create.name for customer in customers],
+        created_projects=[project.name for project in projects],
     )
     for user in users:
         credentials = await bus.query(GetUserCredentialsByEmail(email=user.email))
@@ -61,30 +86,46 @@ async def test_seed_creates_users_and_customers(bus: Bus) -> None:
         assert stored is not None
         assert stored.role is user.role
 
-    page = await bus.query(ListCustomers(limit=1000, offset=0, include_inactive=True))
-    active_by_name = {customer.name: customer.is_active for customer in page.items}
+    customer_page = await bus.query(ListCustomers(limit=1000, offset=0, include_inactive=True))
+    active_by_name = {customer.name: customer.is_active for customer in customer_page.items}
     for customer in customers:
         assert active_by_name[customer.create.name] is not customer.archived
 
+    project_page = await bus.query(ListProjects(limit=1000, offset=0, include_inactive=True))
+    projects_by_name = {project.name: project for project in project_page.items}
+    for project in projects:
+        stored_project = projects_by_name[project.name]
+        assert stored_project.is_active is not project.archived
+        assert stored_project.customer.name == project.customer_name
+
+        members = await bus.query(ListProjectMembers(project_id=stored_project.id))
+        assert {member.email for member in members} == set(project.member_emails)
+
 
 async def test_seed_is_idempotent(bus: Bus) -> None:
-    users, customers = _unique_users(), _unique_customers()
-    await seed_demo_data(bus, users=users, customers=customers)
+    suffix = uuid4().hex[:8]
+    users, customers, projects = (
+        _unique_users(suffix),
+        _unique_customers(suffix),
+        _unique_projects(suffix),
+    )
+    await seed_demo_data(bus, users=users, customers=customers, projects=projects)
 
-    report = await seed_demo_data(bus, users=users, customers=customers)
+    report = await seed_demo_data(bus, users=users, customers=customers, projects=projects)
 
     assert report == SeedReport(
         existing_users=[user.email for user in users],
         existing_customers=[customer.create.name for customer in customers],
+        existing_projects=[project.name for project in projects],
     )
 
 
 async def test_seed_leaves_an_existing_user_untouched(bus: Bus, make_user: UserFactory) -> None:
-    users = _unique_users()
+    users = _unique_users(uuid4().hex[:8])
     admin_seat = next(user for user in users if user.role is UserRole.ADMIN)
     existing = await make_user(email=admin_seat.email, role=UserRole.WORKER, name="Someone Else")
 
-    report = await seed_demo_data(bus, users=users, customers=())
+    report = await seed_demo_data(bus, users=users, customers=(), projects=())
 
     assert report.existing_users == [admin_seat.email]
     stored = await bus.query(GetUserById(user_id=existing.id))
@@ -115,6 +156,7 @@ def test_seed_demo_command_reports_records_and_default_password(
             created_users=["admin@example.com"],
             existing_users=["worker@example.com"],
             existing_customers=["Acme Corporation"],
+            existing_projects=["Website Revamp"],
         ),
     )
 
@@ -126,6 +168,7 @@ def test_seed_demo_command_reports_records_and_default_password(
     assert "Created user admin@example.com" in out
     assert "Skipped user worker@example.com (already exists)" in out
     assert "Skipped customer Acme Corporation (already exists)" in out
+    assert "Skipped project Website Revamp (already exists)" in out
     assert f"password: {DEFAULT_DEMO_PASSWORD}" in out
 
 
