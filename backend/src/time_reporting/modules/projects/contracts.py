@@ -6,6 +6,7 @@ for these messages are registered in ``projects.module``; ORM entities never lea
 
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 from enum import StrEnum
 from typing import Literal, get_args
 from uuid import UUID
@@ -18,6 +19,13 @@ type ClearableProjectField = Literal["description"]
 # Optional text fields that ``UpdateProject.clear_fields`` can reset to ``None``.
 CLEARABLE_PROJECT_FIELDS: tuple[ClearableProjectField, ...] = get_args(
     ClearableProjectField.__value__
+)
+
+type ClearableBillingItemField = Literal["description", "unit_rate", "markup_percent"]
+
+# Optional fields that ``UpdateProjectBillingItem.clear_fields`` can reset to ``None``.
+CLEARABLE_BILLING_ITEM_FIELDS: tuple[ClearableBillingItemField, ...] = get_args(
+    ClearableBillingItemField.__value__
 )
 
 
@@ -83,6 +91,8 @@ class ProjectCustomerDTO:
     id: UUID
     name: str
     is_active: bool
+    # ISO 4217 code; billing item rates are in this currency.
+    currency: str
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -114,6 +124,22 @@ class ProjectMemberDTO:
     added_at: datetime
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ProjectBillingItemDTO:
+    id: UUID
+    project_id: UUID
+    preset: BillingItemPreset | None
+    name: str
+    description: str | None
+    unit: BillingUnit
+    unit_rate: Decimal | None
+    markup_percent: Decimal | None
+    position: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
 # --- Queries ---
 
 
@@ -142,6 +168,18 @@ class ListProjectMembers(Query[tuple[ProjectMemberDTO, ...]]):
     """
 
     project_id: UUID
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ListProjectBillingItems(Query[tuple[ProjectBillingItemDTO, ...]]):
+    """Billing items of a project, ordered by position then name; archived ones only if
+    ``include_inactive``.
+
+    Raises ``ProjectNotFoundError`` if the project doesn't exist.
+    """
+
+    project_id: UUID
+    include_inactive: bool = False
 
 
 # --- Commands ---
@@ -200,6 +238,52 @@ class RemoveUserFromAllProjects(Command[int]):
     """
 
     user_id: UUID
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class AddProjectBillingItem(Command[ProjectBillingItemDTO]):
+    """Add a custom billing item (``preset=None``) at the end of the project's item list.
+
+    The project must exist and be active. ``unit_rate`` is only accepted for ``hour``/``day``
+    items, ``markup_percent`` only for ``amount`` items; either can be left ``None`` ("not set").
+    """
+
+    project_id: UUID
+    name: str
+    unit: BillingUnit
+    description: str | None = None
+    unit_rate: Decimal | None = None
+    markup_percent: Decimal | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class UpdateProjectBillingItem(Command[ProjectBillingItemDTO]):
+    """Partial update: fields left as ``None`` are not changed.
+
+    ``unit`` and ``preset`` are immutable and not part of this command (also for default items,
+    which can otherwise be renamed and archived like any other item). ``description``,
+    ``unit_rate`` and ``markup_percent`` are cleared by naming them in ``clear_fields``. Archive an
+    item with ``is_active=False``; permanently deleting an unreferenced one goes through the admin
+    module. Re-activating an item under an archived project is rejected.
+    """
+
+    project_id: UUID
+    item_id: UUID
+    name: str | None = None
+    description: str | None = None
+    unit_rate: Decimal | None = None
+    markup_percent: Decimal | None = None
+    is_active: bool | None = None
+    clear_fields: frozenset[ClearableBillingItemField] = frozenset()
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class DeleteProjectBillingItem(Command[None]):
+    """Permanently delete a billing item. May raise ``BillingItemInUseError`` if other data (e.g.
+    future time entries) still references it."""
+
+    project_id: UUID
+    item_id: UUID
 
 
 # --- Exceptions ---
@@ -272,3 +356,36 @@ class ProjectInUseError(ProjectError):
     def __init__(self, project_id: UUID) -> None:
         super().__init__(f"Project {project_id} is referenced by other data and cannot be deleted")
         self.project_id = project_id
+
+
+class BillingItemNotFoundError(ProjectError):
+    def __init__(self, project_id: UUID, item_id: UUID) -> None:
+        super().__init__(f"Billing item {item_id} not found for project {project_id}")
+        self.project_id = project_id
+        self.item_id = item_id
+
+
+class BillingItemNameAlreadyExistsError(ProjectError):
+    def __init__(self, project_id: UUID, name: str) -> None:
+        super().__init__(f"A billing item named {name!r} already exists for project {project_id}")
+        self.project_id = project_id
+        self.name = name
+
+
+class BillingItemPricingError(ProjectError):
+    """Raised when a rate or markup is given for a unit that doesn't take it."""
+
+    def __init__(self, unit: BillingUnit, field: str) -> None:
+        super().__init__(f"`{field}` is not allowed for `{unit}` items")
+        self.unit = unit
+        self.field = field
+
+
+class BillingItemInUseError(ProjectError):
+    """Raised when deleting a billing item blocked by other data referencing it."""
+
+    def __init__(self, item_id: UUID) -> None:
+        super().__init__(
+            f"Billing item {item_id} is referenced by other data and cannot be deleted"
+        )
+        self.item_id = item_id

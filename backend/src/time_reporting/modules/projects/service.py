@@ -5,12 +5,17 @@ just a session) because creating and re-activating a project need to check the o
 ``customers.contracts``, and adding a member needs to check the user via ``users.contracts``.
 """
 
+from decimal import Decimal
 from uuid import UUID
 
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.customers.contracts import GetCustomerById
 from time_reporting.modules.projects.contracts import (
     DEFAULT_BILLING_ITEMS,
+    BillingItemNameAlreadyExistsError,
+    BillingItemNotFoundError,
+    BillingItemPricingError,
+    BillingUnit,
     MemberUserInactiveError,
     MemberUserNotFoundError,
     ProjectArchivedError,
@@ -20,6 +25,7 @@ from time_reporting.modules.projects.contracts import (
     ProjectNameAlreadyExistsError,
     ProjectNotFoundError,
     UpdateProject,
+    UpdateProjectBillingItem,
 )
 from time_reporting.modules.projects.models import Project, ProjectBillingItem, ProjectMember
 from time_reporting.modules.projects.repository import (
@@ -81,9 +87,7 @@ class ProjectService:
         return project
 
     async def add_member(self, *, project_id: UUID, user_id: UUID) -> ProjectMember:
-        project = await self.get_project(project_id)
-        if not project.is_active:
-            raise ProjectArchivedError(project_id)
+        await self._ensure_project_active(project_id)
 
         user = await self._bus.query(GetUserById(user_id=user_id))
         if user is None:
@@ -108,6 +112,69 @@ class ProjectService:
     async def remove_user_from_all_projects(self, user_id: UUID) -> int:
         return await self._members.delete_all_for_user(user_id)
 
+    async def add_billing_item(
+        self,
+        *,
+        project_id: UUID,
+        name: str,
+        unit: BillingUnit,
+        description: str | None,
+        unit_rate: Decimal | None,
+        markup_percent: Decimal | None,
+    ) -> ProjectBillingItem:
+        await self._ensure_project_active(project_id)
+        if unit_rate is not None:
+            self._ensure_pricing_allowed(unit, "unit_rate")
+        if markup_percent is not None:
+            self._ensure_pricing_allowed(unit, "markup_percent")
+        await self._ensure_billing_item_name_available(project_id, name)
+
+        position = await self._billing_items.next_position(project_id)
+        item = ProjectBillingItem(
+            project_id=project_id,
+            preset=None,
+            name=name,
+            description=description,
+            unit=unit,
+            unit_rate=unit_rate,
+            markup_percent=markup_percent,
+            position=position,
+        )
+        await self._billing_items.save(item)
+        return item
+
+    async def update_billing_item(self, data: UpdateProjectBillingItem) -> ProjectBillingItem:
+        item = await self._get_billing_item(data.project_id, data.item_id)
+
+        if data.name is not None and data.name != item.name:
+            await self._ensure_billing_item_name_available(data.project_id, data.name)
+            item.name = data.name
+        if "description" in data.clear_fields:
+            item.description = None
+        elif data.description is not None:
+            item.description = data.description
+        if "unit_rate" in data.clear_fields:
+            item.unit_rate = None
+        elif data.unit_rate is not None:
+            self._ensure_pricing_allowed(item.unit, "unit_rate")
+            item.unit_rate = data.unit_rate
+        if "markup_percent" in data.clear_fields:
+            item.markup_percent = None
+        elif data.markup_percent is not None:
+            self._ensure_pricing_allowed(item.unit, "markup_percent")
+            item.markup_percent = data.markup_percent
+        if data.is_active is not None:
+            if data.is_active and not item.is_active:
+                # Re-activating an item requires its project to still be active.
+                await self._ensure_project_active(data.project_id)
+            item.is_active = data.is_active
+        await self._billing_items.save(item)
+        return item
+
+    async def delete_billing_item(self, *, project_id: UUID, item_id: UUID) -> None:
+        item = await self._get_billing_item(project_id, item_id)
+        await self._billing_items.delete(item)
+
     async def _ensure_customer_active(self, customer_id: UUID) -> None:
         customer = await self._bus.query(GetCustomerById(customer_id=customer_id))
         if customer is None:
@@ -115,6 +182,29 @@ class ProjectService:
         if not customer.is_active:
             raise ProjectCustomerArchivedError(customer_id)
 
+    async def _ensure_project_active(self, project_id: UUID) -> None:
+        project = await self.get_project(project_id)
+        if not project.is_active:
+            raise ProjectArchivedError(project_id)
+
     async def _ensure_name_available(self, customer_id: UUID, name: str) -> None:
         if await self._projects.get_by_customer_and_name(customer_id, name) is not None:
             raise ProjectNameAlreadyExistsError(customer_id, name)
+
+    async def _ensure_billing_item_name_available(self, project_id: UUID, name: str) -> None:
+        if await self._billing_items.get_by_project_and_name(project_id, name) is not None:
+            raise BillingItemNameAlreadyExistsError(project_id, name)
+
+    async def _get_billing_item(self, project_id: UUID, item_id: UUID) -> ProjectBillingItem:
+        await self.get_project(project_id)  # raises ProjectNotFoundError if project_id is bogus
+        item = await self._billing_items.get(project_id, item_id)
+        if item is None:
+            raise BillingItemNotFoundError(project_id, item_id)
+        return item
+
+    @staticmethod
+    def _ensure_pricing_allowed(unit: BillingUnit, field: str) -> None:
+        if field == "unit_rate" and unit is BillingUnit.AMOUNT:
+            raise BillingItemPricingError(unit, field)
+        if field == "markup_percent" and unit is not BillingUnit.AMOUNT:
+            raise BillingItemPricingError(unit, field)

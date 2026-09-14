@@ -11,15 +11,23 @@ from time_reporting.core.cqrs import Bus
 from time_reporting.modules.customers.contracts import UpdateCustomer
 from time_reporting.modules.projects.contracts import (
     DEFAULT_BILLING_ITEMS,
+    AddProjectBillingItem,
     AddProjectMember,
+    BillingItemNameAlreadyExistsError,
+    BillingItemNotFoundError,
+    BillingItemPricingError,
+    BillingUnit,
     CreateProject,
     DeleteProject,
+    DeleteProjectBillingItem,
     GetProjectById,
+    ListProjectBillingItems,
     ListProjectMembers,
     ListProjects,
     MemberUserInactiveError,
     MemberUserNotFoundError,
     ProjectArchivedError,
+    ProjectBillingItemDTO,
     ProjectCustomerArchivedError,
     ProjectCustomerNotFoundError,
     ProjectMemberAlreadyExistsError,
@@ -29,6 +37,7 @@ from time_reporting.modules.projects.contracts import (
     RemoveProjectMember,
     RemoveUserFromAllProjects,
     UpdateProject,
+    UpdateProjectBillingItem,
 )
 from time_reporting.modules.projects.models import ProjectBillingItem
 from time_reporting.modules.users.contracts import UpdateUser, UserRole
@@ -337,3 +346,283 @@ async def test_remove_user_from_all_projects_with_no_memberships_returns_zero(
     user = await make_user()
 
     assert await bus.execute(RemoveUserFromAllProjects(user_id=user.id)) == 0
+
+
+# --- Billing items ---
+
+
+async def _item_by_name(
+    bus: Bus, project_id: UUID, name: str, *, include_inactive: bool = True
+) -> ProjectBillingItemDTO:
+    items = await bus.query(
+        ListProjectBillingItems(project_id=project_id, include_inactive=include_inactive)
+    )
+    return next(item for item in items if item.name == name)
+
+
+async def test_add_billing_item_appends_after_the_defaults(
+    bus: Bus, make_project: ProjectFactory
+) -> None:
+    project = await make_project()
+
+    item = await bus.execute(
+        AddProjectBillingItem(
+            project_id=project.id,
+            name="On-call standby",
+            unit=BillingUnit.HOUR,
+            description="Weekend on-call",
+            unit_rate=Decimal("50.00"),
+        )
+    )
+
+    assert item.preset is None
+    assert item.position == len(DEFAULT_BILLING_ITEMS) + 1
+    assert item.unit_rate == Decimal("50.00")
+    assert item.markup_percent is None
+    assert item.is_active
+
+
+async def test_add_billing_item_to_unknown_project_raises(bus: Bus) -> None:
+    with pytest.raises(ProjectNotFoundError):
+        await bus.execute(
+            AddProjectBillingItem(project_id=uuid4(), name="Extra", unit=BillingUnit.HOUR)
+        )
+
+
+async def test_add_billing_item_to_archived_project_raises(
+    bus: Bus, make_project: ProjectFactory
+) -> None:
+    project = await make_project()
+    await bus.execute(UpdateProject(project_id=project.id, is_active=False))
+
+    with pytest.raises(ProjectArchivedError):
+        await bus.execute(
+            AddProjectBillingItem(project_id=project.id, name="Extra", unit=BillingUnit.HOUR)
+        )
+
+
+async def test_billing_item_name_conflict_within_project_but_allowed_in_another_project(
+    bus: Bus, make_project: ProjectFactory
+) -> None:
+    project = await make_project()
+    await bus.execute(
+        AddProjectBillingItem(project_id=project.id, name="Shared Name", unit=BillingUnit.HOUR)
+    )
+
+    with pytest.raises(BillingItemNameAlreadyExistsError):
+        await bus.execute(
+            AddProjectBillingItem(project_id=project.id, name="Shared Name", unit=BillingUnit.DAY)
+        )
+
+    other_project = await make_project()
+    other_item = await bus.execute(
+        AddProjectBillingItem(project_id=other_project.id, name="Shared Name", unit=BillingUnit.DAY)
+    )
+    assert other_item.name == "Shared Name"
+
+
+@pytest.mark.parametrize(
+    ("unit", "unit_rate", "markup_percent"),
+    [
+        (BillingUnit.AMOUNT, Decimal("10.00"), None),
+        (BillingUnit.HOUR, None, Decimal("10.00")),
+        (BillingUnit.DAY, None, Decimal("10.00")),
+    ],
+)
+async def test_add_billing_item_rejects_pricing_that_does_not_match_its_unit(
+    bus: Bus,
+    make_project: ProjectFactory,
+    unit: BillingUnit,
+    unit_rate: Decimal | None,
+    markup_percent: Decimal | None,
+) -> None:
+    project = await make_project()
+
+    with pytest.raises(BillingItemPricingError):
+        await bus.execute(
+            AddProjectBillingItem(
+                project_id=project.id,
+                name="Extra",
+                unit=unit,
+                unit_rate=unit_rate,
+                markup_percent=markup_percent,
+            )
+        )
+
+
+async def test_list_billing_items_excludes_archived_by_default(
+    bus: Bus, make_project: ProjectFactory
+) -> None:
+    project = await make_project()
+    item = await bus.execute(
+        AddProjectBillingItem(project_id=project.id, name="Extra", unit=BillingUnit.HOUR)
+    )
+    await bus.execute(
+        UpdateProjectBillingItem(project_id=project.id, item_id=item.id, is_active=False)
+    )
+
+    active = await bus.query(ListProjectBillingItems(project_id=project.id))
+    assert "Extra" not in {i.name for i in active}
+
+    all_items = await bus.query(
+        ListProjectBillingItems(project_id=project.id, include_inactive=True)
+    )
+    assert "Extra" in {i.name for i in all_items}
+
+
+async def test_list_billing_items_for_unknown_project_raises(bus: Bus) -> None:
+    with pytest.raises(ProjectNotFoundError):
+        await bus.query(ListProjectBillingItems(project_id=uuid4()))
+
+
+async def test_update_billing_item_changes_name_description_and_rate(
+    bus: Bus, make_project: ProjectFactory
+) -> None:
+    project = await make_project()
+    item = await bus.execute(
+        AddProjectBillingItem(project_id=project.id, name="Extra", unit=BillingUnit.HOUR)
+    )
+
+    updated = await bus.execute(
+        UpdateProjectBillingItem(
+            project_id=project.id,
+            item_id=item.id,
+            name="Renamed",
+            description="New description",
+            unit_rate=Decimal("75.00"),
+        )
+    )
+
+    assert updated.name == "Renamed"
+    assert updated.description == "New description"
+    assert updated.unit_rate == Decimal("75.00")
+
+
+async def test_update_billing_item_clears_unit_rate(bus: Bus, make_project: ProjectFactory) -> None:
+    project = await make_project()
+    item = await bus.execute(
+        AddProjectBillingItem(
+            project_id=project.id, name="Extra", unit=BillingUnit.HOUR, unit_rate=Decimal("50.00")
+        )
+    )
+
+    updated = await bus.execute(
+        UpdateProjectBillingItem(
+            project_id=project.id, item_id=item.id, clear_fields=frozenset({"unit_rate"})
+        )
+    )
+
+    assert updated.unit_rate is None
+
+
+async def test_update_billing_item_rejects_pricing_that_does_not_match_its_unit(
+    bus: Bus, make_project: ProjectFactory
+) -> None:
+    project = await make_project()
+    hours = await _item_by_name(bus, project.id, "Normal working hours")
+
+    with pytest.raises(BillingItemPricingError):
+        await bus.execute(
+            UpdateProjectBillingItem(
+                project_id=project.id, item_id=hours.id, markup_percent=Decimal("10.00")
+            )
+        )
+
+
+async def test_archive_and_restore_billing_item(bus: Bus, make_project: ProjectFactory) -> None:
+    project = await make_project()
+    item = await bus.execute(
+        AddProjectBillingItem(project_id=project.id, name="Extra", unit=BillingUnit.HOUR)
+    )
+
+    archived = await bus.execute(
+        UpdateProjectBillingItem(project_id=project.id, item_id=item.id, is_active=False)
+    )
+    assert not archived.is_active
+
+    restored = await bus.execute(
+        UpdateProjectBillingItem(project_id=project.id, item_id=item.id, is_active=True)
+    )
+    assert restored.is_active
+
+
+async def test_restore_billing_item_under_archived_project_raises(
+    bus: Bus, make_project: ProjectFactory
+) -> None:
+    project = await make_project()
+    item = await bus.execute(
+        AddProjectBillingItem(project_id=project.id, name="Extra", unit=BillingUnit.HOUR)
+    )
+    await bus.execute(
+        UpdateProjectBillingItem(project_id=project.id, item_id=item.id, is_active=False)
+    )
+    await bus.execute(UpdateProject(project_id=project.id, is_active=False))
+
+    with pytest.raises(ProjectArchivedError):
+        await bus.execute(
+            UpdateProjectBillingItem(project_id=project.id, item_id=item.id, is_active=True)
+        )
+
+
+async def test_default_items_can_be_renamed_and_archived(
+    bus: Bus, make_project: ProjectFactory
+) -> None:
+    project = await make_project()
+    per_diem = await _item_by_name(bus, project.id, "Per diems")
+
+    updated = await bus.execute(
+        UpdateProjectBillingItem(
+            project_id=project.id, item_id=per_diem.id, name="Daily allowance", is_active=False
+        )
+    )
+
+    assert updated.name == "Daily allowance"
+    assert not updated.is_active
+    assert updated.preset == per_diem.preset
+
+
+async def test_update_unknown_billing_item_raises(bus: Bus, make_project: ProjectFactory) -> None:
+    project = await make_project()
+
+    with pytest.raises(BillingItemNotFoundError):
+        await bus.execute(UpdateProjectBillingItem(project_id=project.id, item_id=uuid4()))
+
+
+async def test_update_billing_item_with_unknown_project_raises(bus: Bus) -> None:
+    with pytest.raises(ProjectNotFoundError):
+        await bus.execute(UpdateProjectBillingItem(project_id=uuid4(), item_id=uuid4()))
+
+
+async def test_update_billing_item_with_wrong_project_id_raises_not_found(
+    bus: Bus, make_project: ProjectFactory
+) -> None:
+    project = await make_project()
+    other_project = await make_project()
+    item = await bus.execute(
+        AddProjectBillingItem(project_id=project.id, name="Extra", unit=BillingUnit.HOUR)
+    )
+
+    # other_project exists, so this is a mismatch, not a missing project: BillingItemNotFoundError.
+    with pytest.raises(BillingItemNotFoundError):
+        await bus.execute(
+            UpdateProjectBillingItem(project_id=other_project.id, item_id=item.id, name="Renamed")
+        )
+
+
+async def test_delete_billing_item(bus: Bus, make_project: ProjectFactory) -> None:
+    project = await make_project()
+    item = await bus.execute(
+        AddProjectBillingItem(project_id=project.id, name="Extra", unit=BillingUnit.HOUR)
+    )
+
+    await bus.execute(DeleteProjectBillingItem(project_id=project.id, item_id=item.id))
+
+    items = await bus.query(ListProjectBillingItems(project_id=project.id, include_inactive=True))
+    assert item.id not in {i.id for i in items}
+
+
+async def test_delete_unknown_billing_item_raises(bus: Bus, make_project: ProjectFactory) -> None:
+    project = await make_project()
+
+    with pytest.raises(BillingItemNotFoundError):
+        await bus.execute(DeleteProjectBillingItem(project_id=project.id, item_id=uuid4()))

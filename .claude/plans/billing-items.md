@@ -138,13 +138,17 @@ Dependency order: **B1 → B2 → B3 → B4** → **F1 → F2** → **D1**.
   `BillingItemNameAlreadyExistsError`), `delete` (FK violation → `BillingItemInUseError`).
 - `ProjectService`: `add_billing_item` (project must exist and be active; pricing checked against
   the unit), `update_billing_item` (name uniqueness, pricing, re-activation requires an active
-  project), `delete_billing_item` (FK violation → `BillingItemInUseError`).
+  project), `delete_billing_item` (FK violation → `BillingItemInUseError`). A shared
+  `_ensure_project_active` helper backs both `add_billing_item` and the existing `add_member`
+  (which had the same inline check). A wrong-but-existing `project_id` for a real item raises
+  `BillingItemNotFoundError` (looked up as `(project_id, item_id)`, so it isn't found); an
+  altogether unknown `project_id` raises `ProjectNotFoundError` first — both are 404 at the API.
 - `ProjectCustomerDTO.currency` (filled from `CustomerDTO.currency`).
 - Register handlers in `projects/module.py`.
 - Tests: add/list/update/archive/restore/delete; include_inactive filter; name conflict within a
   project but the same name allowed in another project; pricing errors for each unit; adding to an
-  archived project; restoring under an archived project; not found (wrong project id for an existing
-  item is also 404); clearing `unit_rate`; default items can be renamed and archived.
+  archived project; restoring under an archived project; both not-found cases above; clearing
+  `unit_rate`; default items can be renamed and archived.
 
 ### B3. HTTP API
 

@@ -8,12 +8,16 @@ from datetime import datetime
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.customers.contracts import CustomerDTO, GetCustomersByIds
 from time_reporting.modules.projects.contracts import (
+    AddProjectBillingItem,
     AddProjectMember,
     CreateProject,
     DeleteProject,
+    DeleteProjectBillingItem,
     GetProjectById,
+    ListProjectBillingItems,
     ListProjectMembers,
     ListProjects,
+    ProjectBillingItemDTO,
     ProjectCustomerDTO,
     ProjectDTO,
     ProjectMemberDTO,
@@ -22,15 +26,22 @@ from time_reporting.modules.projects.contracts import (
     RemoveProjectMember,
     RemoveUserFromAllProjects,
     UpdateProject,
+    UpdateProjectBillingItem,
 )
-from time_reporting.modules.projects.models import Project
-from time_reporting.modules.projects.repository import ProjectMemberRepository, ProjectRepository
+from time_reporting.modules.projects.models import Project, ProjectBillingItem
+from time_reporting.modules.projects.repository import (
+    ProjectBillingItemRepository,
+    ProjectMemberRepository,
+    ProjectRepository,
+)
 from time_reporting.modules.projects.service import ProjectService
 from time_reporting.modules.users.contracts import GetUsersByIds, UserDTO
 
 
 def _customer_dto(customer: CustomerDTO) -> ProjectCustomerDTO:
-    return ProjectCustomerDTO(id=customer.id, name=customer.name, is_active=customer.is_active)
+    return ProjectCustomerDTO(
+        id=customer.id, name=customer.name, is_active=customer.is_active, currency=customer.currency
+    )
 
 
 def _member_dto(user: UserDTO, *, added_at: datetime) -> ProjectMemberDTO:
@@ -53,6 +64,23 @@ def _to_dto(project: Project, customer: ProjectCustomerDTO) -> ProjectDTO:
         is_active=project.is_active,
         created_at=project.created_at,
         updated_at=project.updated_at,
+    )
+
+
+def _billing_item_dto(item: ProjectBillingItem) -> ProjectBillingItemDTO:
+    return ProjectBillingItemDTO(
+        id=item.id,
+        project_id=item.project_id,
+        preset=item.preset,
+        name=item.name,
+        description=item.description,
+        unit=item.unit,
+        unit_rate=item.unit_rate,
+        markup_percent=item.markup_percent,
+        position=item.position,
+        is_active=item.is_active,
+        created_at=item.created_at,
+        updated_at=item.updated_at,
     )
 
 
@@ -134,6 +162,21 @@ class ListProjectMembersHandler:
         return tuple(members)
 
 
+class ListProjectBillingItemsHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._projects = ProjectRepository(bus.session)
+        self._billing_items = ProjectBillingItemRepository(bus.session)
+
+    async def handle(self, query: ListProjectBillingItems) -> tuple[ProjectBillingItemDTO, ...]:
+        if await self._projects.get_by_id(query.project_id) is None:
+            raise ProjectNotFoundError(query.project_id)
+
+        items = await self._billing_items.list_for_project(
+            query.project_id, include_inactive=query.include_inactive
+        )
+        return tuple(_billing_item_dto(item) for item in items)
+
+
 # --- Commands ---
 
 
@@ -194,3 +237,38 @@ class RemoveUserFromAllProjectsHandler:
 
     async def handle(self, command: RemoveUserFromAllProjects) -> int:
         return await self._service.remove_user_from_all_projects(command.user_id)
+
+
+class AddProjectBillingItemHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._service = ProjectService(bus)
+
+    async def handle(self, command: AddProjectBillingItem) -> ProjectBillingItemDTO:
+        item = await self._service.add_billing_item(
+            project_id=command.project_id,
+            name=command.name,
+            unit=command.unit,
+            description=command.description,
+            unit_rate=command.unit_rate,
+            markup_percent=command.markup_percent,
+        )
+        return _billing_item_dto(item)
+
+
+class UpdateProjectBillingItemHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._service = ProjectService(bus)
+
+    async def handle(self, command: UpdateProjectBillingItem) -> ProjectBillingItemDTO:
+        item = await self._service.update_billing_item(command)
+        return _billing_item_dto(item)
+
+
+class DeleteProjectBillingItemHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._service = ProjectService(bus)
+
+    async def handle(self, command: DeleteProjectBillingItem) -> None:
+        await self._service.delete_billing_item(
+            project_id=command.project_id, item_id=command.item_id
+        )

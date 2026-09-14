@@ -13,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from time_reporting.db.queries import escape_like
 from time_reporting.modules.projects.contracts import (
+    BillingItemInUseError,
+    BillingItemNameAlreadyExistsError,
     ProjectInUseError,
     ProjectMemberAlreadyExistsError,
     ProjectNameAlreadyExistsError,
@@ -21,6 +23,7 @@ from time_reporting.modules.projects.models import Project, ProjectBillingItem, 
 
 _NAME_UNIQUE_CONSTRAINT = "uq_projects_customer_id_name"
 _MEMBER_PRIMARY_KEY = "pk_project_members"
+_BILLING_ITEM_NAME_UNIQUE_CONSTRAINT = "uq_project_billing_items_project_id_name"
 
 
 class ProjectRepository:
@@ -170,7 +173,67 @@ class ProjectBillingItemRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    async def get(self, project_id: UUID, item_id: UUID) -> ProjectBillingItem | None:
+        result = await self._session.scalars(
+            select(ProjectBillingItem).where(
+                ProjectBillingItem.project_id == project_id, ProjectBillingItem.id == item_id
+            )
+        )
+        return result.one_or_none()
+
+    async def get_by_project_and_name(
+        self, project_id: UUID, name: str
+    ) -> ProjectBillingItem | None:
+        result = await self._session.scalars(
+            select(ProjectBillingItem).where(
+                ProjectBillingItem.project_id == project_id, ProjectBillingItem.name == name
+            )
+        )
+        return result.one_or_none()
+
+    async def list_for_project(
+        self, project_id: UUID, *, include_inactive: bool
+    ) -> Sequence[ProjectBillingItem]:
+        statement = select(ProjectBillingItem).where(ProjectBillingItem.project_id == project_id)
+        if not include_inactive:
+            statement = statement.where(ProjectBillingItem.is_active.is_(True))
+        statement = statement.order_by(ProjectBillingItem.position, ProjectBillingItem.name)
+        result = await self._session.scalars(statement)
+        return result.all()
+
+    async def next_position(self, project_id: UUID) -> int:
+        """The position to give the next item added to ``project_id`` (existing max + 1, or 1)."""
+        result = await self._session.execute(
+            select(func.coalesce(func.max(ProjectBillingItem.position), 0) + 1).where(
+                ProjectBillingItem.project_id == project_id
+            )
+        )
+        return result.scalar_one()
+
     async def add_all(self, items: Iterable[ProjectBillingItem]) -> None:
         """Add new ``items`` to the session and flush."""
         self._session.add_all(items)
         await self._session.flush()
+
+    async def save(self, item: ProjectBillingItem) -> None:
+        """Add ``item`` to the session (if new) and flush pending changes."""
+        self._session.add(item)
+        try:
+            await self._session.flush()
+        except IntegrityError as exc:
+            # A concurrent request may have taken the name after the service's pre-check.
+            if _BILLING_ITEM_NAME_UNIQUE_CONSTRAINT in str(exc.orig):
+                raise BillingItemNameAlreadyExistsError(item.project_id, item.name) from exc
+            raise
+
+    async def delete(self, item: ProjectBillingItem) -> None:
+        """Delete ``item``. Other data may block this with a foreign-key violation, raised as
+        ``BillingItemInUseError``."""
+        item_id = item.id  # read before flush: a failed flush may expire ORM attributes
+        await self._session.delete(item)
+        try:
+            await self._session.flush()
+        except IntegrityError as exc:
+            if "foreign key constraint" in str(exc.orig):
+                raise BillingItemInUseError(item_id) from exc
+            raise
