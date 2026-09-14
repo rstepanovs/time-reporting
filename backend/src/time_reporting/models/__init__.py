@@ -8,5 +8,6 @@ from time_reporting.db.base import Base
 from time_reporting.modules.customers.models import Customer
 from time_reporting.modules.projects.models import Project, ProjectMember
 from time_reporting.modules.users.models import User
+from time_reporting.modules.work_calendar.models import NonWorkingDay
 
-__all__ = ["Base", "Customer", "Project", "ProjectMember", "User"]
+__all__ = ["Base", "Customer", "NonWorkingDay", "Project", "ProjectMember", "User"]

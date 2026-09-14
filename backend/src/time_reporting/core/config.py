@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     # web client is served over plain HTTP from another host.
     auth_cookie_secure: bool = True
 
+    # ISO 3166-1 alpha-2 country (and optional subdivision, e.g. a German state) whose public
+    # holidays `ImportPublicHolidays` copies from the `holidays` library into the shared calendar.
+    holiday_country: str = "DE"
+    holiday_subdivision: str | None = None
+
 
 @lru_cache
 def get_settings() -> Settings:

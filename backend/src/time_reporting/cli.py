@@ -18,6 +18,10 @@ from time_reporting.modules.users.contracts import (
     UserDTO,
     UserRole,
 )
+from time_reporting.modules.work_calendar.contracts import (
+    HolidayCountryNotSupportedError,
+    ImportPublicHolidays,
+)
 from time_reporting.seed import DEFAULT_DEMO_PASSWORD, SeedReport, seed_demo_data
 
 _email_adapter: TypeAdapter[str] = TypeAdapter(EmailStr)
@@ -33,6 +37,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     if args.command == "seed-demo":
         return _seed_demo_command(args)
+    if args.command == "import-holidays":
+        return _import_holidays_command(args)
     return _create_admin_command(args)
 
 
@@ -61,6 +67,13 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=f"read the demo users' password from stdin instead of using {DEFAULT_DEMO_PASSWORD!r}",
     )
+
+    import_holidays_parser = commands.add_parser(
+        "import-holidays",
+        help="add the configured country's public holidays for a year to the shared calendar; "
+        "existing non-working days (imported or manual) are left untouched",
+    )
+    import_holidays_parser.add_argument("--year", required=True, type=int)
     return parser
 
 
@@ -114,12 +127,25 @@ def _seed_demo_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def _import_holidays_command(args: argparse.Namespace) -> int:
+    try:
+        added = asyncio.run(_import_holidays_in_database(year=args.year))
+    except HolidayCountryNotSupportedError as exc:
+        return _fail(str(exc))
+    print(f"Added {added} public holiday(s) for {args.year}")
+    return 0
+
+
 async def _create_admin_in_database(*, name: str, email: str, password: str) -> UserDTO:
     return await _with_bus(lambda bus: create_admin(bus, name=name, email=email, password=password))
 
 
 async def _seed_demo_in_database(*, password: str) -> SeedReport:
     return await _with_bus(lambda bus: seed_demo_data(bus, password=password))
+
+
+async def _import_holidays_in_database(*, year: int) -> int:
+    return await _with_bus(lambda bus: bus.execute(ImportPublicHolidays(year=year)))
 
 
 async def _with_bus[T](action: Callable[[Bus], Awaitable[T]]) -> T:

@@ -5,6 +5,7 @@ from time_reporting.modules.admin import module as admin_module
 from time_reporting.modules.customers import module as customers_module
 from time_reporting.modules.projects import module as projects_module
 from time_reporting.modules.users import module as users_module
+from time_reporting.modules.work_calendar import module as work_calendar_module
 
 
 def build_registry() -> HandlerRegistry:
@@ -12,6 +13,7 @@ def build_registry() -> HandlerRegistry:
     users_module.register(registry)
     customers_module.register(registry)
     projects_module.register(registry)
+    work_calendar_module.register(registry)
     admin_module.register(registry)
     registry.freeze()
     return registry
