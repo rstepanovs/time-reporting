@@ -63,7 +63,7 @@ New table `project_billing_items` (`projects/models.py: ProjectBillingItem`, `Ti
 | Column | Type | Notes |
 |---|---|---|
 | `id` | uuid PK | |
-| `project_id` | uuid FK `projects.id` `ON DELETE CASCADE`, indexed | immutable |
+| `project_id` | uuid FK `projects.id` `ON DELETE CASCADE` | immutable; lookups use the unique `(project_id, name)` index |
 | `preset` | enum `billing_item_preset`, nullable | set only for defaults; immutable |
 | `name` | varchar(255) | `uq_project_billing_items_project_id_name` |
 | `description` | text, nullable | printed on the invoice line later |
@@ -112,16 +112,16 @@ Dependency order: **B1 → B2 → B3 → B4** → **F1 → F2** → **D1**.
 - `projects/contracts.py`: `BillingUnit(StrEnum)`, `BillingItemPreset(StrEnum)`, and
   `DEFAULT_BILLING_ITEMS: tuple[DefaultBillingItem, ...]` (preset, name, unit — the table above).
 - `projects/models.py`: `ProjectBillingItem` with the constraints above.
-- `projects/repository.py`: `ProjectBillingItemRepository` — `list_for_project(project_id,
-  include_inactive)` ordered by `position, name`, `get(project_id, item_id)`, `next_position`,
-  `save` (maps the name unique constraint to `BillingItemNameAlreadyExistsError`), `add_all`.
+- `projects/repository.py`: `ProjectBillingItemRepository.add_all`. The query and write methods
+  (`list_for_project`, `get`, `next_position`, `save`, `delete`) arrive with B2, which uses them.
 - `ProjectService.create_project` adds the defaults (positions 1..6) in the same flush.
 - Alembic revision (autogenerate + hand edit): creates both enums and the table, then a data step
   inserting the six defaults for every existing project (`gen_random_uuid()`, Postgres 17). The
   downgrade drops the table and enums.
 - Tests (`test_projects_handlers.py`): `CreateProject` yields the six defaults in order with no
-  rates; the migration's default list matches `DEFAULT_BILLING_ITEMS` (guard against drift: the
-  migration keeps its own literal copy, since migrations must not import app code).
+  rates; a DB check constraint rejects a rate on an `amount` item; deleting a project removes its
+  items. The migration keeps its own literal copy of the defaults (migrations must not import app
+  code) and is verified by hand: upgrade on existing projects, downgrade drops table and enums.
 
 ### B2. Contracts, service and handlers
 
@@ -133,6 +133,9 @@ Dependency order: **B1 → B2 → B3 → B4** → **F1 → F2** → **D1**.
   `BillingItemNameAlreadyExistsError(project_id, name)`,
   `BillingItemPricingError(unit, field)` ("`unit_rate` is not allowed for `amount` items" etc.),
   `BillingItemInUseError(item_id)`; reuse `ProjectNotFoundError` / `ProjectArchivedError`.
+- `ProjectBillingItemRepository`: `list_for_project(project_id, include_inactive)` ordered by
+  `position, name`, `get(project_id, item_id)`, `next_position`, `save` (name unique constraint →
+  `BillingItemNameAlreadyExistsError`), `delete` (FK violation → `BillingItemInUseError`).
 - `ProjectService`: `add_billing_item` (project must exist and be active; pricing checked against
   the unit), `update_billing_item` (name uniqueness, pricing, re-activation requires an active
   project), `delete_billing_item` (FK violation → `BillingItemInUseError`).

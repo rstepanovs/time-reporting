@@ -1,11 +1,16 @@
-from uuid import uuid4
+from decimal import Decimal
+from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from support import CustomerFactory, ProjectFactory, UserFactory
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.customers.contracts import UpdateCustomer
 from time_reporting.modules.projects.contracts import (
+    DEFAULT_BILLING_ITEMS,
     AddProjectMember,
     CreateProject,
     DeleteProject,
@@ -25,6 +30,7 @@ from time_reporting.modules.projects.contracts import (
     RemoveUserFromAllProjects,
     UpdateProject,
 )
+from time_reporting.modules.projects.models import ProjectBillingItem
 from time_reporting.modules.users.contracts import UpdateUser, UserRole
 
 
@@ -42,6 +48,43 @@ async def test_create_project_embeds_customer_and_defaults_description(
     assert project.customer.name == "Acme"
     assert project.customer.is_active is True
     assert await bus.query(GetProjectById(project_id=project.id)) == project
+
+
+async def _billing_items(session: AsyncSession, project_id: UUID) -> list[ProjectBillingItem]:
+    result = await session.scalars(
+        select(ProjectBillingItem)
+        .where(ProjectBillingItem.project_id == project_id)
+        .order_by(ProjectBillingItem.position)
+    )
+    return list(result.all())
+
+
+async def test_create_project_adds_default_billing_items_without_rates(
+    bus: Bus, db_session: AsyncSession, make_customer: CustomerFactory
+) -> None:
+    customer = await make_customer()
+
+    project = await bus.execute(CreateProject(customer_id=customer.id, name="With Defaults"))
+
+    items = await _billing_items(db_session, project.id)
+    assert [(item.position, item.preset, item.name, item.unit) for item in items] == [
+        (position, default.preset, default.name, default.unit)
+        for position, default in enumerate(DEFAULT_BILLING_ITEMS, start=1)
+    ]
+    assert all(item.unit_rate is None and item.markup_percent is None for item in items)
+    assert all(item.is_active for item in items)
+
+
+async def test_billing_item_pricing_must_match_its_unit_in_the_database(
+    db_session: AsyncSession, make_project: ProjectFactory
+) -> None:
+    project = await make_project()
+    expense = (await _billing_items(db_session, project.id))[-1]
+
+    expense.unit_rate = Decimal("10.00")
+
+    with pytest.raises(IntegrityError, match="unit_rate_not_for_amount"):
+        await db_session.flush()
 
 
 async def test_create_project_for_unknown_customer_raises(bus: Bus) -> None:
@@ -252,7 +295,7 @@ async def test_remove_member_from_unknown_project_raises(bus: Bus) -> None:
         await bus.execute(RemoveProjectMember(project_id=uuid4(), user_id=uuid4()))
 
 
-async def test_delete_project_cascades_to_members(
+async def test_delete_project_cascades_to_members_and_billing_items(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
     project = await make_project()
@@ -264,6 +307,7 @@ async def test_delete_project_cascades_to_members(
     assert await bus.query(GetProjectById(project_id=project.id)) is None
     with pytest.raises(ProjectNotFoundError):
         await bus.query(ListProjectMembers(project_id=project.id))
+    assert await _billing_items(bus.session, project.id) == []
 
 
 async def test_delete_unknown_project_raises(bus: Bus) -> None:

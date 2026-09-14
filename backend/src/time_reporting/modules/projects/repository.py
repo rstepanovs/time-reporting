@@ -1,9 +1,9 @@
-"""Persistence of ``Project`` and ``ProjectMember`` entities.
+"""Persistence of ``Project``, ``ProjectMember`` and ``ProjectBillingItem`` entities.
 
 Flushes but never commits — the bus owns transactions.
 """
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from typing import Any, cast
 from uuid import UUID
 
@@ -17,7 +17,7 @@ from time_reporting.modules.projects.contracts import (
     ProjectMemberAlreadyExistsError,
     ProjectNameAlreadyExistsError,
 )
-from time_reporting.modules.projects.models import Project, ProjectMember
+from time_reporting.modules.projects.models import Project, ProjectBillingItem, ProjectMember
 
 _NAME_UNIQUE_CONSTRAINT = "uq_projects_customer_id_name"
 _MEMBER_PRIMARY_KEY = "pk_project_members"
@@ -164,3 +164,13 @@ class ProjectMemberRepository:
         )
         await self._session.flush()
         return result.rowcount
+
+
+class ProjectBillingItemRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def add_all(self, items: Iterable[ProjectBillingItem]) -> None:
+        """Add new ``items`` to the session and flush."""
+        self._session.add_all(items)
+        await self._session.flush()

@@ -10,6 +10,7 @@ from uuid import UUID
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.customers.contracts import GetCustomerById
 from time_reporting.modules.projects.contracts import (
+    DEFAULT_BILLING_ITEMS,
     MemberUserInactiveError,
     MemberUserNotFoundError,
     ProjectArchivedError,
@@ -20,8 +21,12 @@ from time_reporting.modules.projects.contracts import (
     ProjectNotFoundError,
     UpdateProject,
 )
-from time_reporting.modules.projects.models import Project, ProjectMember
-from time_reporting.modules.projects.repository import ProjectMemberRepository, ProjectRepository
+from time_reporting.modules.projects.models import Project, ProjectBillingItem, ProjectMember
+from time_reporting.modules.projects.repository import (
+    ProjectBillingItemRepository,
+    ProjectMemberRepository,
+    ProjectRepository,
+)
 from time_reporting.modules.users.contracts import GetUserById
 
 
@@ -30,6 +35,7 @@ class ProjectService:
         self._bus = bus
         self._projects = ProjectRepository(bus.session)
         self._members = ProjectMemberRepository(bus.session)
+        self._billing_items = ProjectBillingItemRepository(bus.session)
 
     async def get_project(self, project_id: UUID) -> Project:
         project = await self._projects.get_by_id(project_id)
@@ -44,6 +50,16 @@ class ProjectService:
         await self._ensure_name_available(customer_id, name)
         project = Project(customer_id=customer_id, name=name, description=description)
         await self._projects.save(project)
+        await self._billing_items.add_all(
+            ProjectBillingItem(
+                project_id=project.id,
+                preset=default.preset,
+                name=default.name,
+                unit=default.unit,
+                position=position,
+            )
+            for position, default in enumerate(DEFAULT_BILLING_ITEMS, start=1)
+        )
         return project
 
     async def update_project(self, data: UpdateProject) -> Project:

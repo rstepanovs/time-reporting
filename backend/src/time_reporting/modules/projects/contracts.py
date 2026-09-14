@@ -6,6 +6,7 @@ for these messages are registered in ``projects.module``; ORM entities never lea
 
 from dataclasses import dataclass
 from datetime import datetime
+from enum import StrEnum
 from typing import Literal, get_args
 from uuid import UUID
 
@@ -17,6 +18,58 @@ type ClearableProjectField = Literal["description"]
 # Optional text fields that ``UpdateProject.clear_fields`` can reset to ``None``.
 CLEARABLE_PROJECT_FIELDS: tuple[ClearableProjectField, ...] = get_args(
     ClearableProjectField.__value__
+)
+
+
+class BillingUnit(StrEnum):
+    """What a billing item's quantity is measured in. Immutable once the item exists."""
+
+    HOUR = "hour"
+    DAY = "day"
+    # An expense entered as a money amount, billed at cost plus the item's optional markup.
+    AMOUNT = "amount"
+
+
+class BillingItemPreset(StrEnum):
+    """Identifies a billing item created from ``DEFAULT_BILLING_ITEMS``; custom items have none."""
+
+    NORMAL_HOURS = "normal_hours"
+    OVERTIME_HOURS = "overtime_hours"
+    TRAVEL_TIME = "travel_time"
+    PER_DIEM = "per_diem"
+    PURCHASING_EXPENSES = "purchasing_expenses"
+    OTHER_EXPENSES = "other_expenses"
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class DefaultBillingItem:
+    preset: BillingItemPreset
+    name: str
+    unit: BillingUnit
+
+
+# Copied, in this order and without rates, into every newly created project.
+DEFAULT_BILLING_ITEMS: tuple[DefaultBillingItem, ...] = (
+    DefaultBillingItem(
+        preset=BillingItemPreset.NORMAL_HOURS, name="Normal working hours", unit=BillingUnit.HOUR
+    ),
+    DefaultBillingItem(
+        preset=BillingItemPreset.OVERTIME_HOURS,
+        name="Overtime working hours",
+        unit=BillingUnit.HOUR,
+    ),
+    DefaultBillingItem(
+        preset=BillingItemPreset.TRAVEL_TIME, name="Travel time", unit=BillingUnit.HOUR
+    ),
+    DefaultBillingItem(preset=BillingItemPreset.PER_DIEM, name="Per diems", unit=BillingUnit.DAY),
+    DefaultBillingItem(
+        preset=BillingItemPreset.PURCHASING_EXPENSES,
+        name="Purchasing expenses",
+        unit=BillingUnit.AMOUNT,
+    ),
+    DefaultBillingItem(
+        preset=BillingItemPreset.OTHER_EXPENSES, name="Other expenses", unit=BillingUnit.AMOUNT
+    ),
 )
 
 
