@@ -116,31 +116,53 @@ immediately — enforced by comparing the token's `ver` claim against the user's
 
 The **customers** module (`modules/customers/`) owns the `Customer` entity: name, legal details, a
 structured billing address (ISO 3166-1 alpha-2 country), a billing period (`interval_count` ×
-`BillingIntervalUnit`, counted from `anchor_date`), currency (ISO 4217) and payment terms. Customers
-are never deleted, only archived (`is_active`), because billing data will reference them. Any
+`BillingIntervalUnit`, counted from `anchor_date`), currency (ISO 4217) and payment terms. Any
 authenticated user can read them; writes require `ManagerDep` (`admin` or `project_manager`).
 `UpdateCustomer` treats `None` as "unchanged"; optional text fields are cleared by naming them in
-`clear_fields`, which the router fills from fields sent as JSON `null`.
+`clear_fields`, which the router fills from fields sent as JSON `null`. `ListCustomers` filters by a
+`search` substring against name or legal name. Deleting is archive-by-default, permanent-on-request
+— see the **admin** module below; `DeleteCustomer` (permanent) fails with `CustomerInUseError` while
+the customer still has any project.
 
 The **projects** module (`modules/projects/`) owns the `Project` entity (belongs to one `Customer`,
 `customer_id` immutable after creation) and `ProjectMember`, a plain user↔project link with no
-per-project role. Project names are unique per customer, not globally. Like customers, projects are
-never deleted, only archived (`is_active`); creating a project, or reactivating one, requires its
-customer to currently be active, but archiving a customer does not cascade to its projects. Only
-active users can be added as members, and only to an active project; a member later deactivated
-stays listed (with `is_active=false`) rather than disappearing. Access follows customers: any
-authenticated user can read projects and members, `ManagerDep` is required to create/update projects
-and to add/remove members. `ListProjects` filters by `customer_id`, `member_id` and a `search`
-substring against the name. Cross-module display data (a project's customer name, a member's name
-and email) is fetched via batch queries — `GetCustomersByIds` / `GetUsersByIds` in the respective
-modules' `contracts.py` — rather than joining across modules; `Project`/`ProjectMember` reference
-`customers.id` / `users.id` by table name only, never by importing those modules' `models`.
+per-project role. Project names are unique per customer, not globally. Creating a project, or
+reactivating one, requires its customer to currently be active, but archiving a customer does not
+cascade to its projects. Only active users can be added as members, and only to an active project; a
+member later deactivated stays listed (with `is_active=false`) rather than disappearing. Access
+follows customers: any authenticated user can read projects and members, `ManagerDep` is required to
+create/update projects and to add/remove members. `ListProjects` filters by `customer_id`,
+`member_id` and a `search` substring against the name. Cross-module display data (a project's
+customer name, a member's name and email) is fetched via batch queries — `GetCustomersByIds` /
+`GetUsersByIds` in the respective modules' `contracts.py` — rather than joining across modules;
+`Project`/`ProjectMember` reference `customers.id` / `users.id` by table name only, never by
+importing those modules' `models`. `DeleteProject` (permanent) cascades to its members (FK
+`ON DELETE CASCADE`).
 
 The **users** module also exposes `GET /users/directory` (`ManagerDep`): a minimal, active-only,
 search-filtered user list for pickers (e.g. adding a project member), since `GET /users` itself is
 admin-only. Both `users.ListUsers` and `customers.ListCustomers`-style listing now support this
 through repository-level search helpers; `db/queries.py:escape_like` is the shared kernel helper for
 building a literal (non-wildcard) `ILIKE` pattern from user input, reused by both modules.
+`DeleteUser` (permanent) rejects deleting yourself and fails with `UserInUseError` while the user is
+still a project member; `RemoveUserFromAllProjects` clears its memberships first (see below).
+
+The **admin** module (`modules/admin/`) owns no tables — it orchestrates archiving or permanently
+deleting a user, customer or project by calling the owning module's commands, reached only through
+`users.contracts` / `customers.contracts` / `projects.contracts`. `RemoveUser` / `RemoveCustomer` /
+`RemoveProject` (`AdminDep` only, under `/admin`) default to archiving (the same
+`UpdateUser`/`UpdateCustomer`/`UpdateProject` a manager already uses) and, with `permanent=True`,
+permanently delete once nothing blocks it: a customer with any project, or a user deleting
+themselves, raise `RemovalBlockedError` / `SelfRemovalError` (409 / 400) without changing anything;
+deleting a user first removes its project memberships (`RemoveUserFromAllProjects`) so the
+`ON DELETE RESTRICT` foreign key doesn't get in the way, and deleting a project cascades to its
+members. `GetUserRemovalImpact` / `GetCustomerRemovalImpact` / `GetProjectRemovalImpact` report what
+a permanent delete would affect (`blockers`, `effects`) before the user confirms; they're built only
+from each module's own contract queries (`ListProjects`, `ListProjectMembers`), never new
+cross-module queries. A same-outer-command failure (e.g. the delete itself fails after memberships
+were already removed) rolls back the whole `RemoveUser` command, per the bus's transaction rule.
+Archiving stays reachable directly through the owning module's existing `PATCH` endpoint too
+(`ManagerDep`); only the permanent-delete path is admin-only.
 
 `core/passwords.py` (Argon2id via `pwdlib`, hashing off the event loop in a thread), `db/queries.py`
 (`escape_like`) and `db/mixins.py:TimestampMixin` (`created_at`/`updated_at`) are shared kernel, not
@@ -159,27 +181,56 @@ owned by a module.
   and `RequireAuth.tsx` (route guard redirecting to `/login` with the page to return to). Signing in or
   out drops every cached query, so no data leaks between users; explicit sign-out and password change
   navigate to `/login` with `flushSync`, so the next sign-in does not return to the page left behind.
-- **`customers/api.ts`** / **`users/api.ts`** — thin typed wrappers for the read-only endpoints those
-  modules need on the frontend (`listCustomers`, `searchUserDirectory`); `customers/hooks.ts` /
-  `users/hooks.ts` wrap them as TanStack Query hooks (`useCustomers`, `useUserDirectory`).
+- **`customers/`** / **`users/`** — `api.ts` (typed calls for the endpoints each module needs, plus
+  their own conflict/rule/not-found error classes — `CustomerConflictError`/`UserEmailConflictError`
+  (409), `UserRuleError` (400), `CustomerNotFoundError`/`UserNotFoundError` (404)) and `hooks.ts`
+  (`customerKeys`/`userKeys` + list/detail queries and create/update mutations, e.g. `useCustomers`,
+  `useCreateCustomer`, `useUpdateCustomer`, `useUsers`, `useCreateUser`, `useUpdateUser`,
+  `useResetUserPassword`, `useUserDirectory`). `CustomerFormModal.tsx` (customers/) and
+  `UserFormModal.tsx` + `ResetPasswordModal.tsx` (users/) are the create/edit forms the `/admin`
+  pages use; elsewhere (e.g. the projects customer picker) only the read-only `useCustomers` is
+  needed.
 - **`projects/`** — `api.ts` (typed calls for all `/projects` endpoints plus `ProjectConflictError`
   (409) / `ProjectRuleError` (400, backend `detail` as the message) / `ProjectNotFoundError` (404)),
   `hooks.ts` (`projectKeys` + `useProjects`/`useProject`/`useProjectMembers` queries and
   `useCreateProject`/`useUpdateProject`/`useAddProjectMember`/`useRemoveProjectMember` mutations, all
   invalidating `projectKeys.all` on success), and `ProjectFormModal.tsx` (shared create/edit form used
-  by both `pages/ProjectsPage.tsx` and `pages/ProjectDetailsPage.tsx`).
+  by `pages/ProjectsPage.tsx`, `pages/ProjectDetailsPage.tsx` and `pages/admin/AdminProjectsPage.tsx`;
+  an optional `onCreated` callback lets the admin page stay put instead of navigating to the new
+  project).
+- **`admin/`** — the shared archive-or-delete UI for all three entities: `api.ts`
+  (`getRemovalImpact`/`removeEntity` against `/api/v1/admin/...`, plus `RemovalBlockedError` (409,
+  carries `blockers`), `RemovalRuleError` (400) and `RemovalNotFoundError` (404)), `hooks.ts`
+  (`useRemovalImpact` — fetched only while a dialog is open — and `useRemoveEntity`, which also
+  invalidates the projects lists for users/customers), and `RemoveEntityModal.tsx`: archives by
+  default, offers a "Delete permanently" checkbox disabled with the blocking reason when other data
+  references the record, and shows what else a permanent delete would remove once checked.
+- **`auth/roles.ts`** — `canManage` (admin or project manager) and `isAdmin`; `auth/RequireRole.tsx`
+  renders its children only for a signed-in user with one of the given roles, the plain not-found
+  page otherwise (so a non-admin can't tell `/admin` exists), and must be nested inside `RequireAuth`.
+- **`pages/admin/`** — `AdminUsersPage`/`AdminCustomersPage`/`AdminProjectsPage`: each lists its
+  entity with a debounced search and an archived/inactive toggle, and a per-row menu (Edit,
+  role/entity-specific actions like Reset password or Restore, Remove… via `RemoveEntityModal`). An
+  admin cannot edit their own role/active status or remove themselves from `AdminUsersPage`.
 - **`router.tsx`** — route tree (`routes`, also used by tests): `/login` is public, everything else sits
   under `RequireAuth` → `AppLayout`. Page components live in `pages/`, shared chrome in `components/`.
+  `/admin/{users,customers,projects}` sit under `RequireRole roles={["admin"]}`, with `/admin`
+  redirecting to `/admin/users`.
 - **`components/AppLayout.tsx`** — the signed-in shell: header with the account menu and an
-  `AppShell.Navbar` (collapsible on mobile via a `Burger`) linking to the pages in `pages/`.
+  `AppShell.Navbar` (collapsible on mobile via a `Burger`) linking to the pages in `pages/`, plus an
+  "Administration" nav group (Users/Customers/Projects) shown only when `isAdmin(user.role)`.
 - **`App.tsx`** — top-level provider composition: `MantineProvider` → `DatesProvider` →
   `QueryClientProvider` → `RouterProvider` (imported from `react-router/dom`, which `flushSync`
   navigation requires).
 - **`test/setup.ts`** — Vitest setup (jsdom polyfills for `matchMedia`/`ResizeObserver`/`document.fonts`
-  that Mantine needs, RTL cleanup). Wired in via `vite.config.ts`'s `test.setupFiles`.
+  that Mantine needs, RTL cleanup, and cleaning `@mantine/notifications`'s module-level queue — it
+  outlives the React tree, so a toast shown in one test would otherwise still be queued when the next
+  test's `<Notifications />` mounts). Wired in via `vite.config.ts`'s `test.setupFiles`.
   `test/renderApp.tsx` renders the full route tree in a memory router with a fresh `QueryClient`;
-  tests mock `@/auth/api` and, for the projects pages, `@/projects/api` / `@/customers/api` /
-  `@/users/api`. Mantine's `Select` renders an input with `role="combobox"`, not `"textbox"`.
+  tests mock `@/auth/api` and whichever of `@/projects/api` / `@/customers/api` / `@/users/api` /
+  `@/admin/api` the page under test calls. Mantine's `Select` renders an input with
+  `role="combobox"`, not `"textbox"`; a required field's `<label>` includes a trailing `*`, so match
+  it with a prefix regex (e.g. `getByLabelText(/^name/i)`) rather than the exact label text.
 
 ### API convention
 
@@ -193,7 +244,8 @@ URL is hardcoded in the frontend.
   `openssl rand -hex 32`; set it in `.env` for local dev, it's already required by `compose.yaml` and
   CI. There is no self-registration endpoint: create the first administrator with
   `uv run time-reporting create-admin`, then manage further accounts via `POST/GET/PATCH /users` (admin
-  only) or `PUT /users/{id}/password`.
+  only) or `PUT /users/{id}/password`; permanently deleting a user, customer or project goes through
+  `DELETE /admin/{users,customers,projects}/{id}` instead (also admin only).
 - Access tokens only (no refresh tokens) — `POST /auth/login` (OAuth2 password form; `username` is the
   email) returns a bearer token good for `access_token_expire_minutes` (default 60).
 - The web client never sees the token: `POST /auth/session` (JSON `email`/`password`) sets it as an
