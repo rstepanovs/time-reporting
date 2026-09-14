@@ -15,7 +15,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { Link, Outlet, useLocation } from "react-router";
 
 import { useAuthenticatedUser, useSignOut } from "@/auth/hooks";
-import { roleLabels } from "@/auth/roles";
+import { isAdmin, roleLabels } from "@/auth/roles";
 
 function AccountMenu() {
   const user = useAuthenticatedUser();
@@ -62,8 +62,16 @@ const NAV_ITEMS = [
   { to: "/projects", label: "Projects" },
 ];
 
+const ADMIN_NAV_ITEMS = [
+  { to: "/admin/users", label: "Users" },
+  { to: "/admin/customers", label: "Customers" },
+  { to: "/admin/projects", label: "Projects" },
+];
+
 function Navigation({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
+  const user = useAuthenticatedUser();
+
   return (
     <>
       {NAV_ITEMS.map((item) => (
@@ -78,6 +86,23 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
           onClick={onNavigate}
         />
       ))}
+      {isAdmin(user.role) && (
+        <NavLink
+          label="Administration"
+          defaultOpened={location.pathname.startsWith("/admin")}
+        >
+          {ADMIN_NAV_ITEMS.map((item) => (
+            <NavLink
+              key={item.to}
+              component={Link}
+              to={item.to}
+              label={item.label}
+              active={location.pathname.startsWith(item.to)}
+              onClick={onNavigate}
+            />
+          ))}
+        </NavLink>
+      )}
     </>
   );
 }

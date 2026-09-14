@@ -2,7 +2,7 @@ import { screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fetchCurrentUser } from "@/auth/api";
-import { testUser } from "@/test/fixtures";
+import { testAdmin, testUser, testWorker } from "@/test/fixtures";
 import { renderApp } from "@/test/renderApp";
 
 vi.mock("@/auth/api", async (importOriginal) => ({
@@ -23,5 +23,26 @@ describe("navigation", () => {
 
     expect(screen.getByRole("link", { name: "Home" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Projects" })).toBeTruthy();
+  });
+
+  it("shows the Administration menu for an admin", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testAdmin);
+    renderApp("/");
+
+    await screen.findByRole("heading", { name: "Time Reporting" });
+
+    expect(screen.getByText("Administration")).toBeTruthy();
+  });
+
+  it("hides the Administration menu for a project manager and a worker", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    renderApp("/");
+    await screen.findByRole("heading", { name: "Time Reporting" });
+    expect(screen.queryByText("Administration")).toBeNull();
+
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+    renderApp("/");
+    await screen.findByRole("heading", { name: "Time Reporting" });
+    expect(screen.queryByText("Administration")).toBeNull();
   });
 });

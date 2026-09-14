@@ -21,6 +21,14 @@ export const testWorker: CurrentUser = {
   role: "worker",
 };
 
+export const testAdmin: CurrentUser = {
+  ...testUser,
+  id: "a1d2e3f4-5678-4abc-9def-0123456789ab",
+  name: "Alice Admin",
+  email: "alice@example.com",
+  role: "admin",
+};
+
 export const testCustomer: Customer = {
   id: "c1a1a1a1-1111-1111-1111-111111111111",
   name: "Acme Corporation",
