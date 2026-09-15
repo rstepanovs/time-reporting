@@ -1,9 +1,9 @@
-import { screen } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fetchCurrentUser } from "@/auth/api";
 import { listSubmittedTimesheetWeeks } from "@/timesheets/api";
-import { testTimesheetWeekSummary, testUser, testWorker } from "@/test/fixtures";
+import { testAdmin, testTimesheetWeekSummary, testUser, testWorker } from "@/test/fixtures";
 import { renderApp } from "@/test/renderApp";
 
 vi.mock("@/auth/api", async (importOriginal) => ({
@@ -47,5 +47,31 @@ describe("ApprovalsPage", () => {
     renderApp("/approvals");
 
     await screen.findByRole("heading", { name: "Page not found" });
+  });
+
+  it("hides the scope toggle from a project manager", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(listSubmittedTimesheetWeeks).mockResolvedValue([]);
+    renderApp("/approvals");
+
+    await screen.findByText("No timesheets are waiting for review.");
+    expect(screen.queryByRole("radio", { name: "All" })).toBeNull();
+  });
+
+  it("lets an admin switch scope, requesting the matching submissions", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testAdmin);
+    vi.mocked(listSubmittedTimesheetWeeks).mockResolvedValue([]);
+    renderApp("/approvals");
+    await screen.findByRole("radio", { name: "My projects" });
+
+    await waitFor(() => {
+      expect(listSubmittedTimesheetWeeks).toHaveBeenCalledWith({ scope: "mine" });
+    });
+
+    fireEvent.click(screen.getByRole("radio", { name: "All" }));
+
+    await waitFor(() => {
+      expect(listSubmittedTimesheetWeeks).toHaveBeenCalledWith({ scope: "all" });
+    });
   });
 });

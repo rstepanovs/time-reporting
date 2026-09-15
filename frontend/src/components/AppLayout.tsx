@@ -66,6 +66,7 @@ const NAV_ITEMS = [
 
 // Shown only to admins/project managers, right after "My hours".
 const APPROVALS_NAV_ITEM = { to: "/approvals", label: "Approvals" };
+const TEAM_NAV_ITEM = { to: "/team", label: "Team" };
 
 const ADMIN_NAV_ITEMS = [
   { to: "/admin/users", label: "Users" },
@@ -79,7 +80,7 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
   const user = useAuthenticatedUser();
   const navItems = canManage(user.role)
-    ? [...NAV_ITEMS.slice(0, 3), APPROVALS_NAV_ITEM, ...NAV_ITEMS.slice(3)]
+    ? [...NAV_ITEMS.slice(0, 3), APPROVALS_NAV_ITEM, TEAM_NAV_ITEM, ...NAV_ITEMS.slice(3)]
     : NAV_ITEMS;
 
   return (

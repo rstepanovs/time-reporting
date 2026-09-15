@@ -1,16 +1,29 @@
-import { Alert, Loader, Stack, Table, Text, Title } from "@mantine/core";
-import { Link } from "react-router";
+import { Alert, Group, Loader, Stack, Table, Text, Title } from "@mantine/core";
+import { Link, useSearchParams } from "react-router";
 
+import type { TeamScope } from "@/timesheets/api";
+import { TeamScopeToggle } from "@/timesheets/TeamScopeToggle";
 import { formatHours, formatWeekLabel } from "@/timesheets/week";
 import { useSubmittedTimesheetWeeks } from "@/timesheets/hooks";
 
 /** A manager's queue of weeks awaiting review, oldest submission first. */
 export function ApprovalsPage() {
-  const submissions = useSubmittedTimesheetWeeks();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const scope = (searchParams.get("scope") === "all" ? "all" : "mine") as TeamScope;
+  const submissions = useSubmittedTimesheetWeeks(scope);
+
+  function setScope(nextScope: TeamScope) {
+    const params = new URLSearchParams(searchParams);
+    params.set("scope", nextScope);
+    setSearchParams(params);
+  }
 
   return (
     <Stack>
-      <Title order={2}>Approvals</Title>
+      <Group justify="space-between">
+        <Title order={2}>Approvals</Title>
+        <TeamScopeToggle scope={scope} onScopeChange={setScope} />
+      </Group>
 
       {submissions.isPending && <Loader />}
       {submissions.isError && <Alert color="red">Could not load submitted timesheets.</Alert>}

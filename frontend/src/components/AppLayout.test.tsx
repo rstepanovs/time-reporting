@@ -59,4 +59,19 @@ describe("navigation", () => {
     await screen.findByRole("heading", { name: "Time Reporting" });
     expect(screen.queryByRole("link", { name: "Approvals" })).toBeNull();
   });
+
+  it("shows Team, right after Approvals, to a project manager and an admin", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser); // a project manager
+    renderApp("/");
+    await screen.findByRole("heading", { name: "Time Reporting" });
+    const links = screen.getAllByRole("link").map((link) => link.textContent);
+    expect(links.indexOf("Team")).toBe(links.indexOf("Approvals") + 1);
+  });
+
+  it("hides Team from a worker", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+    renderApp("/");
+    await screen.findByRole("heading", { name: "Time Reporting" });
+    expect(screen.queryByRole("link", { name: "Team" })).toBeNull();
+  });
 });

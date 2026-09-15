@@ -16,6 +16,7 @@ import { LoginPage } from "@/pages/LoginPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { ProjectDetailsPage } from "@/pages/ProjectDetailsPage";
 import { ProjectsPage } from "@/pages/ProjectsPage";
+import { TeamPage } from "@/pages/TeamPage";
 import { TimesheetPage } from "@/pages/TimesheetPage";
 
 export const routes: RouteObject[] = [
@@ -34,6 +35,11 @@ export const routes: RouteObject[] = [
             path: "approvals",
             element: <RequireRole roles={["admin", "project_manager"]} />,
             children: [{ index: true, element: <ApprovalsPage /> }],
+          },
+          {
+            path: "team",
+            element: <RequireRole roles={["admin", "project_manager"]} />,
+            children: [{ index: true, element: <TeamPage /> }],
           },
           { path: "projects", element: <ProjectsPage /> },
           { path: "projects/:projectId", element: <ProjectDetailsPage /> },
