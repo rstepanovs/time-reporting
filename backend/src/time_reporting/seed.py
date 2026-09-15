@@ -1,4 +1,5 @@
-"""Demo data for local development: one user per role, a few customers, and their projects.
+"""Demo data for local development: one user per access level plus a plain employee, a few
+customers, and their projects.
 
 Seeding is idempotent: users whose email, customers whose name, or projects whose (customer, name)
 already exist are left untouched.
@@ -65,7 +66,7 @@ DEFAULT_DEMO_PASSWORD = "demo-password"
 class DemoUser:
     name: str
     email: str
-    role: UserRole
+    roles: frozenset[UserRole]
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -97,9 +98,19 @@ class DemoProject:
 
 
 DEMO_USERS: tuple[DemoUser, ...] = (
-    DemoUser(name="Alice Admin", email="admin@example.com", role=UserRole.ADMIN),
-    DemoUser(name="Mark Manager", email="manager@example.com", role=UserRole.PROJECT_MANAGER),
-    DemoUser(name="Wendy Worker", email="worker@example.com", role=UserRole.WORKER),
+    DemoUser(name="Alice Admin", email="admin@example.com", roles=frozenset({UserRole.ADMIN})),
+    DemoUser(name="Mark Manager", email="manager@example.com", roles=frozenset({UserRole.MANAGER})),
+    DemoUser(name="Emma Employee", email="employee@example.com", roles=frozenset()),
+    DemoUser(
+        name="Andy Accountant",
+        email="accountant@example.com",
+        roles=frozenset({UserRole.ACCOUNTANT}),
+    ),
+    DemoUser(
+        name="Max Multi",
+        email="lead@example.com",
+        roles=frozenset({UserRole.ADMIN, UserRole.MANAGER}),
+    ),
 )
 
 DEMO_CUSTOMERS: tuple[DemoCustomer, ...] = (
@@ -167,7 +178,7 @@ DEMO_PROJECTS: tuple[DemoProject, ...] = (
         customer_name="Acme Corporation",
         name="Website Revamp",
         description="Redesign the public marketing site.",
-        member_emails=("manager@example.com", "worker@example.com"),
+        member_emails=("manager@example.com", "employee@example.com", "lead@example.com"),
         manager_email="manager@example.com",
         billing_rates=True,
         custom_billing_items=(
@@ -180,7 +191,7 @@ DEMO_PROJECTS: tuple[DemoProject, ...] = (
         customer_name="Acme Corporation",
         name="Internal Tooling",
         description="Roll out time tracking internally.",
-        member_emails=("worker@example.com",),
+        member_emails=("employee@example.com", "accountant@example.com"),
         manager_email="manager@example.com",
         billing_rates=True,
     ),
@@ -196,7 +207,7 @@ DEMO_PROJECTS: tuple[DemoProject, ...] = (
         customer_name="Initech",
         name="Legacy Support",
         description="Wind-down support after the contract ended.",
-        member_emails=("worker@example.com",),
+        member_emails=("employee@example.com",),
         archived=True,
         billing_rates=True,
     ),
@@ -217,10 +228,6 @@ DEMO_PURCHASING_MARKUP = Decimal("10.00")
 # The public holiday whose following day becomes the demo bridge day (a Thursday holiday, so the
 # Friday after it is the classic "long weekend" bridge day).
 DEMO_BRIDGE_DAY_AFTER_HOLIDAY = "Ascension Day"
-# Roles that get demo time entries booked, so a fresh checkout has something to look at on the
-# Timesheet page and the worker dashboard's month calendar / year-hours table; admins aren't
-# expected to book their own time.
-DEMO_TIME_ENTRY_ROLES = frozenset({UserRole.WORKER, UserRole.PROJECT_MANAGER})
 DEMO_DAILY_HOURS = Decimal("8")
 DEMO_OVERTIME_HOURS = Decimal("2")
 DEMO_TRAVEL_HOURS = Decimal("3")
@@ -240,8 +247,9 @@ class SeedReport:
     imported_holidays: int = 0
     created_bridge_day: bool = False
     seeded_time_entries_for: list[str] = field(default_factory=list)
-    # Demo workers (not project managers) whose seeded weeks were pushed through the submit/
-    # approve workflow, so a fresh checkout also has an example of that on the Timesheet page.
+    # Demo users (all but whichever reviewed them) whose seeded weeks were pushed through the
+    # submit/approve workflow, so a fresh checkout also has an example of that on the Timesheet
+    # page.
     submitted_weeks_for: list[str] = field(default_factory=list)
 
 
@@ -345,14 +353,15 @@ def _item_id_for_preset(option: ProjectOptionDTO, preset: BillingItemPreset) -> 
     return next((item.id for item in option.billing_items if item.preset is preset), None)
 
 
-def _reviewer_id(users: tuple[DemoUser, ...], user_ids_by_email: dict[str, UUID]) -> UUID | None:
-    """The demo user who reviews a worker's submitted weeks: a project manager, or an admin if
-    none of the given ``users`` has that role. ``None`` if neither role is present."""
-    managers = (UserRole.PROJECT_MANAGER, UserRole.ADMIN)
-    reviewer = min(
-        (user for user in users if user.role in managers),
-        key=lambda user: managers.index(user.role),
-        default=None,
+def _reviewer_id(
+    users: tuple[DemoUser, ...], user_ids_by_email: dict[str, UUID], *, owner_email: str
+) -> UUID | None:
+    """A ``manager``-level demo user other than ``owner_email``, to review that user's submitted
+    weeks (nobody, not even an admin, may review their own). ``None`` if no other demo user holds
+    ``manager``."""
+    reviewer = next(
+        (user for user in users if UserRole.MANAGER in user.roles and user.email != owner_email),
+        None,
     )
     return user_ids_by_email.get(reviewer.email) if reviewer is not None else None
 
@@ -366,7 +375,7 @@ async def _submit_and_approve_demo_weeks(
     *,
     reviewer_id: UUID,
 ) -> None:
-    """Push a just-seeded demo worker's weeks through the submit/review workflow: every week but
+    """Push a just-seeded demo user's weeks through the submit/review workflow: every week but
     the most recent is submitted and then approved, and the most recent is left submitted (so
     the demo reviewer has something waiting on the approvals page). Only ever called for a
     freshly seeded user (guarded by the ``CountTimeEntries`` check above), so this always starts
@@ -389,9 +398,10 @@ async def _seed_time_entries(
     today: date,
 ) -> None:
     """Book normal working hours on every working day of the last ``DEMO_TIME_ENTRY_MONTHS``
-    months up to today, plus a little overtime and travel time, for each user with a
-    ``DEMO_TIME_ENTRY_ROLES`` role that doesn't already have any time entries — so a fresh
-    checkout has something to show on both the Timesheet page and the worker dashboard's month
+    months up to today, plus a little overtime and travel time, for each demo user who is a
+    project member (so has a booking option — this naturally skips ``admin@example.com``, who
+    isn't a member of any demo project) and doesn't already have any time entries — so a fresh
+    checkout has something to show on both the Timesheet page and the personal dashboard's month
     calendar and year-hours table."""
     range_from = _month_start_n_months_ago(today, DEMO_TIME_ENTRY_MONTHS - 1)
     calendar_days = await bus.query(GetCalendarDays(date_from=range_from, date_to=today))
@@ -418,8 +428,6 @@ async def _seed_time_entries(
         working_days_by_week[_week_start(day)].append(day)
 
     for user in users:
-        if user.role not in DEMO_TIME_ENTRY_ROLES:
-            continue
         user_id = user_ids_by_email.get(user.email)
         if user_id is None:
             continue
@@ -460,17 +468,16 @@ async def _seed_time_entries(
             )
         report.seeded_time_entries_for.append(user.email)
 
-        if user.role is UserRole.WORKER:
-            reviewer_id = _reviewer_id(users, user_ids_by_email)
-            if reviewer_id is not None:
-                await _submit_and_approve_demo_weeks(
-                    bus,
-                    report,
-                    user,
-                    user_id,
-                    sorted(working_days_by_week),
-                    reviewer_id=reviewer_id,
-                )
+        reviewer_id = _reviewer_id(users, user_ids_by_email, owner_email=user.email)
+        if reviewer_id is not None:
+            await _submit_and_approve_demo_weeks(
+                bus,
+                report,
+                user,
+                user_id,
+                sorted(working_days_by_week),
+                reviewer_id=reviewer_id,
+            )
 
 
 async def _project_exists(bus: Bus, customer_id: UUID, name: str) -> bool:
@@ -500,7 +507,7 @@ async def seed_demo_data(
     for user in users:
         try:
             created_user = await bus.execute(
-                CreateUser(name=user.name, email=user.email, role=user.role, password=password)
+                CreateUser(name=user.name, email=user.email, roles=user.roles, password=password)
             )
         except EmailAlreadyExistsError:
             report.existing_users.append(user.email)
