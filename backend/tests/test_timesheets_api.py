@@ -3,7 +3,7 @@ from datetime import date
 import pytest
 from httpx import AsyncClient
 
-from support import ADMIN, EMPLOYEE, MANAGER, AuthHeaders, ProjectFactory, UserFactory
+from support import ADMIN, ADMIN_ONLY, EMPLOYEE, MANAGER, AuthHeaders, ProjectFactory, UserFactory
 from time_reporting.modules.projects.contracts import BillingItemPreset
 from time_reporting.modules.users.contracts import UserRole
 
@@ -606,6 +606,34 @@ async def test_worker_cannot_approve_return_or_list_submissions(
     assert submissions.status_code == 403
 
 
+async def test_admin_only_cannot_approve_or_view_others_week(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    worker_headers, _manager_headers = await _setup_worker_with_hours(
+        client, make_user, make_project, auth_headers
+    )
+    worker_id = (await client.get("/api/v1/users/me", headers=worker_headers)).json()["id"]
+    await client.post(f"/api/v1/timesheets/weeks/{A_MONDAY}/submit", headers=worker_headers)
+    admin_headers = auth_headers(await make_user(roles=ADMIN_ONLY))
+
+    view = await client.get(
+        f"/api/v1/timesheets/weeks/{A_MONDAY}",
+        headers=admin_headers,
+        params={"user_id": worker_id},
+    )
+    approve = await client.post(
+        f"/api/v1/timesheets/weeks/{A_MONDAY}/approve",
+        headers=admin_headers,
+        params={"user_id": worker_id},
+    )
+
+    assert view.status_code == 403
+    assert approve.status_code == 403
+
+
 async def test_submissions_list_includes_a_submitted_week(
     client: AsyncClient,
     make_user: UserFactory,
@@ -685,7 +713,7 @@ async def test_team_overview_defaults_to_the_managers_own_projects(
     assert "counts" in body and "weeks" in body
 
 
-async def test_team_overview_scope_all_requires_admin(
+async def test_team_overview_scope_all_is_available_to_any_manager(
     client: AsyncClient,
     make_user: UserFactory,
     make_project: ProjectFactory,
@@ -704,7 +732,7 @@ async def test_team_overview_scope_all_requires_admin(
         "/api/v1/timesheets/team/2026/9", headers=auth_headers(admin), params={"scope": "all"}
     )
 
-    assert as_manager.status_code == 403
+    assert as_manager.status_code == 200
     assert as_admin.status_code == 200
 
 
@@ -795,23 +823,41 @@ async def test_send_project_month_to_billing_not_ready(
     assert response.status_code == 409
 
 
-async def test_send_project_month_to_billing_by_a_different_manager_is_forbidden(
+async def test_send_project_month_to_billing_by_a_different_manager_is_allowed(
     client: AsyncClient,
     make_user: UserFactory,
     make_project: ProjectFactory,
     auth_headers: AuthHeaders,
 ) -> None:
     manager = await make_user(roles=MANAGER)
+    manager_headers = auth_headers(manager)
     other_manager = await make_user(roles=MANAGER)
+    other_manager_headers = auth_headers(other_manager)
+    worker = await make_user(roles=EMPLOYEE)
+    worker_headers = auth_headers(worker)
     project = await make_project(manager_id=manager.id)
+    await _add_member(client, manager_headers, str(project.id), str(worker.id))
+    item_id = await _normal_hours_item_id(client, manager_headers, str(project.id))
+    await client.put(
+        f"/api/v1/timesheets/weeks/{A_MONDAY}/entries",
+        headers=worker_headers,
+        json={"changes": [{"billing_item_id": item_id, "date": A_MONDAY, "quantity": "8.00"}]},
+    )
+    await client.post(f"/api/v1/timesheets/weeks/{A_MONDAY}/submit", headers=worker_headers)
+    worker_id = (await client.get("/api/v1/users/me", headers=worker_headers)).json()["id"]
+    await client.post(
+        f"/api/v1/timesheets/weeks/{A_MONDAY}/approve",
+        headers=other_manager_headers,
+        params={"user_id": worker_id},
+    )
 
     response = await client.post(
         "/api/v1/timesheets/billing-periods",
-        headers=auth_headers(other_manager),
+        headers=other_manager_headers,
         json={"project_id": str(project.id), "year": 2026, "month": 9},
     )
 
-    assert response.status_code == 403
+    assert response.status_code == 201
 
 
 async def test_reopen_unknown_billing_period_returns_404(

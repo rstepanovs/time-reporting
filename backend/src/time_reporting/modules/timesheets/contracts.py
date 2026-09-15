@@ -510,8 +510,8 @@ class SubmitTimesheetWeek(Command[TimesheetWeekDTO]):
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ApproveTimesheetWeek(Command[TimesheetWeekDTO]):
     """Move ``user_id``'s week from submitted to approved. Raises ``WeekStartNotMondayError``,
-    ``UserNotFoundError``, ``InvalidWeekStatusTransitionError`` or ``SelfReviewError`` (a project
-    manager, not an admin, reviewing their own week)."""
+    ``UserNotFoundError``, ``InvalidWeekStatusTransitionError`` or ``SelfReviewError`` (nobody, not
+    even an admin, reviews their own week)."""
 
     user_id: UUID
     week_start: date
@@ -534,11 +534,11 @@ class ReturnTimesheetWeek(Command[TimesheetWeekDTO]):
 class SendProjectMonthToBilling(Command[ProjectBillingPeriodDTO]):
     """Send ``project_id``'s ``year``/``month`` to billing: a stub that records the handoff
     (``ProjectBillingPeriod``) and locks the period — invoicing itself doesn't exist yet. Allowed
-    on any day, not only after the month ends. Raises ``TimesheetProjectNotFoundError``,
-    ``UserNotFoundError`` (``sent_by_id``), ``NotProjectManagerError`` (a project manager who isn't
-    this project's manager; admins may send any project), ``BillingPeriodNotReadyError`` (some
-    week in scope isn't approved yet, or there is nothing to send) or
-    ``BillingPeriodAlreadySentError``.
+    on any day, not only after the month ends, and by any manager regardless of the project's
+    ``manager_id`` (the router's ``ManagerDep`` is the only check). Raises
+    ``TimesheetProjectNotFoundError``, ``UserNotFoundError`` (``sent_by_id``),
+    ``BillingPeriodNotReadyError`` (some week in scope isn't approved yet, or there is nothing to
+    send) or ``BillingPeriodAlreadySentError``.
     """
 
     project_id: UUID
@@ -644,7 +644,7 @@ class InvalidWeekStatusTransitionError(TimesheetError):
 
 class SelfReviewError(TimesheetError):
     def __init__(self) -> None:
-        super().__init__("A project manager cannot approve or return their own week")
+        super().__init__("Cannot approve or return your own week")
 
 
 class ReturnCommentRequiredError(TimesheetError):
@@ -655,12 +655,6 @@ class ReturnCommentRequiredError(TimesheetError):
 class TimesheetProjectNotFoundError(TimesheetError):
     def __init__(self, project_id: UUID) -> None:
         super().__init__(f"Project {project_id} not found")
-        self.project_id = project_id
-
-
-class NotProjectManagerError(TimesheetError):
-    def __init__(self, project_id: UUID) -> None:
-        super().__init__(f"You are not project {project_id}'s manager")
         self.project_id = project_id
 
 

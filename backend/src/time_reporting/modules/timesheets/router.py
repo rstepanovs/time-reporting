@@ -30,7 +30,6 @@ from time_reporting.modules.timesheets.contracts import (
     InvalidWeekStatusTransitionError,
     ListSubmittedTimesheetWeeks,
     ListTimesheetOptions,
-    NotProjectManagerError,
     QuantityOutOfRangeError,
     ReopenProjectBillingPeriod,
     ReturnCommentRequiredError,
@@ -265,12 +264,7 @@ async def list_submitted_timesheet_weeks(
     return [TimesheetWeekSummaryResponse.model_validate(summary) for summary in summaries]
 
 
-_ALL_SCOPE_FORBIDDEN_RESPONSE: dict[int | str, dict[str, Any]] = {
-    status.HTTP_403_FORBIDDEN: {"description": "Only an admin can view every project"}
-}
-
-
-@router.get("/team/{year}/{month}", responses=_ALL_SCOPE_FORBIDDEN_RESPONSE)
+@router.get("/team/{year}/{month}")
 async def get_team_month_overview(
     year: Annotated[int, Path(ge=2000, le=2100)],
     month: Annotated[int, Path(ge=1, le=12)],
@@ -278,8 +272,6 @@ async def get_team_month_overview(
     bus: BusDep,
     scope: Annotated[Scope, Query()] = "mine",
 ) -> TeamMonthOverviewResponse:
-    if scope == "all" and UserRole.ADMIN not in current_user.roles:
-        raise _forbidden("Only an admin can view every project")
     manager_id = None if scope == "all" else current_user.id
     overview = await bus.query(
         GetTeamMonthOverview(manager_id=manager_id, year=year, month=month, today=date.today())
@@ -292,7 +284,6 @@ async def get_team_month_overview(
     status_code=status.HTTP_201_CREATED,
     responses={
         **_USER_NOT_FOUND_RESPONSE,
-        status.HTTP_403_FORBIDDEN: {"description": "Not this project's manager"},
         status.HTTP_409_CONFLICT: {"description": "Not ready to send, or already sent"},
     },
 )
@@ -312,8 +303,6 @@ async def send_project_month_to_billing(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except UserNotFoundError as exc:
         raise _user_not_found() from exc
-    except NotProjectManagerError as exc:
-        raise _forbidden(str(exc)) from exc
     except (BillingPeriodNotReadyError, BillingPeriodAlreadySentError) as exc:
         raise _conflict(str(exc)) from exc
     return ProjectBillingPeriodResponse.model_validate(period)

@@ -737,7 +737,7 @@ async def test_project_manager_cannot_review_their_own_week(
         )
 
 
-async def test_admin_can_review_their_own_week(
+async def test_admin_manager_cannot_review_their_own_week(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
     admin = await make_user(roles=ADMIN)
@@ -745,10 +745,10 @@ async def test_admin_can_review_their_own_week(
     await bus.execute(AddProjectMember(project_id=project.id, user_id=admin.id))
     await bus.execute(SubmitTimesheetWeek(user_id=admin.id, week_start=A_MONDAY))
 
-    approved = await bus.execute(
-        ApproveTimesheetWeek(user_id=admin.id, week_start=A_MONDAY, reviewer_id=admin.id)
-    )
-    assert approved.status is TimesheetWeekStatus.APPROVED
+    with pytest.raises(SelfReviewError):
+        await bus.execute(
+            ApproveTimesheetWeek(user_id=admin.id, week_start=A_MONDAY, reviewer_id=admin.id)
+        )
 
 
 async def test_can_review_reflects_role_and_status(

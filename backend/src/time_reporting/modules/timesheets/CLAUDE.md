@@ -26,10 +26,10 @@ Depends on: `projects.contracts` (`ListMemberProjectsWithBillingItems`,
 - The week has a `status` (`TimesheetWeekStatus`: `draft`/`submitted`/`approved`/`returned`, backed
   by a `TimesheetWeek` row keyed `(user_id, week_start)` — no row means `draft`, the status is never
   persisted as `draft`). `can_edit`/`can_submit` are `viewer_id == user_id` and the week is
-  `draft`/`returned`, while `can_review` is the viewer being an admin or project manager, the week
-  being `submitted`/`approved`, and not a project manager reviewing their own week (an admin can).
-  None of these three are enforced here — only computed for the caller to render around — the
-  router still owns authorization.
+  `draft`/`returned`, while `can_review` is the viewer holding `manager`, the week being
+  `submitted`/`approved`, and the viewer not being the week's owner — nobody, not even an admin,
+  reviews their own week. None of these three are enforced here — only computed for the caller to
+  render around — the router still owns authorization.
 - `SaveTimesheetWeek` applies a batch of cell changes (`quantity=None` deletes a cell) and
   `row_comments` changes (`comment=None`/blank deletes one) as one command: raises
   `TimesheetWeekLockedError` if the week is `submitted`/`approved`, else validates the
@@ -48,18 +48,18 @@ Depends on: `projects.contracts` (`ListMemberProjectsWithBillingItems`,
 
 - `SubmitTimesheetWeek` (draft/returned → submitted, owner only) and `ApproveTimesheetWeek` /
   `ReturnTimesheetWeek` (submitted → approved, or submitted/approved → `returned` with a required
-  `comment`, admin/project-manager only) drive the workflow, each raising
-  `InvalidWeekStatusTransitionError` outside its allowed source statuses and `SelfReviewError` for a
-  project manager reviewing their own week.
+  `comment`, `ManagerDep` at the router) drive the workflow, each raising
+  `InvalidWeekStatusTransitionError` outside its allowed source statuses and `SelfReviewError` for
+  anyone — including an admin — reviewing their own week.
 - `ListSubmittedTimesheetWeeks` (oldest submission first, with each week's total `hour`-unit
   quantity via `TimeEntryRepository.sum_hours_by_user_week`, optional `manager_id` for the "my
   projects" scope) backs the frontend's approvals page.
 
 ## Worker dashboard queries
 
-All follow the week endpoint's view rule (own data, or another user's for admin/project manager) via
-the HTTP layer's `_resolve_target_user`. `today` is a field of each query (the router fills in the
-real date) so "expected to date" and "which month is current" stay deterministic in tests.
+All follow the week endpoint's view rule (own data, or another user's for a `manager`) via the HTTP
+layer's `_resolve_target_user`. `today` is a field of each query (the router fills in the real
+date) so "expected to date" and "which month is current" stay deterministic in tests.
 
 - `GetMonthCalendar(user_id, year, month, today)` renders a month as full ISO weeks with
   expected-vs-booked `hour`-unit totals per day/week (expected hours = working days, from
@@ -79,8 +79,8 @@ real date) so "expected to date" and "which month is current" stay deterministic
 
 `GetTeamMonthOverview(manager_id, year, month, today)` (a separate `TeamOverviewService` reusing
 `summary.py`'s pure helpers) backs a manager's team dashboard cards and the `/team` page: for every
-project `manager_id` manages (`manager_id=None` covers every active project, an admin's "all" view,
-via `projects.ListManagedProjectsWithMembers`):
+project `manager_id` manages (`manager_id=None` covers every active project — the router's
+`scope=all`, available to any manager — via `projects.ListManagedProjectsWithMembers`):
 - its current members plus anyone else who booked time on it this month but was since removed
   (`TeamMemberDTO.is_member=False`, still shown, read-only history);
 - each member's per-ISO-week status/hours (`TeamMemberWeekDTO` — a straddling week's `project_hours`
@@ -103,8 +103,8 @@ via `projects.ListManagedProjectsWithMembers`):
   = the calendar month, `sent_at`, `sent_by_id`; unique per `(project_id, period_start)`) once ready,
   raising `BillingPeriodNotReadyError` (carries `blocking_weeks`) or
   `BillingPeriodAlreadySentError` otherwise; allowed on any day, not only after the month ends, since
-  a project's work can finish early. The sender must be the project's `manager_id` or an admin
-  (`NotProjectManagerError` otherwise).
+  a project's work can finish early. Any manager may send any project, regardless of its
+  `manager_id` — the router's `ManagerDep` is the only check, same as approvals.
 - `ReopenProjectBillingPeriod(project_id, period_start)` (admin only) deletes the row, unlocking it.
 - Once sent, a period **locks** its dates: `SaveTimesheetWeek` rejects a cell change dated inside a
   sent period, or any row-comment change on a billing item whose project has any sent period

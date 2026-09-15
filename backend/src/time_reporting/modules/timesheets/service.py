@@ -58,7 +58,7 @@ from time_reporting.modules.timesheets.repository import (
     TimeEntryRepository,
     TimesheetWeekRepository,
 )
-from time_reporting.modules.users.contracts import GetUserById, UserDTO, UserNotFoundError, UserRole
+from time_reporting.modules.users.contracts import GetUserById, UserNotFoundError, UserRole
 from time_reporting.modules.work_calendar.contracts import GetCalendarDays
 
 _WEEK_LENGTH_DAYS = 7
@@ -146,7 +146,7 @@ class TimesheetService:
             viewer is not None
             and UserRole.MANAGER in viewer.roles
             and status in _REVIEWABLE_STATUSES
-            and not (UserRole.ADMIN not in viewer.roles and viewer_id == user_id)
+            and viewer_id != user_id
             and not is_locked
         )
 
@@ -247,8 +247,7 @@ class TimesheetService:
         _ensure_monday(week_start)
         if await self._bus.query(GetUserById(user_id=command.user_id)) is None:
             raise UserNotFoundError(command.user_id)
-        reviewer = await self._bus.query(GetUserById(user_id=command.reviewer_id))
-        self._ensure_not_self_review(reviewer, command.user_id, command.reviewer_id)
+        self._ensure_not_self_review(command.user_id, command.reviewer_id)
 
         week_row = await self._weeks.get(user_id=command.user_id, week_start=week_start)
         status = week_row.status if week_row is not None else TimesheetWeekStatus.DRAFT
@@ -273,8 +272,7 @@ class TimesheetService:
         comment = command.comment.strip()
         if not comment:
             raise ReturnCommentRequiredError()
-        reviewer = await self._bus.query(GetUserById(user_id=command.reviewer_id))
-        self._ensure_not_self_review(reviewer, command.user_id, command.reviewer_id)
+        self._ensure_not_self_review(command.user_id, command.reviewer_id)
 
         week_row = await self._weeks.get(user_id=command.user_id, week_start=week_start)
         status = week_row.status if week_row is not None else TimesheetWeekStatus.DRAFT
@@ -293,8 +291,8 @@ class TimesheetService:
         )
 
     @staticmethod
-    def _ensure_not_self_review(reviewer: UserDTO | None, user_id: UUID, reviewer_id: UUID) -> None:
-        if reviewer_id == user_id and (reviewer is None or UserRole.ADMIN not in reviewer.roles):
+    def _ensure_not_self_review(user_id: UUID, reviewer_id: UUID) -> None:
+        if reviewer_id == user_id:
             raise SelfReviewError()
 
     async def _reviewer_name(self, week_row: TimesheetWeek | None) -> str | None:

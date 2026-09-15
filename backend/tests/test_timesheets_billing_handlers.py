@@ -19,7 +19,6 @@ from time_reporting.modules.timesheets.contracts import (
     BillingPeriodNotReadyError,
     BillingPeriodStatus,
     GetTimesheetWeek,
-    NotProjectManagerError,
     ReopenProjectBillingPeriod,
     ReturnTimesheetWeek,
     RowCommentChange,
@@ -198,26 +197,11 @@ async def test_send_twice_is_rejected(
         )
 
 
-async def test_send_by_a_project_manager_who_is_not_this_projects_manager_is_rejected(
+async def test_send_by_a_manager_who_is_not_this_projects_manager_is_allowed(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
     manager = await make_user(roles=MANAGER)
     other_manager = await make_user(roles=MANAGER)
-    project = await make_project(manager_id=manager.id)
-
-    with pytest.raises(NotProjectManagerError):
-        await bus.execute(
-            SendProjectMonthToBilling(
-                project_id=project.id, year=2026, month=9, sent_by_id=other_manager.id
-            )
-        )
-
-
-async def test_admin_can_send_any_project(
-    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
-) -> None:
-    manager = await make_user(roles=MANAGER)
-    admin = await make_user(roles=ADMIN)
     worker = await make_user()
     project = await make_project(manager_id=manager.id)
     await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
@@ -225,14 +209,16 @@ async def test_admin_can_send_any_project(
     await _book_and_approve(
         bus,
         worker_id=worker.id,
-        admin_id=admin.id,
+        admin_id=other_manager.id,
         item_id=item_id,
         entry_date=WEEK_1,
         week_start=WEEK_1,
     )
 
     period = await bus.execute(
-        SendProjectMonthToBilling(project_id=project.id, year=2026, month=9, sent_by_id=admin.id)
+        SendProjectMonthToBilling(
+            project_id=project.id, year=2026, month=9, sent_by_id=other_manager.id
+        )
     )
     assert period.status is BillingPeriodStatus.SENT
 
