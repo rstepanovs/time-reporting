@@ -204,8 +204,15 @@ a year's `hour`-unit entries by month, split by billing item preset (`normal_hou
 `travel_hours`, any other preset or a custom item as `other_hours`) with a per-project breakdown —
 `day`/`amount`-unit entries (per diems, expenses) aren't part of either, the dashboard is hours-only.
 `today` is a field of both queries (the router fills in the real date) so "expected to date" and
-"which month is current" stay deterministic in tests. Both follow the week endpoint's view rule (own
-data, or another user's for admin/project manager) via the HTTP layer's `_resolve_target_user`.
+"which month is current" stay deterministic in tests. `GetMonthTimeSummary(user_id, year, month,
+today)` and `GetWeeklyHours(user_id, weeks, today)` back the dashboard's widget cards: the former is
+one month's hours (as `HoursTotalsDTO`) plus the benefits `HoursTotalsDTO` leaves out —
+`day`-unit entries as `per_diem_days`, `amount`-unit entries summed per customer currency (never
+combined across currencies) as `expenses`; the latter is `weeks` ISO weeks ending with `today`'s
+week (oldest first, capped at `MAX_WEEKLY_HOURS_WEEKS` = 26, `WeekRangeOutOfBoundsError` outside
+that) with a per-project hour breakdown over the whole range for the accompanying table. All four
+queries follow the week endpoint's view rule (own data, or another user's for admin/project
+manager) via the HTTP layer's `_resolve_target_user`.
 
 The **admin** module (`modules/admin/`) owns no tables — it orchestrates archiving or permanently
 deleting a user, customer or project by calling the owning module's commands, reached only through
@@ -276,21 +283,38 @@ owned by a module.
   `NonWorkingDayFormModal.tsx` (create/edit; `kind` is locked once editing, like a billing item's
   unit) backs `pages/admin/AdminCalendarPage.tsx`.
 - **`timesheets/`** — `api.ts` (read/save a week, the caller's project/billing-item picker, the
-  dashboard's `getMonthCalendar`/`getYearHours`, plus `TimesheetRuleError` covering 400/403/404 with
-  the backend's `detail` as the message) and `hooks.ts` (`timesheetKeys` + `useTimesheetWeek`/
-  `useTimesheetOptions`/`useMonthCalendar`/`useYearHours` queries and `useSaveTimesheetWeek`, which
+  dashboard's `getMonthCalendar`/`getYearHours`/`getMonthTimeSummary`/`getWeeklyHours`, plus
+  `TimesheetRuleError` covering 400/403/404 with the backend's `detail` as the message) and
+  `hooks.ts` (`timesheetKeys` + `useTimesheetWeek`/`useTimesheetOptions`/`useMonthCalendar`/
+  `useYearHours`/`useMonthTimeSummary`/`useWeeklyHours` queries and `useSaveTimesheetWeek`, which
   writes the mutation result straight into the week's query cache instead of invalidating, and also
-  invalidates `timesheetKeys.summaries()` so the dashboard picks up a save). `week.ts` holds pure
-  ISO-date helpers (`startOfIsoWeek`, `weekDays`, `addWeeks`, day/week/month label and hours
-  formatting) with their own unit tests. `dayKind.ts` (weekend/holiday/bridge background colors) and
-  `dayStatus.ts` (a calendar day's status — off/future/today/complete/partial/missing/extra — versus
-  its expected hours) are pure helpers shared by `TimesheetGrid.tsx` (the weekly grid: local draft
-  state holds only actual edits keyed by billing-item+date, so Save sends just the changed cells and
-  a closed row renders read-only), `AddRowModal.tsx` ("add a row" / "copy rows from previous week"),
-  and the dashboard's `MonthCalendar.tsx` (weeks as rows, Mon..Sun as columns, the week number
-  linking to `/timesheet?week=`) and `YearHoursTable.tsx` (one row per month, newest first, columns
-  per hours category plus Δ against hours expected to date, expanding into a per-project breakdown).
-  `pages/TimesheetPage.tsx` uses the grid; `pages/DashboardPage.tsx` uses the other two.
+  invalidates `timesheetKeys.summaries()` so the dashboard and `/hours` pick up a save). `week.ts`
+  holds pure ISO-date helpers (`startOfIsoWeek`, `weekDays`, `addWeeks`, `addMonths`/`previousMonth`,
+  day/week/month/ISO-week label formatting, `formatHours`, `fillRatePercent`) with their own unit
+  tests. `dayKind.ts` (weekend/holiday/bridge background colors) and `dayStatus.ts` (a calendar
+  day's status — off/future/today/complete/partial/missing/extra — versus its expected hours) are
+  pure helpers shared by `TimesheetGrid.tsx` (the weekly grid: local draft state holds only actual
+  edits keyed by billing-item+date, so Save sends just the changed cells and a closed row renders
+  read-only), `AddRowModal.tsx` ("add a row" / "copy rows from previous week"), and the month
+  calendar below. `pages/TimesheetPage.tsx` uses the grid.
+  `MonthCalendarTable.tsx`/`YearHoursTableView.tsx` are presentational (already-loaded data as
+  props, an optional `title` override, `title=""` to hide it) — weeks as rows/Mon..Sun as columns
+  with the week number linking to `/timesheet?week=`, and one row per month (newest first, columns
+  per hours category plus Δ against hours expected to date, expanding into a per-project
+  breakdown) respectively; `MonthCalendar.tsx`/`YearHoursTable.tsx` are thin data-loading wrappers
+  around them, reused by `pages/HoursPage.tsx` (`/hours`, month navigation via a `?month=YYYY-MM`
+  param) and, for the current/previous month, by the dashboard's `MonthTimeCard.tsx`. The
+  dashboard's other widgets: `QuickActionsCard.tsx` ("Report time" / "Previous week" shortcuts to
+  `/timesheet`), `MonthTimeCard.tsx` (one month's hours by preset, a reported/expected-to-date
+  total with fill rate %, and per-diem/expense benefits, linking to `/hours?month=`),
+  `WeeklyHoursChart.tsx` (`@mantine/charts` `CompositeChart`: hours booked per week as bars against
+  expected hours as a dashed reference line on the *same* hours axis — never a fill-rate-% line on
+  a second axis — over the last 6 ISO weeks), `WeeklyProjectHoursCard.tsx` (each project's
+  total/overtime hours over that same 6-week window, sharing `WeeklyHoursChart`'s query/cache) and
+  `MyProjectsCard.tsx` (the user's projects, linking to each). All five widgets render inside
+  `components/DashboardCard.tsx`, the shared card frame (title, content, an optional "Details →"
+  style footer link, a highlight tint via `data-highlighted`). `pages/DashboardPage.tsx` composes
+  them in a responsive `SimpleGrid`.
 - **`admin/`** — the shared archive-or-delete UI for all three entities: `api.ts`
   (`getRemovalImpact`/`removeEntity` against `/api/v1/admin/...`, plus `RemovalBlockedError` (409,
   carries `blockers`), `RemovalRuleError` (400) and `RemovalNotFoundError` (404)), `hooks.ts`
@@ -308,14 +332,17 @@ owned by a module.
   `AdminSystemStatusPage` (`/admin/status`) just polls the health endpoints for an API/database badge.
 - **`router.tsx`** — route tree (`routes`, also used by tests): `/login` is public, everything else sits
   under `RequireAuth` → `AppLayout`. Page components live in `pages/`, shared chrome in `components/`.
-  `/` (`DashboardPage`) is the default landing page: this month's calendar, this year's hours by
-  month, and a link to the current week's timesheet; `/timesheet` (query params `week`/`user`) is
-  where time is actually booked. `/admin/{users,customers,projects,calendar,status}` sit under
-  `RequireRole roles={["admin"]}`, with `/admin` redirecting to `/admin/users`.
+  `/` (`DashboardPage`) is the default landing page: quick actions, this/last month's time,
+  hours-per-week chart and per-project table, and the user's projects, all as widget cards.
+  `/timesheet` (query params `week`/`user`) is where time is actually booked; `/hours` (query param
+  `month`) is the fuller month-calendar-and-year-table view a "Details →" card links into.
+  `/admin/{users,customers,projects,calendar,status}` sit under `RequireRole roles={["admin"]}`,
+  with `/admin` redirecting to `/admin/users`.
 - **`components/AppLayout.tsx`** — the signed-in shell: header with the account menu and an
   `AppShell.Navbar` (collapsible on mobile via a `Burger`) linking to the pages in `pages/`
-  (Dashboard first, then Timesheet, then Projects), plus an "Administration" nav group
+  (Dashboard, Timesheet, My hours, Projects, in that order), plus an "Administration" nav group
   (Users/Customers/Projects/Calendar/System status) shown only when `isAdmin(user.role)`.
+  `components/DashboardCard.tsx` is the shared frame the dashboard's widget cards render inside.
 - **`App.tsx`** — top-level provider composition: `MantineProvider` → `DatesProvider` →
   `QueryClientProvider` → `RouterProvider` (imported from `react-router/dom`, which `flushSync`
   navigation requires).
@@ -365,3 +392,5 @@ URL is hardcoded in the frontend.
 - TypeScript is pinned to `~5.9` (not the latest major) because `typescript-eslint` requires `<6.1` and
   `openapi-typescript` requires `^5.x`.
 - Node 24 is required (see `frontend/.nvmrc`) — `react-router@8` and `jsdom@30` need Node ≥ 22.22.
+- `@mantine/charts` (a `recharts` wrapper) renders the dashboard's hours-per-week chart; its CSS is
+  imported once in `main.tsx` alongside Mantine's other stylesheets.
