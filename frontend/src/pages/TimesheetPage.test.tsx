@@ -133,6 +133,26 @@ describe("TimesheetPage", () => {
     expect(screen.queryByRole("textbox", { name: CELL_NAME })).toBeNull();
   });
 
+  it("renders a row's billed dates read-only and shows a locked notice", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+    vi.mocked(getTimesheetWeek).mockResolvedValue({
+      ...testTimesheetWeek,
+      rows: [{ ...testTimesheetRow, locked_dates: ["2026-09-14"] }],
+    });
+    renderApp("/timesheet");
+
+    await screen.findByText(testTimesheetRow.billing_item.name);
+    expect(screen.getByText("Sent to billing")).toBeTruthy();
+    // The locked date's cell is read-only...
+    expect(screen.queryByRole("textbox", { name: CELL_NAME })).toBeNull();
+    // ...but a different date on the same row stays editable.
+    expect(screen.getByRole("textbox", { name: TUESDAY_CELL_NAME })).toBeTruthy();
+    // The whole row can't be deleted once any of its dates are locked.
+    expect(
+      screen.queryByRole("button", { name: `Delete row ${testTimesheetRow.billing_item.name}` }),
+    ).toBeNull();
+  });
+
   it("shows a rule error from the server", async () => {
     vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
     vi.mocked(saveTimesheetWeek).mockRejectedValue(new TimesheetRuleError("Total hours too high"));

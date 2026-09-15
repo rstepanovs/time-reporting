@@ -430,6 +430,13 @@ export function TimesheetGrid({ userId, weekStart, onDirtyChange }: Props) {
         </Alert>
       )}
 
+      {rows.some((row) => row.locked_dates.length > 0) && (
+        <Alert color="blue" variant="light" mb="sm" title="Sent to billing">
+          Some days on this week fall in a project month already sent to billing and can no
+          longer be changed.
+        </Alert>
+      )}
+
       {ruleError && (
         <Alert color="red" mb="sm" onClose={() => setRuleError(null)} withCloseButton>
           {ruleError}
@@ -621,6 +628,8 @@ function RowView({
 }) {
   const [commentOpened, { open: openComment, close: closeComment }] = useDisclosure(false);
   const total = days.reduce((sum, day) => sum + (cellValue(row, day.day).quantity ?? 0), 0);
+  const isRowLocked = row.locked_dates.length > 0;
+  const canEditComment = canEdit && !isRowLocked;
   return (
     <Table.Tr>
       <Table.Td>
@@ -653,6 +662,11 @@ function RowView({
                   Closed
                 </Badge>
               )}
+              {isRowLocked && (
+                <Badge size="xs" color="blue" variant="light">
+                  🔒 Sent to billing
+                </Badge>
+              )}
             </Group>
           </div>
           <Group gap={2} wrap="nowrap">
@@ -671,7 +685,7 @@ function RowView({
                 </Tooltip>
               </Popover.Target>
               <Popover.Dropdown>
-                {canEdit ? (
+                {canEditComment ? (
                   <Textarea
                     aria-label={`Comment text for ${row.billing_item.name}`}
                     placeholder="Comment"
@@ -688,7 +702,7 @@ function RowView({
                 )}
               </Popover.Dropdown>
             </Popover>
-            {canEdit && (
+            {canEdit && !isRowLocked && (
               <ActionIcon
                 variant="subtle"
                 color="red"
@@ -702,11 +716,21 @@ function RowView({
           </Group>
         </Group>
       </Table.Td>
-      {days.map((day) => (
-        <Table.Td key={day.day} data-kind={dayKind(day)}>
-          <Cell row={row} date={day.day} canEdit={canEdit} value={cellValue(row, day.day)} onChange={(patch) => setCell(row, day.day, patch)} />
-        </Table.Td>
-      ))}
+      {days.map((day) => {
+        const isDateLocked = row.locked_dates.includes(day.day);
+        return (
+          <Table.Td key={day.day} data-kind={dayKind(day)}>
+            <Cell
+              row={row}
+              date={day.day}
+              canEdit={canEdit && !isDateLocked}
+              locked={isDateLocked}
+              value={cellValue(row, day.day)}
+              onChange={(patch) => setCell(row, day.day, patch)}
+            />
+          </Table.Td>
+        );
+      })}
       <Table.Td>{total > 0 ? `${total.toFixed(2)} ${rowUnitLabel(row)}`.trim() : ""}</Table.Td>
     </Table.Tr>
   );
@@ -716,12 +740,14 @@ function Cell({
   row,
   date,
   canEdit,
+  locked = false,
   value,
   onChange,
 }: {
   row: TimesheetRow;
   date: string;
   canEdit: boolean;
+  locked?: boolean;
   value: CellDraft;
   onChange: (patch: Partial<CellDraft>) => void;
 }) {
@@ -729,12 +755,22 @@ function Cell({
   const label = `${row.billing_item.name} ${date}`;
 
   if (!canEdit) {
-    return value.quantity !== null ? (
-      <Text size="sm">{value.quantity.toFixed(2)}</Text>
-    ) : (
-      <Text size="sm" c="dimmed">
-        –
-      </Text>
+    const text =
+      value.quantity !== null ? (
+        <Text size="sm">{value.quantity.toFixed(2)}</Text>
+      ) : (
+        <Text size="sm" c="dimmed">
+          –
+        </Text>
+      );
+    if (!locked) return text;
+    return (
+      <Tooltip label="Sent to billing — no longer editable">
+        <Group gap={4} wrap="nowrap">
+          <Text size="xs">🔒</Text>
+          {text}
+        </Group>
+      </Tooltip>
     );
   }
 

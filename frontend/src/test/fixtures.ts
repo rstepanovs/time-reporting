@@ -6,6 +6,8 @@ import type {
   MonthCalendar,
   MonthHours,
   MonthTimeSummary,
+  ProjectBillingPeriod,
+  TeamMonthOverview,
   TimesheetOption,
   TimesheetRow,
   TimesheetWeek,
@@ -560,3 +562,139 @@ export const testTimesheetOption: TimesheetOption = {
     },
   ],
 };
+
+const zeroHours = {
+  normal_hours: "0.00",
+  overtime_hours: "0.00",
+  travel_hours: "0.00",
+  other_hours: "0.00",
+  total_hours: "0.00",
+};
+
+export const testNotReadyBillingPeriod: ProjectBillingPeriod = {
+  project_id: testProject.id,
+  period_start: "2026-09-01",
+  period_end: "2026-09-30",
+  status: "not_ready",
+  sent_at: null,
+  sent_by: null,
+  blocking_weeks: 1,
+  weeks_in_scope: 1,
+  hours: { ...zeroHours, normal_hours: "19.00", total_hours: "19.00" },
+  per_diem_days: "0",
+  expenses: [],
+};
+
+export const testReadyBillingPeriod: ProjectBillingPeriod = {
+  project_id: "p2a2a2a2-2222-2222-2222-222222222222",
+  period_start: "2026-08-01",
+  period_end: "2026-08-31",
+  status: "ready",
+  sent_at: null,
+  sent_by: null,
+  blocking_weeks: 0,
+  weeks_in_scope: 4,
+  hours: { ...zeroHours, normal_hours: "160.00", total_hours: "160.00" },
+  per_diem_days: "0",
+  expenses: [],
+};
+
+export const testTeamMonthOverview: TeamMonthOverview = {
+  year: 2026,
+  month: 9,
+  weeks: ["2026-08-31", "2026-09-07", "2026-09-14", "2026-09-21", "2026-09-28"],
+  counts: {
+    awaiting_approval: 1,
+    returned: 0,
+    not_submitted: 3,
+    approved: 1,
+  },
+  projects: [
+    {
+      project: testTimesheetRow.project,
+      members: [
+        {
+          user: { id: testWorker.id, name: testWorker.name, email: testWorker.email },
+          is_member: true,
+          project_hours: "19.00",
+          total_hours_in_month: "19.00",
+          expected_hours_to_date: "88.00",
+          weeks: testTeamMonthOverviewWeeks(),
+          warning: "under_expected_hours",
+        },
+      ],
+      billing: testNotReadyBillingPeriod,
+    },
+    {
+      project: {
+        id: testReadyBillingPeriod.project_id,
+        customer: testTimesheetRow.project.customer,
+        name: "Platform Migration",
+        is_active: true,
+        normal_working_hours: "8.00",
+      },
+      members: [
+        {
+          user: { id: testUser.id, name: testUser.name, email: testUser.email },
+          is_member: true,
+          project_hours: "160.00",
+          total_hours_in_month: "160.00",
+          expected_hours_to_date: "88.00",
+          weeks: testTeamMonthOverviewWeeks(),
+          warning: null,
+        },
+      ],
+      billing: testReadyBillingPeriod,
+    },
+  ],
+};
+
+function testTeamMonthOverviewWeeks() {
+  return [
+    {
+      week_start: "2026-08-31",
+      iso_year: 2026,
+      iso_week: 36,
+      status: "approved" as const,
+      project_hours: "5.00",
+      total_hours: "5.00",
+      expected_hours: "8.00",
+    },
+    {
+      week_start: "2026-09-07",
+      iso_year: 2026,
+      iso_week: 37,
+      status: "approved" as const,
+      project_hours: "40.00",
+      total_hours: "40.00",
+      expected_hours: "40.00",
+    },
+    {
+      week_start: "2026-09-14",
+      iso_year: 2026,
+      iso_week: 38,
+      status: "submitted" as const,
+      project_hours: "19.00",
+      total_hours: "19.00",
+      expected_hours: "40.00",
+    },
+    {
+      week_start: "2026-09-21",
+      iso_year: 2026,
+      iso_week: 39,
+      status: "draft" as const,
+      project_hours: "0.00",
+      total_hours: "0.00",
+      expected_hours: "40.00",
+    },
+    {
+      week_start: "2026-09-28",
+      iso_year: 2026,
+      iso_week: 40,
+      status: "draft" as const,
+      project_hours: "0.00",
+      total_hours: "0.00",
+      expected_hours: "16.00",
+    },
+  ];
+}

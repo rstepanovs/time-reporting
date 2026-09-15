@@ -4,22 +4,27 @@ import {
   approveTimesheetWeek,
   getMonthCalendar,
   getMonthTimeSummary,
+  getTeamMonthOverview,
   getTimesheetWeek,
   getWeeklyHours,
   getYearHours,
   listSubmittedTimesheetWeeks,
   listTimesheetOptions,
+  reopenProjectBillingPeriod,
   returnTimesheetWeek,
   saveTimesheetWeek,
+  sendProjectMonthToBilling,
   submitTimesheetWeek,
   type RowCommentChange,
+  type TeamScope,
   type TimeEntryChange,
 } from "@/timesheets/api";
 
 export const timesheetKeys = {
   all: ["timesheets"] as const,
+  weeks: () => [...timesheetKeys.all, "week"] as const,
   week: (userId: string, weekStart: string) =>
-    [...timesheetKeys.all, "week", userId, weekStart] as const,
+    [...timesheetKeys.weeks(), userId, weekStart] as const,
   options: () => [...timesheetKeys.all, "options"] as const,
   summaries: () => [...timesheetKeys.all, "summaries"] as const,
   monthCalendar: (userId: string, year: number, month: number) =>
@@ -30,7 +35,13 @@ export const timesheetKeys = {
     [...timesheetKeys.summaries(), "monthSummary", userId, year, month] as const,
   weeklyHours: (userId: string, weeks: number) =>
     [...timesheetKeys.summaries(), "weeklyHours", userId, weeks] as const,
-  submissions: () => [...timesheetKeys.all, "submissions"] as const,
+  // A shared prefix, for invalidating every scope variant at once; the query itself keys off
+  // `submissions(scope)` below, one cache entry per scope.
+  allSubmissions: () => [...timesheetKeys.all, "submissions"] as const,
+  submissions: (scope?: TeamScope) => [...timesheetKeys.allSubmissions(), scope] as const,
+  team: () => [...timesheetKeys.all, "team"] as const,
+  teamMonth: (year: number, month: number, scope?: TeamScope) =>
+    [...timesheetKeys.team(), year, month, scope] as const,
 };
 
 /** `userId` selects whose week to load; pass the viewer's own id for "my timesheet". */
@@ -61,8 +72,9 @@ export function useSaveTimesheetWeek(userId: string, weekStart: string) {
     onSuccess: (week) => {
       queryClient.setQueryData(timesheetKeys.week(userId, weekStart), week);
       // The saved week may fall in the current month/year, so the dashboard's calendar and
-      // year-hours table need fresh data too.
+      // year-hours table need fresh data too, along with the manager team overview.
       void queryClient.invalidateQueries({ queryKey: timesheetKeys.summaries() });
+      void queryClient.invalidateQueries({ queryKey: timesheetKeys.team() });
     },
   });
 }
@@ -75,7 +87,8 @@ export function useSubmitTimesheetWeek(userId: string, weekStart: string) {
     mutationFn: () => submitTimesheetWeek(weekStart),
     onSuccess: (week) => {
       queryClient.setQueryData(timesheetKeys.week(userId, weekStart), week);
-      void queryClient.invalidateQueries({ queryKey: timesheetKeys.submissions() });
+      void queryClient.invalidateQueries({ queryKey: timesheetKeys.allSubmissions() });
+      void queryClient.invalidateQueries({ queryKey: timesheetKeys.team() });
     },
   });
 }
@@ -87,7 +100,8 @@ export function useApproveTimesheetWeek(userId: string, weekStart: string) {
     mutationFn: () => approveTimesheetWeek({ weekStart, userId }),
     onSuccess: (week) => {
       queryClient.setQueryData(timesheetKeys.week(userId, weekStart), week);
-      void queryClient.invalidateQueries({ queryKey: timesheetKeys.submissions() });
+      void queryClient.invalidateQueries({ queryKey: timesheetKeys.allSubmissions() });
+      void queryClient.invalidateQueries({ queryKey: timesheetKeys.team() });
     },
   });
 }
@@ -99,16 +113,18 @@ export function useReturnTimesheetWeek(userId: string, weekStart: string) {
     mutationFn: (comment: string) => returnTimesheetWeek({ weekStart, userId, comment }),
     onSuccess: (week) => {
       queryClient.setQueryData(timesheetKeys.week(userId, weekStart), week);
-      void queryClient.invalidateQueries({ queryKey: timesheetKeys.submissions() });
+      void queryClient.invalidateQueries({ queryKey: timesheetKeys.allSubmissions() });
+      void queryClient.invalidateQueries({ queryKey: timesheetKeys.team() });
     },
   });
 }
 
-/** The manager's approvals list: weeks awaiting review. */
-export function useSubmittedTimesheetWeeks() {
+/** The manager's approvals list: weeks awaiting review. `scope: "mine"` narrows to projects the
+ * caller manages. */
+export function useSubmittedTimesheetWeeks(scope?: TeamScope) {
   return useQuery({
-    queryKey: timesheetKeys.submissions(),
-    queryFn: listSubmittedTimesheetWeeks,
+    queryKey: timesheetKeys.submissions(scope),
+    queryFn: () => listSubmittedTimesheetWeeks({ scope }),
   });
 }
 
@@ -142,5 +158,41 @@ export function useWeeklyHours(userId: string, weeks: number) {
   return useQuery({
     queryKey: timesheetKeys.weeklyHours(userId, weeks),
     queryFn: () => getWeeklyHours({ weeks, userId }),
+  });
+}
+
+/** A manager's team for one calendar month; `scope: "mine"` (the default) is their own projects,
+ * `"all"` (admin only) is every active project. */
+export function useTeamMonthOverview(year: number, month: number, scope?: TeamScope) {
+  return useQuery({
+    queryKey: timesheetKeys.teamMonth(year, month, scope),
+    queryFn: () => getTeamMonthOverview({ year, month, scope }),
+  });
+}
+
+/** Send a project's calendar month to billing; refreshes the team overview, the approvals list
+ * and every cached week (locks may have changed which cells/actions they allow). */
+export function useSendProjectMonthToBilling() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: sendProjectMonthToBilling,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: timesheetKeys.team() });
+      void queryClient.invalidateQueries({ queryKey: timesheetKeys.allSubmissions() });
+      void queryClient.invalidateQueries({ queryKey: timesheetKeys.weeks() });
+    },
+  });
+}
+
+/** Admin only: reopen a sent billing period. Same invalidation as sending one. */
+export function useReopenProjectBillingPeriod() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: reopenProjectBillingPeriod,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: timesheetKeys.team() });
+      void queryClient.invalidateQueries({ queryKey: timesheetKeys.allSubmissions() });
+      void queryClient.invalidateQueries({ queryKey: timesheetKeys.weeks() });
+    },
   });
 }

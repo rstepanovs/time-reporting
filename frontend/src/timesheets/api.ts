@@ -24,6 +24,16 @@ export type CurrencyAmount = components["schemas"]["CurrencyAmountResponse"];
 export type WeeklyHours = components["schemas"]["WeeklyHoursResponse"];
 export type WeekHours = components["schemas"]["WeekHoursResponse"];
 
+export type TeamMonthOverview = components["schemas"]["TeamMonthOverviewResponse"];
+export type TeamProject = components["schemas"]["TeamProjectResponse"];
+export type TeamMember = components["schemas"]["TeamMemberResponse"];
+export type TeamMemberWeek = components["schemas"]["TeamMemberWeekResponse"];
+export type TeamMemberWarning = components["schemas"]["TeamMemberResponse"]["warning"];
+export type TeamStatusCounts = components["schemas"]["TeamStatusCountsResponse"];
+export type ProjectBillingPeriod = components["schemas"]["ProjectBillingPeriodResponse"];
+export type BillingPeriodStatus = components["schemas"]["ProjectBillingPeriodResponse"]["status"];
+export type TeamScope = "mine" | "all";
+
 /** A project/billing-item pair picked from the options list, before it has any entries — the
  * shape a draft row (added but not yet saved) takes in the grid. */
 export type PickedRow = {
@@ -124,9 +134,14 @@ export async function returnTimesheetWeek(params: {
   return data;
 }
 
-/** Weeks awaiting review, oldest submission first — a manager's approvals list. */
-export async function listSubmittedTimesheetWeeks(): Promise<TimesheetWeekSummary[]> {
-  const { data, response } = await api.GET("/api/v1/timesheets/submissions");
+/** Weeks awaiting review, oldest submission first — a manager's approvals list. `scope: "mine"`
+ * narrows to projects the caller manages; `"all"` (the default) matches the previous behavior. */
+export async function listSubmittedTimesheetWeeks(
+  params: { scope?: TeamScope } = {},
+): Promise<TimesheetWeekSummary[]> {
+  const { data, response } = await api.GET("/api/v1/timesheets/submissions", {
+    params: { query: { scope: params.scope } },
+  });
   if (!data) throw await timesheetAwareError(response);
   return data;
 }
@@ -187,4 +202,48 @@ export async function getWeeklyHours(params: {
   });
   if (!data) throw await timesheetAwareError(response);
   return data;
+}
+
+/** A manager's team for one calendar month: every project they manage (`scope: "mine"`, the
+ * default) or, for an admin, every active project (`"all"`). */
+export async function getTeamMonthOverview(params: {
+  year: number;
+  month: number;
+  scope?: TeamScope;
+}): Promise<TeamMonthOverview> {
+  const { data, response } = await api.GET("/api/v1/timesheets/team/{year}/{month}", {
+    params: {
+      path: { year: params.year, month: params.month },
+      query: { scope: params.scope },
+    },
+  });
+  if (!data) throw await timesheetAwareError(response);
+  return data;
+}
+
+/** Send a project's calendar month to billing: a stub that records the handoff and locks the
+ * period. Throws `TimesheetRuleError` (not this project's manager) or `TimesheetConflictError`
+ * (not ready yet, or already sent). */
+export async function sendProjectMonthToBilling(params: {
+  projectId: string;
+  year: number;
+  month: number;
+}): Promise<ProjectBillingPeriod> {
+  const { data, response } = await api.POST("/api/v1/timesheets/billing-periods", {
+    body: { project_id: params.projectId, year: params.year, month: params.month },
+  });
+  if (!data) throw await timesheetAwareError(response);
+  return data;
+}
+
+/** Admin only: delete a sent billing period, unlocking it again. */
+export async function reopenProjectBillingPeriod(params: {
+  projectId: string;
+  periodStart: string;
+}): Promise<void> {
+  const { response } = await api.DELETE(
+    "/api/v1/timesheets/billing-periods/{project_id}/{period_start}",
+    { params: { path: { project_id: params.projectId, period_start: params.periodStart } } },
+  );
+  if (!response.ok) throw await timesheetAwareError(response);
 }
