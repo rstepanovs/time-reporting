@@ -4,8 +4,15 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from support import CustomerFactory, ProjectFactory, UserFactory
+from support import (
+    DEFAULT_BILLING_ADDRESS,
+    DEFAULT_BILLING_PERIOD,
+    CustomerFactory,
+    ProjectFactory,
+    UserFactory,
+)
 from time_reporting.core.cqrs import Bus
+from time_reporting.modules.customers.contracts import CreateCustomer
 from time_reporting.modules.projects.contracts import (
     AddProjectBillingItem,
     AddProjectMember,
@@ -16,9 +23,12 @@ from time_reporting.modules.projects.contracts import (
 )
 from time_reporting.modules.timesheets.contracts import (
     GetMonthCalendar,
+    GetMonthTimeSummary,
+    GetWeeklyHours,
     GetYearHours,
     SaveTimesheetWeek,
     TimeEntryChange,
+    WeekRangeOutOfBoundsError,
 )
 from time_reporting.modules.users.contracts import UserNotFoundError
 from time_reporting.modules.work_calendar.contracts import AddNonWorkingDay, NonWorkingDayKind
@@ -36,6 +46,18 @@ EXPECTED_HOURS_TO_DATE_SEPTEMBER = Decimal("88")
 async def _billing_item_id(bus: Bus, project_id: UUID, preset: BillingItemPreset) -> UUID:
     items = await bus.query(ListProjectBillingItems(project_id=project_id))
     return next(item.id for item in items if item.preset == preset)
+
+
+async def _make_customer_with_currency(bus: Bus, currency: str) -> UUID:
+    customer = await bus.execute(
+        CreateCustomer(
+            name=f"Customer {currency} {uuid4().hex[:8]}",
+            billing_address=DEFAULT_BILLING_ADDRESS,
+            billing_period=DEFAULT_BILLING_PERIOD,
+            currency=currency,
+        )
+    )
+    return customer.id
 
 
 async def _book(bus: Bus, user_id: UUID, item_id: UUID, day: date, quantity: Decimal) -> None:
@@ -298,3 +320,226 @@ async def test_year_hours_totals_sum_across_months(
 async def test_year_hours_for_unknown_user_raises(bus: Bus) -> None:
     with pytest.raises(UserNotFoundError):
         await bus.query(GetYearHours(user_id=uuid4(), year=YEAR, today=TODAY))
+
+
+# --- GetMonthTimeSummary ---
+
+
+async def test_month_time_summary_splits_hours_by_preset(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    user = await make_user()
+    project = await make_project()
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=user.id))
+    normal_id = await _billing_item_id(bus, project.id, BillingItemPreset.NORMAL_HOURS)
+    overtime_id = await _billing_item_id(bus, project.id, BillingItemPreset.OVERTIME_HOURS)
+    travel_id = await _billing_item_id(bus, project.id, BillingItemPreset.TRAVEL_TIME)
+    custom = await bus.execute(
+        AddProjectBillingItem(project_id=project.id, name="Consulting", unit=BillingUnit.HOUR)
+    )
+
+    await _book(bus, user.id, normal_id, date(2026, 9, 1), Decimal("8"))
+    await _book(bus, user.id, overtime_id, date(2026, 9, 1), Decimal("2"))
+    await _book(bus, user.id, travel_id, date(2026, 9, 2), Decimal("3"))
+    await _book(bus, user.id, custom.id, date(2026, 9, 2), Decimal("4"))
+
+    summary = await bus.query(
+        GetMonthTimeSummary(user_id=user.id, year=YEAR, month=MONTH, today=TODAY)
+    )
+
+    assert summary.hours.normal_hours == Decimal("8.00")
+    assert summary.hours.overtime_hours == Decimal("2.00")
+    assert summary.hours.travel_hours == Decimal("3.00")
+    assert summary.hours.other_hours == Decimal("4.00")
+    assert summary.hours.total_hours == Decimal("17.00")
+
+
+async def test_month_time_summary_sums_per_diem_days(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    user = await make_user()
+    project = await make_project()
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=user.id))
+    per_diem_id = await _billing_item_id(bus, project.id, BillingItemPreset.PER_DIEM)
+
+    await _book(bus, user.id, per_diem_id, date(2026, 9, 1), Decimal("1"))
+    await _book(bus, user.id, per_diem_id, date(2026, 9, 2), Decimal("0.5"))
+
+    summary = await bus.query(
+        GetMonthTimeSummary(user_id=user.id, year=YEAR, month=MONTH, today=TODAY)
+    )
+
+    assert summary.per_diem_days == Decimal("1.50")
+    # Per diems don't count as hours.
+    assert summary.hours.total_hours == Decimal(0)
+
+
+async def test_month_time_summary_groups_expenses_by_currency(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    user = await make_user()
+    eur_customer_id = await _make_customer_with_currency(bus, "EUR")
+    gbp_customer_id = await _make_customer_with_currency(bus, "GBP")
+    eur_project = await make_project(customer_id=eur_customer_id)
+    gbp_project = await make_project(customer_id=gbp_customer_id)
+    await bus.execute(AddProjectMember(project_id=eur_project.id, user_id=user.id))
+    await bus.execute(AddProjectMember(project_id=gbp_project.id, user_id=user.id))
+    eur_expense_id = await _billing_item_id(
+        bus, eur_project.id, BillingItemPreset.PURCHASING_EXPENSES
+    )
+    gbp_expense_id = await _billing_item_id(
+        bus, gbp_project.id, BillingItemPreset.PURCHASING_EXPENSES
+    )
+
+    await _book(bus, user.id, eur_expense_id, date(2026, 9, 1), Decimal("120.00"))
+    await _book(bus, user.id, gbp_expense_id, date(2026, 9, 2), Decimal("50.00"))
+    # A second EUR expense on a different project should add to the same currency total.
+    other_eur_project = await make_project(customer_id=eur_customer_id)
+    await bus.execute(AddProjectMember(project_id=other_eur_project.id, user_id=user.id))
+    other_eur_expense_id = await _billing_item_id(
+        bus, other_eur_project.id, BillingItemPreset.PURCHASING_EXPENSES
+    )
+    await _book(bus, user.id, other_eur_expense_id, date(2026, 9, 3), Decimal("30.00"))
+
+    summary = await bus.query(
+        GetMonthTimeSummary(user_id=user.id, year=YEAR, month=MONTH, today=TODAY)
+    )
+
+    assert dict((amount.currency, amount.amount) for amount in summary.expenses) == {
+        "EUR": Decimal("150.00"),
+        "GBP": Decimal("50.00"),
+    }
+
+
+async def test_month_time_summary_expected_hours_and_current_flag(
+    bus: Bus, make_user: UserFactory
+) -> None:
+    user = await make_user()
+
+    current = await bus.query(
+        GetMonthTimeSummary(user_id=user.id, year=YEAR, month=MONTH, today=TODAY)
+    )
+    past = await bus.query(
+        GetMonthTimeSummary(user_id=user.id, year=YEAR, month=MONTH - 1, today=TODAY)
+    )
+
+    assert current.is_current is True
+    assert current.expected_hours_to_date == EXPECTED_HOURS_TO_DATE_SEPTEMBER
+    assert current.expected_hours_to_date < current.expected_hours
+    assert past.is_current is False
+    assert past.expected_hours_to_date == past.expected_hours
+
+
+async def test_month_time_summary_for_unknown_user_raises(bus: Bus) -> None:
+    with pytest.raises(UserNotFoundError):
+        await bus.query(GetMonthTimeSummary(user_id=uuid4(), year=YEAR, month=MONTH, today=TODAY))
+
+
+# --- GetWeeklyHours ---
+
+
+async def test_weekly_hours_returns_requested_weeks_ending_at_todays_week(
+    bus: Bus, make_user: UserFactory
+) -> None:
+    user = await make_user()
+
+    result = await bus.query(GetWeeklyHours(user_id=user.id, weeks=6, today=TODAY))
+
+    assert len(result.weeks) == 6
+    # TODAY (2026-09-15) is a Tuesday in the week starting 2026-09-14.
+    assert result.weeks[-1].week_start == date(2026, 9, 14)
+    assert result.weeks[-1].is_current is True
+    assert result.weeks[0].week_start == date(2026, 8, 10)
+    assert all(not week.is_current for week in result.weeks[:-1])
+    # Oldest first.
+    assert [week.week_start for week in result.weeks] == sorted(
+        week.week_start for week in result.weeks
+    )
+
+
+async def test_weekly_hours_expected_hours_skip_non_working_days(
+    bus: Bus, make_user: UserFactory
+) -> None:
+    user = await make_user()
+    await bus.execute(
+        AddNonWorkingDay(
+            day=date(2026, 9, 16), name="Company day off", kind=NonWorkingDayKind.COMPANY_DAY_OFF
+        )
+    )
+
+    result = await bus.query(GetWeeklyHours(user_id=user.id, weeks=1, today=TODAY))
+
+    current_week = result.weeks[-1]
+    # Mon..Fri minus the one non-working Wednesday = 4 working days.
+    assert current_week.expected_hours == Decimal("32")
+
+
+async def test_weekly_hours_per_project_totals_over_the_whole_range(
+    bus: Bus,
+    make_project: ProjectFactory,
+    make_customer: CustomerFactory,
+    make_user: UserFactory,
+) -> None:
+    user = await make_user()
+    customer_a = await make_customer(name="Alpha")
+    customer_b = await make_customer(name="Beta")
+    project_a = await make_project(customer_id=customer_a.id, name="Portal")
+    project_b = await make_project(customer_id=customer_b.id, name="ERP")
+    await bus.execute(AddProjectMember(project_id=project_a.id, user_id=user.id))
+    await bus.execute(AddProjectMember(project_id=project_b.id, user_id=user.id))
+    item_a = await _billing_item_id(bus, project_a.id, BillingItemPreset.NORMAL_HOURS)
+    item_b = await _billing_item_id(bus, project_b.id, BillingItemPreset.NORMAL_HOURS)
+
+    # Different weeks within the 3-week range.
+    await _book(bus, user.id, item_a, date(2026, 9, 1), Decimal("5"))
+    await _book(bus, user.id, item_a, date(2026, 9, 14), Decimal("3"))
+    await _book(bus, user.id, item_b, date(2026, 9, 8), Decimal("2"))
+
+    result = await bus.query(GetWeeklyHours(user_id=user.id, weeks=3, today=TODAY))
+
+    assert [p.project.id for p in result.projects] == [project_a.id, project_b.id]
+    assert result.projects[0].totals.normal_hours == Decimal("8.00")
+    assert result.projects[1].totals.normal_hours == Decimal("2.00")
+
+
+async def test_weekly_hours_ignores_non_hour_entries(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    user = await make_user()
+    project = await make_project()
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=user.id))
+    per_diem_id = await _billing_item_id(bus, project.id, BillingItemPreset.PER_DIEM)
+    await _book(bus, user.id, per_diem_id, date(2026, 9, 14), Decimal("1"))
+
+    result = await bus.query(GetWeeklyHours(user_id=user.id, weeks=1, today=TODAY))
+
+    assert result.weeks[-1].totals.total_hours == Decimal(0)
+    assert result.projects == ()
+
+
+async def test_weekly_hours_uses_the_iso_week_year_at_a_year_boundary(
+    bus: Bus, make_user: UserFactory
+) -> None:
+    user = await make_user()
+    # 2025-12-29 is a Monday, but falls in ISO week 1 of 2026; the week before it is ISO week 52
+    # of 2025.
+    boundary_today = date(2025, 12, 29)
+
+    result = await bus.query(GetWeeklyHours(user_id=user.id, weeks=2, today=boundary_today))
+
+    assert (result.weeks[0].iso_year, result.weeks[0].iso_week) == (2025, 52)
+    assert (result.weeks[1].iso_year, result.weeks[1].iso_week) == (2026, 1)
+
+
+@pytest.mark.parametrize("weeks", [0, 27])
+async def test_weekly_hours_rejects_out_of_range_weeks(
+    bus: Bus, make_user: UserFactory, weeks: int
+) -> None:
+    user = await make_user()
+    with pytest.raises(WeekRangeOutOfBoundsError):
+        await bus.query(GetWeeklyHours(user_id=user.id, weeks=weeks, today=TODAY))
+
+
+async def test_weekly_hours_for_unknown_user_raises(bus: Bus) -> None:
+    with pytest.raises(UserNotFoundError):
+        await bus.query(GetWeeklyHours(user_id=uuid4(), weeks=6, today=TODAY))

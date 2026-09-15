@@ -24,6 +24,8 @@ MAX_HOUR_ENTRY_QUANTITY = Decimal("24")
 MAX_DAY_ENTRY_QUANTITY = Decimal("1")
 # The combined quantity of all `hour`-unit entries a user may book on a single date.
 MAX_DAILY_HOURS = Decimal("24")
+# The widest range `GetWeeklyHours` may cover.
+MAX_WEEKLY_HOURS_WEEKS = 26
 
 
 # --- DTOs ---
@@ -152,6 +154,63 @@ class YearHoursDTO:
     totals: HoursTotalsDTO
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CurrencyAmountDTO:
+    """A summed ``amount``-unit total in one customer currency; ``amount``-unit entries in
+    different currencies are never added together."""
+
+    currency: str
+    amount: Decimal
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class MonthTimeSummaryDTO:
+    """One month's booked time for the worker dashboard's "My time" card: hours split by preset
+    (``hours``, as in ``HoursTotalsDTO``), plus the benefits that aren't hours — ``day``-unit
+    entries (per diems) as ``per_diem_days`` and ``amount``-unit entries (expenses) summed per
+    currency as ``expenses``.
+    """
+
+    user: UserDTO
+    year: int
+    month: int
+    # Whether ``today`` (as passed to the query) falls inside this month.
+    is_current: bool
+    working_days: int
+    expected_hours: Decimal
+    expected_hours_to_date: Decimal
+    hours: HoursTotalsDTO
+    per_diem_days: Decimal
+    expenses: tuple[CurrencyAmountDTO, ...]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class WeekHoursDTO:
+    """One ISO week's booked ``hour``-unit totals, for the dashboard's hours-per-week chart."""
+
+    week_start: date
+    iso_year: int
+    iso_week: int
+    # Whether this is the week containing ``today`` (as passed to the query).
+    is_current: bool
+    expected_hours: Decimal
+    expected_hours_to_date: Decimal
+    totals: HoursTotalsDTO
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class WeeklyHoursDTO:
+    """``weeks`` consecutive ISO weeks ending with the week containing ``today``, oldest first, for
+    the dashboard's hours-per-week chart, plus each project's hour totals over that same range
+    (sorted by customer name, then project name; only projects with any hours in range) for the
+    accompanying per-project table.
+    """
+
+    user: UserDTO
+    weeks: tuple[WeekHoursDTO, ...]
+    projects: tuple[ProjectHoursDTO, ...]
+
+
 # --- Queries ---
 
 
@@ -203,6 +262,29 @@ class GetYearHours(Query[YearHoursDTO]):
 
     user_id: UUID
     year: int
+    today: date
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetMonthTimeSummary(Query[MonthTimeSummaryDTO]):
+    """A single month's booked time for the worker dashboard's "My time" card. ``today`` is
+    supplied by the caller (the router fills in the real date), like ``GetMonthCalendar``. Raises
+    ``UserNotFoundError`` if ``user_id`` doesn't exist."""
+
+    user_id: UUID
+    year: int
+    month: int
+    today: date
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetWeeklyHours(Query[WeeklyHoursDTO]):
+    """``weeks`` ISO weeks ending with ``today``'s week, for the dashboard's hours-per-week chart
+    and per-project table. Raises ``UserNotFoundError`` if ``user_id`` doesn't exist, or
+    ``WeekRangeOutOfBoundsError`` unless ``1 <= weeks <= MAX_WEEKLY_HOURS_WEEKS``."""
+
+    user_id: UUID
+    weeks: int
     today: date
 
 
@@ -296,3 +378,9 @@ class DailyHoursExceededError(TimesheetError):
         )
         self.entry_date = entry_date
         self.total_hours = total_hours
+
+
+class WeekRangeOutOfBoundsError(TimesheetError):
+    def __init__(self, weeks: int) -> None:
+        super().__init__(f"weeks must be between 1 and {MAX_WEEKLY_HOURS_WEEKS}, got {weeks}")
+        self.weeks = weeks

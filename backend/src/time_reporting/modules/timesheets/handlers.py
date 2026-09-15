@@ -11,12 +11,16 @@ from time_reporting.modules.projects.contracts import (
 from time_reporting.modules.timesheets.contracts import (
     CountTimeEntries,
     GetMonthCalendar,
+    GetMonthTimeSummary,
     GetTimesheetWeek,
+    GetWeeklyHours,
     GetYearHours,
     ListTimesheetOptions,
     MonthCalendarDTO,
+    MonthTimeSummaryDTO,
     SaveTimesheetWeek,
     TimesheetWeekDTO,
+    WeeklyHoursDTO,
     YearHoursDTO,
 )
 from time_reporting.modules.timesheets.repository import TimeEntryRepository
@@ -79,4 +83,24 @@ class GetYearHoursHandler:
     async def handle(self, query: GetYearHours) -> YearHoursDTO:
         return await self._service.year_hours(
             user_id=query.user_id, year=query.year, today=query.today
+        )
+
+
+class GetMonthTimeSummaryHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._service = TimesheetSummaryService(bus)
+
+    async def handle(self, query: GetMonthTimeSummary) -> MonthTimeSummaryDTO:
+        return await self._service.month_time_summary(
+            user_id=query.user_id, year=query.year, month=query.month, today=query.today
+        )
+
+
+class GetWeeklyHoursHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._service = TimesheetSummaryService(bus)
+
+    async def handle(self, query: GetWeeklyHours) -> WeeklyHoursDTO:
+        return await self._service.weekly_hours(
+            user_id=query.user_id, weeks=query.weeks, today=query.today
         )
