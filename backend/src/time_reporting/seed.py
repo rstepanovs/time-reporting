@@ -4,6 +4,7 @@ Seeding is idempotent: users whose email, customers whose name, or projects whos
 already exist are left untouched.
 """
 
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal
@@ -29,6 +30,7 @@ from time_reporting.modules.projects.contracts import (
     ListProjects,
     ProjectCustomerArchivedError,
     ProjectNameAlreadyExistsError,
+    ProjectOptionDTO,
     UpdateProject,
     UpdateProjectBillingItem,
 )
@@ -46,6 +48,7 @@ from time_reporting.modules.users.contracts import (
 )
 from time_reporting.modules.work_calendar.contracts import (
     AddNonWorkingDay,
+    GetCalendarDays,
     HolidayCountryNotSupportedError,
     ImportPublicHolidays,
     ListNonWorkingDays,
@@ -208,10 +211,16 @@ DEMO_PURCHASING_MARKUP = Decimal("10.00")
 # The public holiday whose following day becomes the demo bridge day (a Thursday holiday, so the
 # Friday after it is the classic "long weekend" bridge day).
 DEMO_BRIDGE_DAY_AFTER_HOLIDAY = "Ascension Day"
-# Roles that get a couple of weeks of booked normal working hours, so a fresh checkout has
-# something to look at on the Timesheet page; admins aren't expected to book their own time.
+# Roles that get demo time entries booked, so a fresh checkout has something to look at on the
+# Timesheet page and the worker dashboard's month calendar / year-hours table; admins aren't
+# expected to book their own time.
 DEMO_TIME_ENTRY_ROLES = frozenset({UserRole.WORKER, UserRole.PROJECT_MANAGER})
 DEMO_DAILY_HOURS = Decimal("8")
+DEMO_OVERTIME_HOURS = Decimal("2")
+DEMO_TRAVEL_HOURS = Decimal("3")
+# How many months of history to book (this month plus the two before it), so the dashboard's
+# year-hours table shows more than a single row.
+DEMO_TIME_ENTRY_MONTHS = 3
 
 
 @dataclass(slots=True)
@@ -301,6 +310,32 @@ async def _seed_calendar(bus: Bus, report: SeedReport, *, today: date) -> None:
         report.created_bridge_day = True
 
 
+def _month_start_n_months_ago(today: date, months_ago: int) -> date:
+    total_months = today.year * 12 + (today.month - 1) - months_ago
+    return date(total_months // 12, total_months % 12 + 1, 1)
+
+
+def _week_start(day: date) -> date:
+    return day - timedelta(days=day.isoweekday() - 1)
+
+
+def _option_with_normal_hours(
+    options: tuple[ProjectOptionDTO, ...],
+) -> ProjectOptionDTO | None:
+    return next(
+        (
+            option
+            for option in options
+            if any(item.preset is BillingItemPreset.NORMAL_HOURS for item in option.billing_items)
+        ),
+        None,
+    )
+
+
+def _item_id_for_preset(option: ProjectOptionDTO, preset: BillingItemPreset) -> UUID | None:
+    return next((item.id for item in option.billing_items if item.preset is preset), None)
+
+
 async def _seed_time_entries(
     bus: Bus,
     report: SeedReport,
@@ -309,9 +344,35 @@ async def _seed_time_entries(
     *,
     today: date,
 ) -> None:
-    """Book two weeks of normal working hours (last week in full, this week up to today) for each
-    user with a ``DEMO_TIME_ENTRY_ROLES`` role that doesn't already have any time entries."""
-    this_monday = today - timedelta(days=today.weekday())
+    """Book normal working hours on every working day of the last ``DEMO_TIME_ENTRY_MONTHS``
+    months up to today, plus a little overtime and travel time, for each user with a
+    ``DEMO_TIME_ENTRY_ROLES`` role that doesn't already have any time entries — so a fresh
+    checkout has something to show on both the Timesheet page and the worker dashboard's month
+    calendar and year-hours table."""
+    range_from = _month_start_n_months_ago(today, DEMO_TIME_ENTRY_MONTHS - 1)
+    calendar_days = await bus.query(GetCalendarDays(date_from=range_from, date_to=today))
+    working_days = [
+        day.day for day in calendar_days if not day.is_weekend and day.non_working_day is None
+    ]
+    if not working_days:
+        return
+
+    # The first and last working day booked in each calendar month get a couple of hours of
+    # overtime/travel time on top of the normal hours, so the year-hours table isn't all one
+    # column — a small, deterministic stand-in for "some weeks have a late day or a trip".
+    first_working_day_of_month: dict[tuple[int, int], date] = {}
+    last_working_day_of_month: dict[tuple[int, int], date] = {}
+    for day in working_days:
+        month_key = (day.year, day.month)
+        first_working_day_of_month.setdefault(month_key, day)
+        last_working_day_of_month[month_key] = day
+    overtime_dates = frozenset(first_working_day_of_month.values())
+    travel_dates = frozenset(last_working_day_of_month.values())
+
+    working_days_by_week: dict[date, list[date]] = defaultdict(list)
+    for day in working_days:
+        working_days_by_week[_week_start(day)].append(day)
+
     for user in users:
         if user.role not in DEMO_TIME_ENTRY_ROLES:
             continue
@@ -321,28 +382,38 @@ async def _seed_time_entries(
         if await bus.query(CountTimeEntries(user_id=user_id)):
             continue
         options = await bus.query(ListTimesheetOptions(user_id=user_id))
-        normal_item_id = next(
-            (
-                item.id
-                for option in options
-                for item in option.billing_items
-                if item.preset is BillingItemPreset.NORMAL_HOURS
-            ),
-            None,
-        )
-        if normal_item_id is None:
+        option = _option_with_normal_hours(options)
+        if option is None:
             continue
+        normal_item_id = _item_id_for_preset(option, BillingItemPreset.NORMAL_HOURS)
+        assert normal_item_id is not None
+        overtime_item_id = _item_id_for_preset(option, BillingItemPreset.OVERTIME_HOURS)
+        travel_item_id = _item_id_for_preset(option, BillingItemPreset.TRAVEL_TIME)
 
-        for week_start in (this_monday - timedelta(days=7), this_monday):
-            changes = tuple(
+        for week_start, days_in_week in sorted(working_days_by_week.items()):
+            changes = [
                 TimeEntryChange(billing_item_id=normal_item_id, date=day, quantity=DEMO_DAILY_HOURS)
-                for offset in range(5)  # Monday..Friday
-                if (day := week_start + timedelta(days=offset)) <= today
+                for day in days_in_week
+            ]
+            if overtime_item_id is not None:
+                changes += [
+                    TimeEntryChange(
+                        billing_item_id=overtime_item_id, date=day, quantity=DEMO_OVERTIME_HOURS
+                    )
+                    for day in days_in_week
+                    if day in overtime_dates
+                ]
+            if travel_item_id is not None:
+                changes += [
+                    TimeEntryChange(
+                        billing_item_id=travel_item_id, date=day, quantity=DEMO_TRAVEL_HOURS
+                    )
+                    for day in days_in_week
+                    if day in travel_dates
+                ]
+            await bus.execute(
+                SaveTimesheetWeek(user_id=user_id, week_start=week_start, changes=tuple(changes))
             )
-            if changes:
-                await bus.execute(
-                    SaveTimesheetWeek(user_id=user_id, week_start=week_start, changes=changes)
-                )
         report.seeded_time_entries_for.append(user.email)
 
 

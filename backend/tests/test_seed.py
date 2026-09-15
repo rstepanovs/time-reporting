@@ -151,14 +151,17 @@ async def test_seed_creates_users_customers_and_projects(bus: Bus) -> None:
     non_working_days = await bus.query(ListNonWorkingDays(year=SEED_TODAY.year))
     assert any(day.kind is NonWorkingDayKind.BRIDGE_DAY for day in non_working_days)
 
-    # Time entries: only workers/PMs get demo hours booked, not admins. SEED_TODAY is itself a
-    # Monday, so last week gets all five weekdays but this week gets only today (Monday).
+    # Time entries: only workers/PMs get demo hours booked, not admins. Normal hours are booked on
+    # every working day from Jul 1 through SEED_TODAY (2026-09-14) — 54 working days, no DE public
+    # holidays fall in that window — plus one overtime and one travel entry per month (the first
+    # and last working day booked that month); SEED_TODAY is itself the last working day booked
+    # for September, so this week also carries a travel entry alongside the normal hours.
     time_entry_users = {user for user in users if user.role in DEMO_TIME_ENTRY_ROLES}
     assert set(report.seeded_time_entries_for) == {user.email for user in time_entry_users}
     for user in time_entry_users:
         credentials = await bus.query(GetUserCredentialsByEmail(email=user.email))
         assert credentials is not None
-        assert await bus.query(CountTimeEntries(user_id=credentials.id)) == 6
+        assert await bus.query(CountTimeEntries(user_id=credentials.id)) == 60
         this_week = await bus.query(
             GetTimesheetWeek(
                 user_id=credentials.id, week_start=SEED_TODAY, viewer_id=credentials.id
@@ -166,9 +169,11 @@ async def test_seed_creates_users_customers_and_projects(bus: Bus) -> None:
         )
         booked_dates = {entry.date for row in this_week.rows for entry in row.entries}
         assert booked_dates == {SEED_TODAY}
-        for row in this_week.rows:
-            for entry in row.entries:
-                assert entry.quantity == Decimal("8.00")
+        entries_by_preset = {
+            row.billing_item.preset: entry for row in this_week.rows for entry in row.entries
+        }
+        assert entries_by_preset[BillingItemPreset.NORMAL_HOURS].quantity == Decimal("8.00")
+        assert entries_by_preset[BillingItemPreset.TRAVEL_TIME].quantity == Decimal("3.00")
     for user in users:
         if user.role not in DEMO_TIME_ENTRY_ROLES:
             credentials = await bus.query(GetUserCredentialsByEmail(email=user.email))
