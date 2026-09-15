@@ -1,16 +1,16 @@
-import { fireEvent, screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fetchCurrentUser } from "@/auth/api";
-import { getMonthCalendar, getYearHours } from "@/timesheets/api";
 import {
-  testMonthCalendar,
-  testMonthHoursCurrent,
-  testMonthHoursPast,
+  testMonthTimeSummary,
+  testMonthTimeSummaryPrevious,
+  testTimesheetOption,
+  testWeeklyHours,
   testWorker,
-  testYearHours,
 } from "@/test/fixtures";
 import { renderApp } from "@/test/renderApp";
+import { getMonthTimeSummary, getWeeklyHours, listTimesheetOptions } from "@/timesheets/api";
 
 vi.mock("@/auth/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/auth/api")>()),
@@ -19,92 +19,107 @@ vi.mock("@/auth/api", async (importOriginal) => ({
 
 vi.mock("@/timesheets/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/timesheets/api")>()),
-  getMonthCalendar: vi.fn(),
-  getYearHours: vi.fn(),
+  getMonthTimeSummary: vi.fn(),
+  getWeeklyHours: vi.fn(),
+  listTimesheetOptions: vi.fn(),
 }));
 
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
-  vi.mocked(getMonthCalendar).mockResolvedValue(testMonthCalendar);
-  vi.mocked(getYearHours).mockResolvedValue(testYearHours);
+  vi.mocked(getMonthTimeSummary).mockImplementation(async ({ month }) => {
+    if (month === 9) return testMonthTimeSummary;
+    if (month === 8) return testMonthTimeSummaryPrevious;
+    throw new Error(`unexpected month in test: ${month}`);
+  });
+  vi.mocked(getWeeklyHours).mockResolvedValue(testWeeklyHours);
+  vi.mocked(listTimesheetOptions).mockResolvedValue([testTimesheetOption]);
 });
 
 describe("DashboardPage", () => {
-  it("links to this week's timesheet", async () => {
+  it("shows the quick action links", async () => {
     renderApp("/");
 
-    const link = await screen.findByRole("link", { name: "Open this week's timesheet" });
-    expect(link.getAttribute("href")).toBe("/timesheet");
+    const reportTime = await screen.findByRole("link", { name: "Report time" });
+    expect(reportTime.getAttribute("href")).toBe("/timesheet");
+
+    const previousWeek = screen.getByRole("link", { name: "Previous week" });
+    // Today is 2026-09-15 (Tue); the previous ISO week starts 2026-09-07.
+    expect(previousWeek.getAttribute("href")).toBe("/timesheet?week=2026-09-07");
   });
 
-  it("requests the current month and year for the signed-in user", async () => {
+  it("shows this month and last month's time, with fill rate and expenses per currency", async () => {
     renderApp("/");
 
-    await screen.findByText("September 2026");
-    expect(getMonthCalendar).toHaveBeenCalledWith({ year: 2026, month: 9, userId: testWorker.id });
-    expect(getYearHours).toHaveBeenCalledWith({ year: 2026, userId: testWorker.id });
+    // 46 / 56 h expected to date -> 82%; wait on this (not just the card's title, which renders
+    // before the query resolves) so the assertions below don't race the mocked fetch.
+    await screen.findByText("46 / 56 h (82%)");
+    expect(screen.getByText("120 EUR")).toBeTruthy();
+
+    // 172 / 168 h expected to date -> 102%.
+    expect(await screen.findByText("172 / 168 h (102%)")).toBeTruthy();
+    expect(screen.getAllByText("—")).toHaveLength(1);
   });
 
-  it("marks each day's kind and status, and links the week number to its timesheet", async () => {
+  it("highlights the current month card but not the previous one", async () => {
     renderApp("/");
-    await screen.findByText("September 2026");
+    await screen.findByText("46 / 56 h (82%)");
 
-    const table = screen.getAllByRole("table")[0];
-    const holidayCell = within(table).getByText("16").closest("td");
-    expect(holidayCell?.getAttribute("data-kind")).toBe("company_day_off");
+    const current = screen.getByRole("heading", { level: 4, name: "September 2026" });
+    const previous = screen.getByRole("heading", { level: 4, name: "August 2026" });
 
-    // Sep 7 is a fully-booked past working day (8 of 8 expected hours).
-    const bookedDayCell = within(table).getByText("7").closest("td");
-    expect(bookedDayCell?.getAttribute("data-status")).toBe("complete");
-
-    const weekLink = within(table).getByRole("link", { name: "37" });
-    expect(weekLink.getAttribute("href")).toBe("/timesheet?week=2026-09-07");
+    expect(current.closest('[data-highlighted="true"]')).toBeTruthy();
+    expect(previous.closest('[data-highlighted="true"]')).toBeNull();
   });
 
-  it("shows the week and month totals", async () => {
+  it("links each month card to its details on /hours", async () => {
     renderApp("/");
-    await screen.findByText("September 2026");
 
-    expect(screen.getByText("6 / 32 h")).toBeTruthy();
-    expect(screen.getByText(/46 h booked/)).toBeTruthy();
+    // Wait for both month cards to finish loading (findAllByRole would resolve as soon as the
+    // first "Details →" link appears, racing the second card's own fetch).
+    await screen.findByText("46 / 56 h (82%)");
+    await screen.findByText("172 / 168 h (102%)");
+
+    const links = screen.getAllByRole("link", { name: "Details →" });
+    expect(links.map((link) => link.getAttribute("href"))).toEqual([
+      "/hours?month=2026-09",
+      "/hours?month=2026-08",
+    ]);
   });
 
-  it("hides the Other column when no month has other-preset hours", async () => {
+  it("renders the weekly hours chart card", async () => {
     renderApp("/");
-    await screen.findByRole("heading", { level: 3, name: "2026" });
+    // recharts needs a real layout to draw anything meaningful in jsdom; just check the card
+    // that hosts it renders with the right title and footer link. Both this card and Hours per
+    // project share the "My hours →" label and the same underlying query, so wait for both
+    // footers (not just the first) before scoping down to this one.
+    await waitFor(() => {
+      expect(screen.getAllByRole("link", { name: "My hours →" })).toHaveLength(2);
+    });
 
-    expect(screen.queryByText("Other")).toBeNull();
+    const heading = screen.getByRole("heading", { level: 4, name: "Hours per week" });
+    const card = heading.closest(".mantine-Paper-root") as HTMLElement;
+    const link = within(card).getByRole("link", { name: "My hours →" });
+    expect(link.getAttribute("href")).toBe("/hours");
   });
 
-  it("expands a month into its per-project breakdown", async () => {
+  it("lists hours per project for the last 6 weeks", async () => {
     renderApp("/");
-    await screen.findByText("September");
 
-    expect(screen.queryByText(/Website Revamp/)).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Expand September" }));
-
-    expect(await screen.findByText(/Website Revamp/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Collapse September" }));
-    expect(screen.queryByText(/Website Revamp/)).toBeNull();
+    // "Website Revamp" also appears in the My projects card below, so scope to the table (the
+    // only one on this page).
+    const table = await screen.findByRole("table");
+    const row = within(table).getByText(/Website Revamp/).closest("tr");
+    expect(row).toBeTruthy();
+    const cells = within(row as HTMLElement).getAllByRole("cell");
+    expect(cells[1].textContent).toBe("172");
+    expect(cells[2].textContent).toBe("2");
   });
 
-  it("badges the current month as in progress and shows a delta for a past month", async () => {
+  it("lists the signed-in user's projects, linking to each", async () => {
     renderApp("/");
-    await screen.findByText("September");
 
-    expect(screen.getByText("In progress")).toBeTruthy();
-    // August: total 172.00 vs expected-to-date 168.00 -> +4.
-    expect(screen.getByText("+4")).toBeTruthy();
-  });
-});
-
-// Keep the fixtures' shape honest: MonthRows reads is_current/month off testMonthHoursCurrent and
-// testMonthHoursPast directly, so a future edit to one without the other would silently break the
-// "badges the current month" assertion above.
-describe("fixtures", () => {
-  it("agree on which month is current", () => {
-    expect(testMonthHoursCurrent.is_current).toBe(true);
-    expect(testMonthHoursPast.is_current).toBe(false);
+    const link = await screen.findByRole("link", { name: /Website Revamp/ });
+    expect(link.getAttribute("href")).toBe(`/projects/${testTimesheetOption.project.id}`);
   });
 });

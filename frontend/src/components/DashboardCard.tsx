@@ -20,10 +20,9 @@ export function DashboardCard({ title, children, footer, highlighted }: Props) {
       p="md"
       radius="md"
       h="100%"
+      data-highlighted={highlighted || undefined}
       bg={highlighted ? "var(--mantine-primary-color-light)" : undefined}
-      style={
-        highlighted ? { borderColor: "var(--mantine-primary-color-filled)" } : undefined
-      }
+      style={highlighted ? { borderColor: "var(--mantine-primary-color-filled)" } : undefined}
     >
       <Stack gap="sm" h="100%" justify="space-between">
         <Stack gap="sm">
