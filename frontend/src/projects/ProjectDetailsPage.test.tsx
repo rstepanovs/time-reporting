@@ -136,6 +136,55 @@ describe("ProjectDetailsPage", () => {
     });
   });
 
+  it("shows 'None' when the project has no manager", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    renderApp(`/projects/${testProject.id}`);
+
+    await screen.findByRole("heading", { name: testProject.name });
+    expect(screen.getByText("Manager: None")).toBeTruthy();
+  });
+
+  it("shows the project's manager when assigned", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(getProject).mockResolvedValue({
+      ...testProject,
+      manager: { id: "mgr-1", name: "Mark Manager", email: "mark@example.com", is_active: true },
+    });
+    renderApp(`/projects/${testProject.id}`);
+
+    await screen.findByRole("heading", { name: testProject.name });
+    expect(screen.getByText("Manager: Mark Manager (mark@example.com)")).toBeTruthy();
+  });
+
+  it("lets a manager assign a project manager", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    const candidate = {
+      id: "mgr-1",
+      name: "Mark Manager",
+      email: "mark@example.com",
+      role: "project_manager" as const,
+    };
+    vi.mocked(searchUserDirectory).mockResolvedValue([candidate]);
+    vi.mocked(updateProject).mockResolvedValue({
+      ...testProject,
+      manager: { id: candidate.id, name: candidate.name, email: candidate.email, is_active: true },
+    });
+    renderApp(`/projects/${testProject.id}`);
+    await screen.findByRole("heading", { name: testProject.name });
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    const dialog = await screen.findByRole("dialog");
+    const combobox = within(dialog).getByRole("combobox", { name: /^manager/i });
+    fireEvent.click(combobox);
+    fireEvent.change(combobox, { target: { value: "Mark" } });
+    fireEvent.click(await screen.findByRole("option", { name: /Mark Manager/ }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => {
+      expect(updateProject).toHaveBeenCalledWith(testProject.id, { manager_id: candidate.id });
+    });
+  });
+
   it("lets a manager change normal working hours per day", async () => {
     vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
     vi.mocked(updateProject).mockResolvedValue({

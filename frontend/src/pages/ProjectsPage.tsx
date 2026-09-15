@@ -33,6 +33,7 @@ export function ProjectsPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch] = useDebouncedValue(search, 300);
   const [includeInactive, setIncludeInactive] = useState(false);
+  const [managedByMe, setManagedByMe] = useState(false);
   const [page, setPage] = useState(1);
   const [createOpened, { open: openCreate, close: closeCreate }] = useDisclosure(false);
 
@@ -41,6 +42,7 @@ export function ProjectsPage() {
     offset: (page - 1) * PAGE_SIZE,
     includeInactive,
     customerId: customerId ?? undefined,
+    managerId: managedByMe ? user.id : undefined,
     search: debouncedSearch || undefined,
   });
 
@@ -93,6 +95,17 @@ export function ProjectsPage() {
           }}
           mb={8}
         />
+        {canManage(user.role) && (
+          <Switch
+            label="Managed by me"
+            checked={managedByMe}
+            onChange={(event) => {
+              setManagedByMe(event.currentTarget.checked);
+              resetToFirstPage();
+            }}
+            mb={8}
+          />
+        )}
       </Group>
 
       {projects.isPending && <Loader />}
@@ -108,6 +121,7 @@ export function ProjectsPage() {
                 <Table.Tr>
                   <Table.Th>Name</Table.Th>
                   <Table.Th>Customer</Table.Th>
+                  <Table.Th>Manager</Table.Th>
                   <Table.Th>Status</Table.Th>
                 </Table.Tr>
               </Table.Thead>
@@ -120,6 +134,15 @@ export function ProjectsPage() {
                       </Anchor>
                     </Table.Td>
                     <Table.Td>{project.customer.name}</Table.Td>
+                    <Table.Td>
+                      {project.manager ? (
+                        project.manager.name
+                      ) : (
+                        <Text c="dimmed" span>
+                          None
+                        </Text>
+                      )}
+                    </Table.Td>
                     <Table.Td>
                       <Badge color={project.is_active ? "green" : "gray"} variant="light">
                         {project.is_active ? "Active" : "Archived"}

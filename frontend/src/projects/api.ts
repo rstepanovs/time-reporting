@@ -3,6 +3,7 @@ import { ApiError } from "@/api/errors";
 import type { components } from "@/api/schema";
 
 export type Project = components["schemas"]["ProjectResponse"];
+export type ProjectManager = components["schemas"]["ProjectManagerResponse"];
 export type ProjectPage = components["schemas"]["ProjectPageResponse"];
 export type ProjectMember = components["schemas"]["ProjectMemberResponse"];
 export type BillingItem = components["schemas"]["ProjectBillingItemResponse"];
@@ -84,6 +85,7 @@ export async function listProjects(params: {
   includeInactive?: boolean;
   customerId?: string;
   memberId?: string;
+  managerId?: string;
   search?: string;
 }): Promise<ProjectPage> {
   const { data, response } = await api.GET("/api/v1/projects", {
@@ -94,6 +96,7 @@ export async function listProjects(params: {
         include_inactive: params.includeInactive,
         customer_id: params.customerId,
         member_id: params.memberId,
+        manager_id: params.managerId,
         search: params.search,
       },
     },
@@ -115,6 +118,7 @@ export async function createProject(body: {
   name: string;
   description?: string | null;
   normalWorkingHours: number | string;
+  managerId?: string | null;
 }): Promise<Project> {
   const { data, response } = await api.POST("/api/v1/projects", {
     body: {
@@ -122,6 +126,7 @@ export async function createProject(body: {
       name: body.name,
       description: body.description,
       normal_working_hours: body.normalWorkingHours,
+      manager_id: body.managerId,
     },
   });
   if (!data) throw await ruleAwareError(response);
@@ -135,6 +140,7 @@ export async function updateProject(
     description?: string | null;
     is_active?: boolean;
     normal_working_hours?: number | string;
+    manager_id?: string | null;
   },
 ): Promise<Project> {
   const { data, response } = await api.PATCH("/api/v1/projects/{project_id}", {

@@ -42,13 +42,15 @@ async function userAwareError(response: Response): Promise<Error> {
 }
 
 /** Active users matching `search` (name or email substring), for pickers such as adding a
- * project member. Requires manager access (admin or project manager). */
+ * project member or a project manager (`roles`). Requires manager access (admin or project
+ * manager). */
 export async function searchUserDirectory(params: {
   search?: string;
   limit?: number;
+  roles?: UserRole[];
 }): Promise<UserSummary[]> {
   const { data, response } = await api.GET("/api/v1/users/directory", {
-    params: { query: { search: params.search, limit: params.limit } },
+    params: { query: { search: params.search, limit: params.limit, role: params.roles } },
   });
   if (!data) throw new ApiError(response);
   return data;

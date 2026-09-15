@@ -149,7 +149,8 @@ export interface paths {
         };
         /**
          * Search User Directory
-         * @description Minimal, active-only user list for pickers (e.g. adding a project member).
+         * @description Minimal, active-only user list for pickers (e.g. adding a project member or a project
+         *     manager, the latter via ``role=admin&role=project_manager``).
          */
         get: operations["search_user_directory_api_v1_users_directory_get"];
         put?: never;
@@ -1184,6 +1185,8 @@ export interface components {
              * @default 8.00
              */
             normal_working_hours: number | string;
+            /** Manager Id */
+            manager_id?: string | null;
         };
         /** ProjectCustomerResponse */
         ProjectCustomerResponse: {
@@ -1203,6 +1206,20 @@ export interface components {
         ProjectHoursResponse: {
             project: components["schemas"]["TimesheetProjectResponse"];
             totals: components["schemas"]["HoursTotalsResponse"];
+        };
+        /** ProjectManagerResponse */
+        ProjectManagerResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Email */
+            email: string;
+            /** Is Active */
+            is_active: boolean;
         };
         /** ProjectMemberAddRequest */
         ProjectMemberAddRequest: {
@@ -1259,6 +1276,7 @@ export interface components {
             is_active: boolean;
             /** Normal Working Hours */
             normal_working_hours: string;
+            manager: components["schemas"]["ProjectManagerResponse"] | null;
             /**
              * Created At
              * Format: date-time
@@ -1274,8 +1292,8 @@ export interface components {
          * ProjectUpdateRequest
          * @description Partial update: omitted fields are left unchanged.
          *
-         *     ``customer_id`` is immutable and not part of this request. ``null`` clears ``description``; it
-         *     is rejected for ``name``, ``is_active`` and ``normal_working_hours``.
+         *     ``customer_id`` is immutable and not part of this request. ``null`` clears ``description`` and
+         *     ``manager_id``; it is rejected for ``name``, ``is_active`` and ``normal_working_hours``.
          */
         ProjectUpdateRequest: {
             /** Name */
@@ -1286,6 +1304,8 @@ export interface components {
             is_active?: boolean | null;
             /** Normal Working Hours */
             normal_working_hours?: number | string | null;
+            /** Manager Id */
+            manager_id?: string | null;
         };
         /**
          * RemovalBlockerKind
@@ -1305,7 +1325,7 @@ export interface components {
          * @description What a permanent delete also removes, in addition to the record itself.
          * @enum {string}
          */
-        RemovalEffectKind: "project_memberships" | "project_members" | "project_billing_items";
+        RemovalEffectKind: "project_memberships" | "managed_projects" | "project_members" | "project_billing_items";
         /** RemovalImpactResponse */
         RemovalImpactResponse: {
             /** Is Active */
@@ -1985,6 +2005,7 @@ export interface operations {
             query?: {
                 search?: string | null;
                 limit?: number;
+                role?: components["schemas"]["UserRole"][] | null;
             };
             header?: never;
             path?: never;
@@ -2315,6 +2336,7 @@ export interface operations {
                 include_inactive?: boolean;
                 customer_id?: string | null;
                 member_id?: string | null;
+                manager_id?: string | null;
                 search?: string | null;
             };
             header?: never;
@@ -2365,7 +2387,7 @@ export interface operations {
                     "application/json": components["schemas"]["ProjectResponse"];
                 };
             };
-            /** @description The customer does not exist or is archived */
+            /** @description The manager does not exist, is inactive, or is not an admin/project manager */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -2452,7 +2474,7 @@ export interface operations {
                     "application/json": components["schemas"]["ProjectResponse"];
                 };
             };
-            /** @description The customer does not exist or is archived */
+            /** @description The manager does not exist, is inactive, or is not an admin/project manager */
             400: {
                 headers: {
                     [name: string]: unknown;

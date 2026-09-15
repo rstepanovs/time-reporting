@@ -14,6 +14,7 @@ import {
 } from "@/projects/api";
 import { testAdmin, testCustomer, testProject } from "@/test/fixtures";
 import { renderApp } from "@/test/renderApp";
+import { searchUserDirectory } from "@/users/api";
 
 vi.mock("@/auth/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/auth/api")>()),
@@ -30,6 +31,11 @@ vi.mock("@/projects/api", async (importOriginal) => ({
 vi.mock("@/customers/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/customers/api")>()),
   listCustomers: vi.fn(),
+}));
+
+vi.mock("@/users/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/users/api")>()),
+  searchUserDirectory: vi.fn(),
 }));
 
 vi.mock("@/admin/api", async (importOriginal) => ({
@@ -59,6 +65,7 @@ beforeEach(() => {
     blockers: [],
     effects: [],
   });
+  vi.mocked(searchUserDirectory).mockResolvedValue([]);
 });
 
 describe("AdminProjectsPage", () => {

@@ -76,6 +76,7 @@ export const testProject: Project = {
   description: "Redesign the public marketing site.",
   is_active: true,
   normal_working_hours: "8.00",
+  manager: null,
   created_at: "2026-02-01T08:00:00Z",
   updated_at: "2026-02-01T08:00:00Z",
 };

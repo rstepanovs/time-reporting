@@ -484,6 +484,9 @@ export function ProjectDetailsPage() {
             </Badge>
           </Group>
           <Text c="dimmed">{data.customer.name}</Text>
+          <Text c="dimmed" size="sm">
+            Manager: {data.manager ? `${data.manager.name} (${data.manager.email})` : "None"}
+          </Text>
         </div>
         {canManage(user.role) && (
           <Group>
