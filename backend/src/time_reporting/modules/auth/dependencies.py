@@ -59,8 +59,8 @@ async def get_current_user(
     except InvalidTokenError as exc:
         raise _unauthorized() from exc
 
-    # Status and role are read from the database on every request, so deactivation, role changes
-    # and password changes (token_version) take effect immediately.
+    # Status and access levels are read from the database on every request, so deactivation, level
+    # changes and password changes (token_version) take effect immediately.
     user = await bus.query(GetUserById(user_id=payload.user_id))
     if user is None or not user.is_active or user.token_version != payload.token_version:
         raise _unauthorized()
@@ -71,11 +71,11 @@ CurrentUserDep = Annotated[UserDTO, Depends(get_current_user)]
 
 
 def require_roles(*roles: UserRole) -> Callable[[UserDTO], Awaitable[UserDTO]]:
-    """Build a dependency that admits only users with one of ``roles``."""
+    """Build a dependency that admits only users holding at least one of ``roles``."""
     allowed = frozenset(roles)
 
     async def dependency(user: CurrentUserDep) -> UserDTO:
-        if user.role not in allowed:
+        if allowed.isdisjoint(user.roles):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
             )
@@ -85,5 +85,6 @@ def require_roles(*roles: UserRole) -> Callable[[UserDTO], Awaitable[UserDTO]]:
 
 
 AdminDep = Annotated[UserDTO, Depends(require_roles(UserRole.ADMIN))]
-# Administrators and project managers, who manage billing data such as customers.
-ManagerDep = Annotated[UserDTO, Depends(require_roles(UserRole.ADMIN, UserRole.PROJECT_MANAGER))]
+ManagerDep = Annotated[UserDTO, Depends(require_roles(UserRole.MANAGER))]
+# Defined for later use; nothing depends on the accountant level yet.
+AccountantDep = Annotated[UserDTO, Depends(require_roles(UserRole.ACCOUNTANT))]

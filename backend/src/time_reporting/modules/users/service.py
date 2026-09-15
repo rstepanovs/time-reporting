@@ -30,10 +30,17 @@ class UserService:
             raise UserNotFoundError(user_id)
         return user
 
-    async def create_user(self, *, name: str, email: str, role: UserRole, password: str) -> User:
+    async def create_user(
+        self, *, name: str, email: str, roles: frozenset[UserRole], password: str
+    ) -> User:
         email = normalize_email(email)
         await self._ensure_email_available(email)
-        user = User(name=name, email=email, role=role, password_hash=await hash_password(password))
+        user = User(
+            name=name,
+            email=email,
+            roles=sorted(roles),
+            password_hash=await hash_password(password),
+        )
         await self._users.save(user)
         return user
 
@@ -44,13 +51,14 @@ class UserService:
         acting_user_id: UUID,
         name: str | None = None,
         email: str | None = None,
-        role: UserRole | None = None,
+        roles: frozenset[UserRole] | None = None,
         is_active: bool | None = None,
     ) -> User:
         user = await self.get_user(user_id)
-        # Changing one's own role or deactivating oneself could lock the last admin out.
+        # Deactivating oneself, or dropping one's own admin level, could lock the last admin out.
         if user.id == acting_user_id and (
-            (role is not None and role != user.role) or is_active is False
+            is_active is False
+            or (roles is not None and UserRole.ADMIN in user.roles and UserRole.ADMIN not in roles)
         ):
             raise SelfModificationError()
 
@@ -60,8 +68,8 @@ class UserService:
             email = normalize_email(email)
             await self._ensure_email_available(email)
             user.email = email
-        if role is not None:
-            user.role = role
+        if roles is not None:
+            user.roles = sorted(roles)
         if is_active is not None:
             user.is_active = is_active
         await self._users.save(user)

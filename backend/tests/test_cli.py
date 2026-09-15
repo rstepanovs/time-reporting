@@ -20,7 +20,7 @@ async def test_create_admin_creates_an_active_admin(bus: Bus) -> None:
         bus, name="Root", email="root@example.com", password=DEFAULT_PASSWORD
     )
 
-    assert admin.role is UserRole.ADMIN
+    assert admin.roles == frozenset({UserRole.ADMIN, UserRole.MANAGER})
     assert admin.email == "root@example.com"
     assert admin.is_active
     assert admin.token_version == 0
@@ -44,7 +44,7 @@ def _fake_admin(*, email: str) -> UserDTO:
         id=uuid4(),
         name="Root",
         email=email,
-        role=UserRole.ADMIN,
+        roles=frozenset({UserRole.ADMIN, UserRole.MANAGER}),
         is_active=True,
         token_version=0,
         last_login_at=None,

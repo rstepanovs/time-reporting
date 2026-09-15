@@ -59,7 +59,7 @@ class BillingService:
         sender = await self._bus.query(GetUserById(user_id=command.sent_by_id))
         if sender is None:
             raise UserNotFoundError(command.sent_by_id)
-        if sender.role != UserRole.ADMIN and (
+        if UserRole.ADMIN not in sender.roles and (
             project.manager is None or project.manager.id != sender.id
         ):
             raise NotProjectManagerError(command.project_id)

@@ -113,7 +113,8 @@ Modules talk to each other exclusively through the in-process CQRS bus in `core/
 - `api/deps.py:BusDep` builds a request-scoped `Bus`; `cli.py` builds one per invocation the same way.
 
 Modules (each documented in its own `CLAUDE.md`):
-- **`users`** — `User`, roles (`admin`/`project_manager`/`worker`), account management, user directory.
+- **`users`** — `User`, access levels (`admin`/`manager`/`accountant`, combinable, on top of the
+  implicit "employee" baseline every account has), account management, user directory.
 - **`auth`** — JWT issuing/validation, login/session cookie, route guards (`auth/dependencies.py`).
 - **`customers`** — `Customer`: legal details, billing address/period, currency, payment terms.
 - **`projects`** — `Project`, `ProjectMember`, `ProjectBillingItem`, a project's `manager_id`.
@@ -181,9 +182,11 @@ URL is hardcoded in the frontend.
   `DELETE /auth/session` clears it. `get_current_user` accepts a bearer header (which wins) or that
   cookie; cookie-authenticated unsafe requests (not GET/HEAD/OPTIONS) must also carry `X-Requested-With`
   or get 403 (CSRF defense). Signing out only clears the cookie — the JWT stays valid until it expires.
-- Route guards every router uses: `auth/dependencies.py` — `CurrentUserDep`, `require_roles`,
-  `AdminDep`, `ManagerDep` (`admin` or `project_manager`). Role and `is_active` are re-read from the
-  database on every request, so deactivation/role/password changes take effect immediately.
+- Route guards every router uses: `auth/dependencies.py` — `CurrentUserDep`, `require_roles`
+  (admits a user holding *any* of the given levels), `AdminDep`, `ManagerDep`, `AccountantDep`. A
+  user's access levels are orthogonal (a plain `CurrentUserDep` is the implicit "employee" every
+  account has); levels and `is_active` are re-read from the database on every request, so
+  deactivation/level/password changes take effect immediately.
 - Tests need a running, migrated Postgres (`docker compose up -d db`, then `alembic upgrade head`):
   `tests/conftest.py`'s `db_session` fixture runs each test in a rolled-back transaction on a real
   connection, so there is no SQLite/mock fallback.

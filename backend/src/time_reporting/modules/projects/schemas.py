@@ -152,7 +152,7 @@ class ProjectMemberResponse(BaseModel):
     user_id: UUID
     name: str
     email: str
-    role: UserRole
+    roles: frozenset[UserRole]
     is_active: bool
     added_at: datetime
 

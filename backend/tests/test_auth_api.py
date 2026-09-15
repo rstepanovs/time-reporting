@@ -1,8 +1,8 @@
 from httpx import AsyncClient, Response
 
-from support import DEFAULT_PASSWORD, AuthHeaders, UserFactory
+from support import ADMIN, DEFAULT_PASSWORD, AuthHeaders, UserFactory
 from time_reporting.core.cqrs import Bus
-from time_reporting.modules.users.contracts import UpdateUser, UserRole
+from time_reporting.modules.users.contracts import UpdateUser
 
 
 async def _login(client: AsyncClient, email: str, password: str) -> Response:
@@ -30,7 +30,7 @@ async def test_login_returns_working_token(client: AsyncClient, make_user: UserF
 async def test_login_failures_are_indistinguishable(
     client: AsyncClient, bus: Bus, make_user: UserFactory
 ) -> None:
-    admin = await make_user(role=UserRole.ADMIN)
+    admin = await make_user(roles=ADMIN)
     await make_user(email="active@example.com")
     inactive = await make_user(email="inactive@example.com")
     await bus.execute(UpdateUser(user_id=inactive.id, acting_user_id=admin.id, is_active=False))
@@ -74,7 +74,7 @@ async def test_token_is_revoked_by_password_change(
 async def test_token_is_rejected_after_deactivation(
     client: AsyncClient, bus: Bus, make_user: UserFactory, auth_headers: AuthHeaders
 ) -> None:
-    admin = await make_user(role=UserRole.ADMIN)
+    admin = await make_user(roles=ADMIN)
     user = await make_user()
     headers = auth_headers(user)
 

@@ -13,9 +13,12 @@ from time_reporting.core.cqrs import Command, Query
 
 
 class UserRole(StrEnum):
+    """An access level a user can hold, in addition to the implicit "employee" baseline every
+    account has (reports time, can be a project member, sees the personal dashboard)."""
+
     ADMIN = "admin"
-    PROJECT_MANAGER = "project_manager"
-    WORKER = "worker"
+    MANAGER = "manager"
+    ACCOUNTANT = "accountant"
 
 
 # --- DTOs ---
@@ -26,7 +29,7 @@ class UserDTO:
     id: UUID
     name: str
     email: str
-    role: UserRole
+    roles: frozenset[UserRole]
     is_active: bool
     token_version: int
     last_login_at: datetime | None
@@ -79,7 +82,7 @@ class ListUsers(Query[UserPageDTO]):
     # Case-insensitive substring match against name or email.
     search: str | None = None
     include_inactive: bool = True
-    # Restrict to these roles; empty/``None`` means any role.
+    # Restrict to users holding any of these levels; empty/``None`` means everyone.
     roles: frozenset[UserRole] | None = None
 
 
@@ -90,7 +93,7 @@ class ListUsers(Query[UserPageDTO]):
 class CreateUser(Command[UserDTO]):
     name: str
     email: str
-    role: UserRole
+    roles: frozenset[UserRole]
     password: str = field(repr=False)
 
 
@@ -102,7 +105,7 @@ class UpdateUser(Command[UserDTO]):
     acting_user_id: UUID
     name: str | None = None
     email: str | None = None
-    role: UserRole | None = None
+    roles: frozenset[UserRole] | None = None
     is_active: bool | None = None
 
 
@@ -160,7 +163,9 @@ class EmailAlreadyExistsError(UserError):
 
 class SelfModificationError(UserError):
     def __init__(self) -> None:
-        super().__init__("Users cannot change their own role, deactivate, or delete themselves")
+        super().__init__(
+            "Users cannot remove their own administrator access, or deactivate or delete themselves"
+        )
 
 
 class UserInUseError(UserError):

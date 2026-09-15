@@ -37,8 +37,6 @@ from time_reporting.modules.projects.repository import (
 )
 from time_reporting.modules.users.contracts import GetUserById, UserRole
 
-_ELIGIBLE_MANAGER_ROLES = frozenset({UserRole.ADMIN, UserRole.PROJECT_MANAGER})
-
 
 class ProjectService:
     def __init__(self, bus: Bus) -> None:
@@ -217,7 +215,7 @@ class ProjectService:
         user = await self._bus.query(GetUserById(user_id=user_id))
         if user is None:
             raise ProjectManagerNotFoundError(user_id)
-        if not user.is_active or user.role not in _ELIGIBLE_MANAGER_ROLES:
+        if not user.is_active or UserRole.MANAGER not in user.roles:
             raise ProjectManagerNotEligibleError(user_id)
 
     async def _ensure_name_available(self, customer_id: UUID, name: str) -> None:

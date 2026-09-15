@@ -68,8 +68,6 @@ Scope = Literal["mine", "all"]
 
 router = APIRouter(prefix="/timesheets", tags=["timesheets"])
 
-_VIEW_ANY_ROLES = frozenset({UserRole.ADMIN, UserRole.PROJECT_MANAGER})
-
 _USER_NOT_FOUND_RESPONSE: dict[int | str, dict[str, Any]] = {
     status.HTTP_404_NOT_FOUND: {"description": "User not found"}
 }
@@ -99,9 +97,9 @@ def _conflict(detail: str) -> HTTPException:
 
 def _resolve_target_user(current_user: UserDTO, user_id: UUID | None) -> UUID:
     """The user whose data is being requested: ``current_user`` unless ``user_id`` names someone
-    else, which is only allowed for an admin or project manager."""
+    else, which is only allowed for a manager."""
     target_user_id = current_user.id if user_id is None else user_id
-    if target_user_id != current_user.id and current_user.role not in _VIEW_ANY_ROLES:
+    if target_user_id != current_user.id and UserRole.MANAGER not in current_user.roles:
         raise _forbidden("Cannot view another user's timesheet")
     return target_user_id
 
@@ -280,7 +278,7 @@ async def get_team_month_overview(
     bus: BusDep,
     scope: Annotated[Scope, Query()] = "mine",
 ) -> TeamMonthOverviewResponse:
-    if scope == "all" and current_user.role != UserRole.ADMIN:
+    if scope == "all" and UserRole.ADMIN not in current_user.roles:
         raise _forbidden("Only an admin can view every project")
     manager_id = None if scope == "all" else current_user.id
     overview = await bus.query(

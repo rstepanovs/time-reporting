@@ -4,7 +4,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from support import CustomerFactory, ProjectFactory, UserFactory
+from support import ADMIN, MANAGER, CustomerFactory, ProjectFactory, UserFactory
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.admin.contracts import (
     GetCustomerRemovalImpact,
@@ -33,7 +33,7 @@ from time_reporting.modules.projects.contracts import (
 )
 from time_reporting.modules.timesheets.contracts import SaveTimesheetWeek, TimeEntryChange
 from time_reporting.modules.users import repository as users_repository
-from time_reporting.modules.users.contracts import GetUserById, UserRole
+from time_reporting.modules.users.contracts import GetUserById
 
 # 2026-09-14 is a Monday.
 A_MONDAY = date(2026, 9, 14)
@@ -59,7 +59,7 @@ async def _book_normal_hours(bus: Bus, *, project_id: UUID, user_id: UUID) -> No
 
 
 async def test_user_removal_impact_with_no_dependencies(bus: Bus, make_user: UserFactory) -> None:
-    admin = await make_user(role=UserRole.ADMIN)
+    admin = await make_user(roles=ADMIN)
     user = await make_user()
 
     impact = await bus.query(GetUserRemovalImpact(user_id=user.id, acting_user_id=admin.id))
@@ -72,7 +72,7 @@ async def test_user_removal_impact_with_no_dependencies(bus: Bus, make_user: Use
 
 
 async def test_user_removal_impact_flags_self(bus: Bus, make_user: UserFactory) -> None:
-    admin = await make_user(role=UserRole.ADMIN)
+    admin = await make_user(roles=ADMIN)
 
     impact = await bus.query(GetUserRemovalImpact(user_id=admin.id, acting_user_id=admin.id))
 
@@ -84,7 +84,7 @@ async def test_user_removal_impact_flags_self(bus: Bus, make_user: UserFactory) 
 async def test_user_removal_impact_lists_membership_effect(
     bus: Bus, make_user: UserFactory, make_project: ProjectFactory
 ) -> None:
-    admin = await make_user(role=UserRole.ADMIN)
+    admin = await make_user(roles=ADMIN)
     user = await make_user()
     project = await make_project()
     await bus.execute(AddProjectMember(project_id=project.id, user_id=user.id))
@@ -100,8 +100,8 @@ async def test_user_removal_impact_lists_membership_effect(
 async def test_user_removal_impact_lists_managed_projects_effect(
     bus: Bus, make_user: UserFactory, make_project: ProjectFactory
 ) -> None:
-    admin = await make_user(role=UserRole.ADMIN)
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    admin = await make_user(roles=ADMIN)
+    manager = await make_user(roles=MANAGER)
     await make_project(manager_id=manager.id)
 
     impact = await bus.query(GetUserRemovalImpact(user_id=manager.id, acting_user_id=admin.id))
@@ -115,7 +115,7 @@ async def test_user_removal_impact_lists_managed_projects_effect(
 async def test_user_removal_impact_blocked_by_time_entries(
     bus: Bus, make_user: UserFactory, make_project: ProjectFactory
 ) -> None:
-    admin = await make_user(role=UserRole.ADMIN)
+    admin = await make_user(roles=ADMIN)
     user = await make_user()
     project = await make_project()
     await bus.execute(AddProjectMember(project_id=project.id, user_id=user.id))
@@ -132,7 +132,7 @@ async def test_user_removal_impact_blocked_by_time_entries(
 async def test_user_removal_impact_unknown_user_returns_none(
     bus: Bus, make_user: UserFactory
 ) -> None:
-    admin = await make_user(role=UserRole.ADMIN)
+    admin = await make_user(roles=ADMIN)
 
     assert await bus.query(GetUserRemovalImpact(user_id=uuid4(), acting_user_id=admin.id)) is None
 
@@ -222,7 +222,7 @@ async def test_project_removal_impact_unknown_returns_none(bus: Bus) -> None:
 
 
 async def test_remove_user_default_archives(bus: Bus, make_user: UserFactory) -> None:
-    admin = await make_user(role=UserRole.ADMIN)
+    admin = await make_user(roles=ADMIN)
     user = await make_user()
 
     outcome = await bus.execute(RemoveUser(user_id=user.id, acting_user_id=admin.id))
@@ -234,7 +234,7 @@ async def test_remove_user_default_archives(bus: Bus, make_user: UserFactory) ->
 
 
 async def test_remove_user_archive_is_idempotent(bus: Bus, make_user: UserFactory) -> None:
-    admin = await make_user(role=UserRole.ADMIN)
+    admin = await make_user(roles=ADMIN)
     user = await make_user()
 
     await bus.execute(RemoveUser(user_id=user.id, acting_user_id=admin.id))
@@ -244,7 +244,7 @@ async def test_remove_user_archive_is_idempotent(bus: Bus, make_user: UserFactor
 
 
 async def test_remove_user_rejects_self_in_both_modes(bus: Bus, make_user: UserFactory) -> None:
-    admin = await make_user(role=UserRole.ADMIN)
+    admin = await make_user(roles=ADMIN)
 
     with pytest.raises(SelfRemovalError):
         await bus.execute(RemoveUser(user_id=admin.id, acting_user_id=admin.id))
@@ -280,7 +280,7 @@ async def test_remove_project_default_archives(bus: Bus, make_project: ProjectFa
 async def test_remove_user_permanently_deletes_and_cascades_memberships(
     bus: Bus, make_user: UserFactory, make_project: ProjectFactory
 ) -> None:
-    admin = await make_user(role=UserRole.ADMIN)
+    admin = await make_user(roles=ADMIN)
     user = await make_user()
     project_a = await make_project()
     project_b = await make_project()
@@ -300,8 +300,8 @@ async def test_remove_user_permanently_deletes_and_cascades_memberships(
 async def test_remove_user_permanently_clears_manager_assignment(
     bus: Bus, make_user: UserFactory, make_project: ProjectFactory
 ) -> None:
-    admin = await make_user(role=UserRole.ADMIN)
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    admin = await make_user(roles=ADMIN)
+    manager = await make_user(roles=MANAGER)
     project = await make_project(manager_id=manager.id)
 
     outcome = await bus.execute(
@@ -319,7 +319,7 @@ async def test_remove_user_permanently_rolls_back_membership_removal_on_failure(
 ) -> None:
     """If deleting the user itself fails after its memberships were removed, the whole
     ``RemoveUser`` command rolls back — the memberships must still be there afterwards."""
-    admin = await make_user(role=UserRole.ADMIN)
+    admin = await make_user(roles=ADMIN)
     user = await make_user()
     project = await make_project()
     await bus.execute(AddProjectMember(project_id=project.id, user_id=user.id))
@@ -339,7 +339,7 @@ async def test_remove_user_permanently_rolls_back_membership_removal_on_failure(
 async def test_remove_user_permanently_blocked_by_time_entries(
     bus: Bus, make_user: UserFactory, make_project: ProjectFactory
 ) -> None:
-    admin = await make_user(role=UserRole.ADMIN)
+    admin = await make_user(roles=ADMIN)
     user = await make_user()
     project = await make_project()
     await bus.execute(AddProjectMember(project_id=project.id, user_id=user.id))
@@ -397,7 +397,7 @@ async def test_remove_project_permanently_blocked_by_time_entries(
 
 
 async def test_remove_unknown_user_raises_not_found(bus: Bus, make_user: UserFactory) -> None:
-    admin = await make_user(role=UserRole.ADMIN)
+    admin = await make_user(roles=ADMIN)
 
     with pytest.raises(RemovalTargetNotFoundError):
         await bus.execute(RemoveUser(user_id=uuid4(), acting_user_id=admin.id))

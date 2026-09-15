@@ -2,7 +2,7 @@ from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
-from support import ProjectFactory, UserFactory
+from support import ADMIN, MANAGER, ProjectFactory, UserFactory
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.projects.contracts import (
     AddProjectMember,
@@ -20,7 +20,6 @@ from time_reporting.modules.timesheets.contracts import (
     TeamMemberWarning,
     TimeEntryChange,
 )
-from time_reporting.modules.users.contracts import UserRole
 
 # September 2026's five ISO weeks (its first/last week spill outside the month): 2026-08-31 is the
 # Monday of the week holding Sep 1, so it also holds Aug 31 — a straddling week used below.
@@ -44,8 +43,8 @@ async def _normal_hours_item_id(bus: Bus, project_id: UUID) -> UUID:
 async def test_overview_scope_filters_by_manager(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
-    manager_a = await make_user(role=UserRole.PROJECT_MANAGER)
-    manager_b = await make_user(role=UserRole.PROJECT_MANAGER)
+    manager_a = await make_user(roles=MANAGER)
+    manager_b = await make_user(roles=MANAGER)
     project_a = await make_project(name="A", manager_id=manager_a.id)
     project_b = await make_project(name="B", manager_id=manager_b.id)
 
@@ -64,7 +63,7 @@ async def test_overview_scope_filters_by_manager(
 async def test_project_hours_are_clipped_to_the_query_month_for_a_straddling_week(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    manager = await make_user(roles=MANAGER)
     worker = await make_user()
     project = await make_project(manager_id=manager.id)
     await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
@@ -103,7 +102,7 @@ async def test_project_hours_are_clipped_to_the_query_month_for_a_straddling_wee
 async def test_status_counts_reflect_current_members_across_all_weeks_in_scope(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    manager = await make_user(roles=MANAGER)
     worker = await make_user()
     project = await make_project(manager_id=manager.id)
     await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
@@ -134,7 +133,7 @@ async def test_status_counts_reflect_current_members_across_all_weeks_in_scope(
 async def test_warning_flags_a_member_with_no_entries_on_the_project(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    manager = await make_user(roles=MANAGER)
     worker = await make_user()
     project = await make_project(manager_id=manager.id)
     await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
@@ -151,7 +150,7 @@ async def test_warning_flags_a_member_with_no_entries_on_the_project(
 async def test_warning_flags_a_member_under_expected_hours(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    manager = await make_user(roles=MANAGER)
     worker = await make_user()
     project = await make_project(manager_id=manager.id)
     await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
@@ -181,7 +180,7 @@ async def test_warning_flags_a_member_under_expected_hours(
 async def test_removed_member_is_still_listed_with_is_member_false(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    manager = await make_user(roles=MANAGER)
     worker = await make_user()
     project = await make_project(manager_id=manager.id)
     await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
@@ -212,7 +211,7 @@ async def test_removed_member_is_still_listed_with_is_member_false(
 async def test_billing_readiness_not_ready_with_no_entries(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    manager = await make_user(roles=MANAGER)
     await make_project(manager_id=manager.id)
 
     overview = await bus.query(
@@ -228,7 +227,7 @@ async def test_billing_readiness_not_ready_with_no_entries(
 async def test_billing_readiness_blocked_by_an_unapproved_week(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    manager = await make_user(roles=MANAGER)
     worker = await make_user()
     project = await make_project(manager_id=manager.id)
     await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
@@ -258,8 +257,8 @@ async def test_billing_readiness_blocked_by_an_unapproved_week(
 async def test_billing_readiness_ready_once_every_week_in_scope_is_approved(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
-    admin = await make_user(role=UserRole.ADMIN)
+    manager = await make_user(roles=MANAGER)
+    admin = await make_user(roles=ADMIN)
     worker = await make_user()
     project = await make_project(manager_id=manager.id)
     await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
@@ -295,7 +294,7 @@ async def test_billing_readiness_ready_once_every_week_in_scope_is_approved(
 async def test_billing_status_is_sent_once_a_period_has_been_sent(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    manager = await make_user(roles=MANAGER)
     worker = await make_user()
     project = await make_project(manager_id=manager.id)
     await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))

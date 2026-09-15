@@ -15,6 +15,7 @@ from support import (
     DEFAULT_BILLING_ADDRESS,
     DEFAULT_BILLING_PERIOD,
     DEFAULT_PASSWORD,
+    EMPLOYEE,
     AuthHeaders,
     CustomerFactory,
     ProjectFactory,
@@ -72,7 +73,7 @@ def make_user(bus: Bus) -> UserFactory:
 
     async def factory(
         *,
-        role: UserRole = UserRole.WORKER,
+        roles: frozenset[UserRole] = EMPLOYEE,
         email: str | None = None,
         name: str = "Test User",
         password: str = DEFAULT_PASSWORD,
@@ -83,7 +84,7 @@ def make_user(bus: Bus) -> UserFactory:
             CreateUser(
                 name=name,
                 email=email or f"user{created}@example.com",
-                role=role,
+                roles=roles,
                 password=password,
             )
         )

@@ -29,7 +29,7 @@ def to_dto(user: User) -> UserDTO:
         id=user.id,
         name=user.name,
         email=user.email,
-        role=user.role,
+        roles=frozenset(user.roles),
         is_active=user.is_active,
         token_version=user.token_version,
         last_login_at=user.last_login_at,
@@ -101,7 +101,7 @@ class _CommandHandler:
 class CreateUserHandler(_CommandHandler):
     async def handle(self, command: CreateUser) -> UserDTO:
         user = await self._service.create_user(
-            name=command.name, email=command.email, role=command.role, password=command.password
+            name=command.name, email=command.email, roles=command.roles, password=command.password
         )
         return to_dto(user)
 
@@ -113,7 +113,7 @@ class UpdateUserHandler(_CommandHandler):
             acting_user_id=command.acting_user_id,
             name=command.name,
             email=command.email,
-            role=command.role,
+            roles=command.roles,
             is_active=command.is_active,
         )
         return to_dto(user)

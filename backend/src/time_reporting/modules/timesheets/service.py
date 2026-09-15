@@ -64,7 +64,6 @@ from time_reporting.modules.work_calendar.contracts import GetCalendarDays
 _WEEK_LENGTH_DAYS = 7
 _EDITABLE_STATUSES = frozenset({TimesheetWeekStatus.DRAFT, TimesheetWeekStatus.RETURNED})
 _REVIEWABLE_STATUSES = frozenset({TimesheetWeekStatus.SUBMITTED, TimesheetWeekStatus.APPROVED})
-_MANAGER_ROLES = frozenset({UserRole.ADMIN, UserRole.PROJECT_MANAGER})
 
 
 class TimesheetService:
@@ -145,9 +144,9 @@ class TimesheetService:
         is_locked = any(locked_dates_by_project.values())
         can_review = (
             viewer is not None
-            and viewer.role in _MANAGER_ROLES
+            and UserRole.MANAGER in viewer.roles
             and status in _REVIEWABLE_STATUSES
-            and not (viewer.role == UserRole.PROJECT_MANAGER and viewer_id == user_id)
+            and not (UserRole.ADMIN not in viewer.roles and viewer_id == user_id)
             and not is_locked
         )
 
@@ -295,7 +294,7 @@ class TimesheetService:
 
     @staticmethod
     def _ensure_not_self_review(reviewer: UserDTO | None, user_id: UUID, reviewer_id: UUID) -> None:
-        if reviewer_id == user_id and (reviewer is None or reviewer.role != UserRole.ADMIN):
+        if reviewer_id == user_id and (reviewer is None or UserRole.ADMIN not in reviewer.roles):
             raise SelfReviewError()
 
     async def _reviewer_name(self, week_row: TimesheetWeek | None) -> str | None:

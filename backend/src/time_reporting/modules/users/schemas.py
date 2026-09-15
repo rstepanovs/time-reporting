@@ -18,7 +18,7 @@ class UserCreateRequest(BaseModel):
 
     name: UserName
     email: EmailStr
-    role: UserRole
+    roles: frozenset[UserRole]
     password: NewPassword
 
 
@@ -29,7 +29,7 @@ class UserUpdateRequest(BaseModel):
 
     name: UserName | None = None
     email: EmailStr | None = None
-    role: UserRole | None = None
+    roles: frozenset[UserRole] | None = None
     is_active: bool | None = None
 
 
@@ -52,7 +52,7 @@ class UserResponse(BaseModel):
     id: UUID
     name: str
     email: str
-    role: UserRole
+    roles: frozenset[UserRole]
     is_active: bool
     last_login_at: datetime | None
     created_at: datetime
@@ -76,4 +76,4 @@ class UserSummaryResponse(BaseModel):
     id: UUID
     name: str
     email: str
-    role: UserRole
+    roles: frozenset[UserRole]

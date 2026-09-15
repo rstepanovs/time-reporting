@@ -132,7 +132,7 @@ class ProjectMemberDTO:
     user_id: UUID
     name: str
     email: str
-    role: UserRole
+    roles: frozenset[UserRole]
     is_active: bool
     added_at: datetime
 
@@ -417,8 +417,7 @@ class ProjectManagerNotFoundError(ProjectError):
 
 
 class ProjectManagerNotEligibleError(ProjectError):
-    """Raised when the given user is inactive or has neither the ``admin`` nor the
-    ``project_manager`` role."""
+    """Raised when the given user is inactive or does not hold the ``manager`` access level."""
 
     def __init__(self, user_id: UUID) -> None:
         super().__init__(f"User {user_id} cannot be assigned as a project manager")
