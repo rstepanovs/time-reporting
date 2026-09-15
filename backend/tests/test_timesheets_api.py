@@ -1,3 +1,5 @@
+from datetime import date
+
 import pytest
 from httpx import AsyncClient
 
@@ -194,3 +196,123 @@ async def test_list_timesheet_options_returns_member_projects(
     body = response.json()
     assert [option["project"]["id"] for option in body] == [str(project.id)]
     assert len(body[0]["billing_items"]) == 6
+
+
+async def test_worker_can_read_own_month_calendar_and_year_hours(
+    client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
+) -> None:
+    worker = await make_user(role=UserRole.WORKER)
+    headers = auth_headers(worker)
+
+    calendar = await client.get(
+        "/api/v1/timesheets/calendar", headers=headers, params={"year": 2026, "month": 9}
+    )
+    year = await client.get("/api/v1/timesheets/years/2026", headers=headers)
+
+    assert calendar.status_code == 200
+    assert calendar.json()["user"]["id"] == str(worker.id)
+    assert calendar.json()["year"] == 2026
+    assert calendar.json()["month"] == 9
+    assert year.status_code == 200
+    assert year.json()["user"]["id"] == str(worker.id)
+    assert year.json()["year"] == 2026
+
+
+async def test_worker_cannot_view_someone_elses_calendar_or_year_hours(
+    client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
+) -> None:
+    worker = await make_user(role=UserRole.WORKER)
+    other = await make_user(role=UserRole.WORKER)
+    headers = auth_headers(worker)
+
+    calendar = await client.get(
+        "/api/v1/timesheets/calendar",
+        headers=headers,
+        params={"year": 2026, "month": 9, "user_id": str(other.id)},
+    )
+    year = await client.get(
+        "/api/v1/timesheets/years/2026", headers=headers, params={"user_id": str(other.id)}
+    )
+
+    assert calendar.status_code == 403
+    assert year.status_code == 403
+
+
+@pytest.mark.parametrize("role", [UserRole.ADMIN, UserRole.PROJECT_MANAGER])
+async def test_manager_can_view_someone_elses_calendar_and_year_hours(
+    client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders, role: UserRole
+) -> None:
+    manager_headers = auth_headers(await make_user(role=role))
+    worker = await make_user(role=UserRole.WORKER)
+
+    calendar = await client.get(
+        "/api/v1/timesheets/calendar",
+        headers=manager_headers,
+        params={"year": 2026, "month": 9, "user_id": str(worker.id)},
+    )
+    year = await client.get(
+        "/api/v1/timesheets/years/2026",
+        headers=manager_headers,
+        params={"user_id": str(worker.id)},
+    )
+
+    assert calendar.status_code == 200
+    assert calendar.json()["user"]["id"] == str(worker.id)
+    assert year.status_code == 200
+    assert year.json()["user"]["id"] == str(worker.id)
+
+
+async def test_calendar_and_year_hours_default_to_today(
+    client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
+) -> None:
+    headers = auth_headers(await make_user(role=UserRole.WORKER))
+
+    calendar = await client.get("/api/v1/timesheets/calendar", headers=headers)
+
+    assert calendar.status_code == 200
+    today = date.today()
+    assert calendar.json()["year"] == today.year
+    assert calendar.json()["month"] == today.month
+
+
+async def test_calendar_and_year_hours_for_unknown_user_return_404(
+    client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
+) -> None:
+    admin_headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    unknown_user_id = "00000000-0000-0000-0000-000000000000"
+
+    calendar = await client.get(
+        "/api/v1/timesheets/calendar",
+        headers=admin_headers,
+        params={"year": 2026, "month": 9, "user_id": unknown_user_id},
+    )
+    year = await client.get(
+        "/api/v1/timesheets/years/2026",
+        headers=admin_headers,
+        params={"user_id": unknown_user_id},
+    )
+
+    assert calendar.status_code == 404
+    assert year.status_code == 404
+
+
+async def test_calendar_and_year_hours_reject_out_of_range_query_params(
+    client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
+) -> None:
+    headers = auth_headers(await make_user(role=UserRole.WORKER))
+
+    bad_month = await client.get(
+        "/api/v1/timesheets/calendar", headers=headers, params={"year": 2026, "month": 13}
+    )
+    bad_year = await client.get("/api/v1/timesheets/years/1999", headers=headers)
+
+    assert bad_month.status_code == 422
+    assert bad_year.status_code == 422
+
+
+async def test_calendar_and_year_hours_require_authentication(client: AsyncClient) -> None:
+    calendar = await client.get("/api/v1/timesheets/calendar")
+    year = await client.get("/api/v1/timesheets/years/2026")
+
+    assert calendar.status_code == 401
+    assert year.status_code == 401

@@ -128,3 +128,76 @@ class SaveTimesheetWeekRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     changes: list[TimeEntryChangeRequest]
+
+
+class HoursTotalsResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    normal_hours: Decimal
+    overtime_hours: Decimal
+    travel_hours: Decimal
+    other_hours: Decimal
+    total_hours: Decimal
+
+
+class CalendarDayHoursResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    calendar_day: CalendarDayResponse
+    in_month: bool
+    is_working_day: bool
+    expected_hours: Decimal
+    hours: Decimal
+
+
+class CalendarWeekHoursResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    week_start: date
+    iso_week: int
+    days: list[CalendarDayHoursResponse]
+    expected_hours: Decimal
+    hours: Decimal
+
+
+class MonthCalendarResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user: TimesheetUserResponse
+    year: int
+    month: int
+    weeks: list[CalendarWeekHoursResponse]
+    expected_hours: Decimal
+    expected_hours_to_date: Decimal
+    hours: Decimal
+
+
+class ProjectHoursResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    project: TimesheetProjectResponse
+    totals: HoursTotalsResponse
+
+
+class MonthHoursResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    year: int
+    month: int
+    is_current: bool
+    working_days: int
+    expected_hours: Decimal
+    expected_hours_to_date: Decimal
+    totals: HoursTotalsResponse
+    projects: list[ProjectHoursResponse]
+
+
+class YearHoursResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user: TimesheetUserResponse
+    year: int
+    months: list[MonthHoursResponse]
+    expected_hours: Decimal
+    expected_hours_to_date: Decimal
+    totals: HoursTotalsResponse
