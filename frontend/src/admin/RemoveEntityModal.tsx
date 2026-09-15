@@ -23,6 +23,8 @@ function blockerReason(kind: RemovalCount["kind"], count: number): string {
       return "You cannot delete your own account.";
     case "projects":
       return `Has ${count} project${count === 1 ? "" : "s"}. Delete or reassign them first.`;
+    case "time_entries":
+      return `Has ${count} time ${count === 1 ? "entry" : "entries"} booked against it.`;
     default:
       return "This record is referenced by other data.";
   }
@@ -38,6 +40,8 @@ function effectPhrase(kind: RemovalCount["kind"], count: number): string {
       return `${count} project membership${count === 1 ? "" : "s"}`;
     case "project_members":
       return `${count} project member${count === 1 ? "" : "s"}`;
+    case "project_billing_items":
+      return `${count} billing item${count === 1 ? "" : "s"}`;
     default:
       return `${count} related record${count === 1 ? "" : "s"}`;
   }

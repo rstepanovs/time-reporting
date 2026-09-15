@@ -79,6 +79,8 @@ class ListUsers(Query[UserPageDTO]):
     # Case-insensitive substring match against name or email.
     search: str | None = None
     include_inactive: bool = True
+    # Restrict to these roles; empty/``None`` means any role.
+    roles: frozenset[UserRole] | None = None
 
 
 # --- Commands ---

@@ -10,6 +10,7 @@ from support import DEFAULT_PASSWORD, UserFactory
 from time_reporting.cli import create_admin, main
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.users.contracts import EmailAlreadyExistsError, UserDTO, UserRole
+from time_reporting.modules.work_calendar.contracts import HolidayCountryNotSupportedError
 
 # --- create_admin(): the create-admin path through the bus, against a real (rolled-back) DB ---
 
@@ -140,3 +141,39 @@ def test_duplicate_email_from_the_database_is_reported(
 
     assert exit_code == 1
     assert "already exists" in capsys.readouterr().err
+
+
+# --- import-holidays ---
+
+
+def _stub_holiday_import(monkeypatch: pytest.MonkeyPatch, outcome: int | Exception) -> None:
+    async def fake_import_holidays_in_database(*, year: int) -> int:
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    monkeypatch.setattr(
+        "time_reporting.cli._import_holidays_in_database", fake_import_holidays_in_database
+    )
+
+
+def test_import_holidays_prints_the_added_count(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _stub_holiday_import(monkeypatch, 9)
+
+    exit_code = main(["import-holidays", "--year", "2026"])
+
+    assert exit_code == 0
+    assert "Added 9 public holiday(s) for 2026" in capsys.readouterr().out
+
+
+def test_import_holidays_reports_unsupported_country(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _stub_holiday_import(monkeypatch, HolidayCountryNotSupportedError("ZZ", None))
+
+    exit_code = main(["import-holidays", "--year", "2026"])
+
+    assert exit_code == 1
+    assert "not supported" in capsys.readouterr().err

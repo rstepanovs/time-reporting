@@ -13,14 +13,16 @@ import {
 export const userKeys = {
   all: ["users"] as const,
   list: (params: Parameters<typeof listUsers>[0]) => [...userKeys.all, "list", params] as const,
-  directory: (search: string) => [...userKeys.all, "directory", search] as const,
+  directory: (search: string, roles?: UserRole[]) =>
+    [...userKeys.all, "directory", search, roles ?? []] as const,
 };
 
-/** Debounce `search` in the caller; this hook just runs the query as given. */
-export function useUserDirectory(search: string) {
+/** Debounce `search` in the caller; this hook just runs the query as given. `roles` narrows the
+ * picker (e.g. to admins/project managers for a project's manager field). */
+export function useUserDirectory(search: string, roles?: UserRole[]) {
   return useQuery({
-    queryKey: userKeys.directory(search),
-    queryFn: () => searchUserDirectory({ search: search || undefined, limit: 20 }),
+    queryKey: userKeys.directory(search, roles),
+    queryFn: () => searchUserDirectory({ search: search || undefined, limit: 20, roles }),
   });
 }
 

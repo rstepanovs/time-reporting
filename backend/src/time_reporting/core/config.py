@@ -1,5 +1,6 @@
 """Application settings loaded from environment variables and an optional ``.env`` file."""
 
+from decimal import Decimal
 from functools import lru_cache
 
 from pydantic import Field, SecretStr
@@ -26,6 +27,16 @@ class Settings(BaseSettings):
     # Browsers send `Secure` cookies only over HTTPS and to http://localhost; disable only when the
     # web client is served over plain HTTP from another host.
     auth_cookie_secure: bool = True
+
+    # ISO 3166-1 alpha-2 country (and optional subdivision, e.g. a German state) whose public
+    # holidays `ImportPublicHolidays` copies from the `holidays` library into the shared calendar.
+    holiday_country: str = "DE"
+    holiday_subdivision: str | None = None
+
+    # Hours a full working day counts as, for the "expected hours" shown against reported time on
+    # the worker dashboard (`timesheets.summary`). Not enforced anywhere — a user may report more
+    # or less on any given day.
+    daily_working_hours: Decimal = Field(default=Decimal("8"), gt=0, le=24)
 
 
 @lru_cache

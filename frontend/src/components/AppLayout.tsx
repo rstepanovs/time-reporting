@@ -15,7 +15,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { Link, Outlet, useLocation } from "react-router";
 
 import { useAuthenticatedUser, useSignOut } from "@/auth/hooks";
-import { isAdmin, roleLabels } from "@/auth/roles";
+import { canManage, isAdmin, roleLabels } from "@/auth/roles";
 
 function AccountMenu() {
   const user = useAuthenticatedUser();
@@ -58,23 +58,34 @@ function AccountMenu() {
 }
 
 const NAV_ITEMS = [
-  { to: "/", label: "Home" },
+  { to: "/", label: "Dashboard" },
+  { to: "/timesheet", label: "Timesheet" },
+  { to: "/hours", label: "My hours" },
   { to: "/projects", label: "Projects" },
 ];
+
+// Shown only to admins/project managers, right after "My hours".
+const APPROVALS_NAV_ITEM = { to: "/approvals", label: "Approvals" };
+const TEAM_NAV_ITEM = { to: "/team", label: "Team" };
 
 const ADMIN_NAV_ITEMS = [
   { to: "/admin/users", label: "Users" },
   { to: "/admin/customers", label: "Customers" },
   { to: "/admin/projects", label: "Projects" },
+  { to: "/admin/calendar", label: "Calendar" },
+  { to: "/admin/status", label: "System status" },
 ];
 
 function Navigation({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
   const user = useAuthenticatedUser();
+  const navItems = canManage(user.role)
+    ? [...NAV_ITEMS.slice(0, 3), APPROVALS_NAV_ITEM, TEAM_NAV_ITEM, ...NAV_ITEMS.slice(3)]
+    : NAV_ITEMS;
 
   return (
     <>
-      {NAV_ITEMS.map((item) => (
+      {navItems.map((item) => (
         <NavLink
           key={item.to}
           component={Link}

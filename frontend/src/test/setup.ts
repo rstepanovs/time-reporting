@@ -34,6 +34,10 @@ class ResizeObserverStub implements ResizeObserver {
 
 window.ResizeObserver = ResizeObserverStub;
 
+// Mantine's Select/Combobox scrolls the active option into view as the keyboard cursor moves;
+// jsdom has no layout engine, so this is a no-op here rather than an unimplemented-method throw.
+Element.prototype.scrollIntoView = () => {};
+
 // Mantine's autosizing Textarea listens for font-loading to re-measure; jsdom has no FontFaceSet.
 if (!document.fonts) {
   Object.defineProperty(document, "fonts", {

@@ -78,11 +78,12 @@ class ListUsersHandler(_QueryHandler):
             offset=query.offset,
             search=query.search,
             include_inactive=query.include_inactive,
+            roles=query.roles,
         )
         return UserPageDTO(
             items=tuple(to_dto(user) for user in users),
             total=await self._users.count(
-                search=query.search, include_inactive=query.include_inactive
+                search=query.search, include_inactive=query.include_inactive, roles=query.roles
             ),
             limit=query.limit,
             offset=query.offset,

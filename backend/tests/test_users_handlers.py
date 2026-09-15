@@ -214,6 +214,26 @@ async def test_list_users_filters_by_search_and_active_status(
     assert {u.id for u in all_including_inactive.items} == {match.id, inactive.id}
 
 
+async def test_list_users_filters_by_roles(bus: Bus, make_user: UserFactory) -> None:
+    admin = await make_user(role=UserRole.ADMIN, name="Ada Admin", email="ada-roles@example.com")
+    manager = await make_user(
+        role=UserRole.PROJECT_MANAGER, name="Mark Manager", email="mark-roles@example.com"
+    )
+    await make_user(role=UserRole.WORKER, name="Wendy Worker", email="wendy-roles@example.com")
+
+    page = await bus.query(
+        ListUsers(
+            limit=100,
+            offset=0,
+            roles=frozenset({UserRole.ADMIN, UserRole.PROJECT_MANAGER}),
+        )
+    )
+
+    ids = {u.id for u in page.items}
+    assert admin.id in ids
+    assert manager.id in ids
+
+
 async def test_list_users_search_treats_wildcards_as_literal(
     bus: Bus, make_user: UserFactory
 ) -> None:

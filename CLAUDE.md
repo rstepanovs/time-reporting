@@ -5,9 +5,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project
 
 Time tracking with subsequent billing. Monorepo containing a Python API (`backend/`) and a React web
-client (`frontend/`). Infrastructure, a health-check endpoint, and user accounts with JWT
-authentication exist, as do customers and their projects; the remaining domain models (time
-entries, invoices) do not yet.
+client (`frontend/`). Infrastructure, a health-check endpoint, user accounts with JWT authentication,
+customers and their projects, a shared non-working-day calendar, and weekly timesheets all exist;
+the remaining domain model (invoices) does not yet.
+
+Detailed notes live next to the code and load only when files in that directory are read:
+`backend/src/time_reporting/modules/<module>/CLAUDE.md` for each backend module and
+`frontend/src/<area>/CLAUDE.md` for each frontend area (`pages/CLAUDE.md` maps each page to the area
+that documents it). Repeatable procedures are project skills in `.claude/skills/` (committing,
+opening a PR, seeding demo data).
 
 ## Commands
 
@@ -27,9 +33,9 @@ uv run ruff format .                                             # format
 uv run mypy                                                      # type check (strict)
 uv run alembic -c backend/alembic.ini upgrade head               # apply migrations
 uv run alembic -c backend/alembic.ini revision --autogenerate -m "describe change"
-uv run time-reporting create-admin --email you@example.com --name "You"   # first admin account
-uv run time-reporting seed-demo                                  # demo users (password demo-password) + customers
 ```
+
+Seeding (`create-admin`, `seed-demo`, `import-holidays`) is covered by the `seed-test-data` skill.
 
 ### Frontend (run from `frontend/`)
 
@@ -75,12 +81,13 @@ head`) → `backend` → `frontend` (nginx, proxies `/api/` to `backend`).
 - **`migrations/env.py`** — async Alembic environment; reads the DB URL from `Settings`, not from
   `alembic.ini`, so it always agrees with the running app.
 - **`cli.py`** — the `time-reporting` console script (`[project.scripts]` in `backend/pyproject.toml`);
-  `create-admin` and `seed-demo`, each run through a `Bus` built the same way as in a request.
-- **`seed.py`** — demo data for local development (one user per role, sharing the password
-  `demo-password`, active and archived customers, and a few projects with members per customer).
-  Idempotent: existing emails/customer or project names are skipped. Projects are created for each
-  customer before it is archived (creating a project requires an active customer); tests seed
-  uniquely renamed copies, because the test database doubles as the dev database.
+  `create-admin`, `seed-demo` and `import-holidays`, each run through a `Bus` built the same way as in
+  a request.
+- **`seed.py`** — idempotent demo data for local development; tests seed uniquely renamed copies,
+  because the test database doubles as the dev database. Details: the `seed-test-data` skill.
+- **Shared kernel** (not owned by a module): `core/passwords.py` (Argon2id via `pwdlib`, hashing off
+  the event loop in a thread), `db/queries.py` (`escape_like` — a literal, non-wildcard `ILIKE`
+  pattern from user input) and `db/mixins.py:TimestampMixin` (`created_at`/`updated_at`).
 
 ### Feature modules (`modules/`) and the CQRS bus
 
@@ -89,7 +96,9 @@ Domain functionality lives in self-contained modules under `modules/<name>/`, ea
 and `router.py`. **A module may import from another module only its `contracts.py`** (plus
 `auth.dependencies` for the HTTP route guards every router needs) — never another module's `models`,
 `repository` or `service` directly. `tests/test_module_boundaries.py` enforces this with an AST check
-over every file in `modules/`.
+over every file in `modules/`. Cross-module display data is fetched via batch queries
+(`GetCustomersByIds`, `GetUsersByIds`, ...) rather than joining across modules; a model references
+another module's table by table name only.
 
 Modules talk to each other exclusively through the in-process CQRS bus in `core/cqrs.py`:
 - `Command[R]` / `Query[R]` are typed messages; concrete ones live in each module's `contracts.py`
@@ -103,70 +112,18 @@ Modules talk to each other exclusively through the in-process CQRS bus in `core/
   repositories only `flush()`. Query handlers must not call `execute()`.
 - `api/deps.py:BusDep` builds a request-scoped `Bus`; `cli.py` builds one per invocation the same way.
 
-The **users** module (`modules/users/`) owns the `User` entity, roles (`UserRole`: `admin`,
-`project_manager`, `worker`) and account management (admin CRUD, `/users/me`, password change/reset).
-The **auth** module (`modules/auth/`) owns JWT issuing/validation and login, and reaches user data only
-through `users.contracts` messages (`GetUserCredentialsByEmail`, `RecordSuccessfulLogin`, ...) — it never
-imports `users.models` or `users.repository`. `auth/dependencies.py` (`CurrentUserDep`, `require_roles`,
-`AdminDep`, `ManagerDep`) is the one exception to the "only `contracts.py`" rule: every protected
-router depends on it directly. Role and `is_active` are re-read from the database on every request (via
-the token's `sub`), not trusted from the token, so deactivation/role/password changes take effect
-immediately — enforced by comparing the token's `ver` claim against the user's current
-`token_version`, which password changes/resets increment.
+Modules (each documented in its own `CLAUDE.md`):
+- **`users`** — `User`, roles (`admin`/`project_manager`/`worker`), account management, user directory.
+- **`auth`** — JWT issuing/validation, login/session cookie, route guards (`auth/dependencies.py`).
+- **`customers`** — `Customer`: legal details, billing address/period, currency, payment terms.
+- **`projects`** — `Project`, `ProjectMember`, `ProjectBillingItem`, a project's `manager_id`.
+- **`work_calendar`** — `NonWorkingDay`: the company-wide holiday calendar.
+- **`timesheets`** — `TimeEntry`, the weekly submit/approve workflow, dashboards, team overview,
+  billing handoff and locking.
+- **`admin`** — no tables; orchestrates archiving/permanent deletion of users, customers, projects.
 
-The **customers** module (`modules/customers/`) owns the `Customer` entity: name, legal details, a
-structured billing address (ISO 3166-1 alpha-2 country), a billing period (`interval_count` ×
-`BillingIntervalUnit`, counted from `anchor_date`), currency (ISO 4217) and payment terms. Any
-authenticated user can read them; writes require `ManagerDep` (`admin` or `project_manager`).
-`UpdateCustomer` treats `None` as "unchanged"; optional text fields are cleared by naming them in
-`clear_fields`, which the router fills from fields sent as JSON `null`. `ListCustomers` filters by a
-`search` substring against name or legal name. Deleting is archive-by-default, permanent-on-request
-— see the **admin** module below; `DeleteCustomer` (permanent) fails with `CustomerInUseError` while
-the customer still has any project.
-
-The **projects** module (`modules/projects/`) owns the `Project` entity (belongs to one `Customer`,
-`customer_id` immutable after creation) and `ProjectMember`, a plain user↔project link with no
-per-project role. Project names are unique per customer, not globally. Creating a project, or
-reactivating one, requires its customer to currently be active, but archiving a customer does not
-cascade to its projects. Only active users can be added as members, and only to an active project; a
-member later deactivated stays listed (with `is_active=false`) rather than disappearing. Access
-follows customers: any authenticated user can read projects and members, `ManagerDep` is required to
-create/update projects and to add/remove members. `ListProjects` filters by `customer_id`,
-`member_id` and a `search` substring against the name. Cross-module display data (a project's
-customer name, a member's name and email) is fetched via batch queries — `GetCustomersByIds` /
-`GetUsersByIds` in the respective modules' `contracts.py` — rather than joining across modules;
-`Project`/`ProjectMember` reference `customers.id` / `users.id` by table name only, never by
-importing those modules' `models`. `DeleteProject` (permanent) cascades to its members (FK
-`ON DELETE CASCADE`).
-
-The **users** module also exposes `GET /users/directory` (`ManagerDep`): a minimal, active-only,
-search-filtered user list for pickers (e.g. adding a project member), since `GET /users` itself is
-admin-only. Both `users.ListUsers` and `customers.ListCustomers`-style listing now support this
-through repository-level search helpers; `db/queries.py:escape_like` is the shared kernel helper for
-building a literal (non-wildcard) `ILIKE` pattern from user input, reused by both modules.
-`DeleteUser` (permanent) rejects deleting yourself and fails with `UserInUseError` while the user is
-still a project member; `RemoveUserFromAllProjects` clears its memberships first (see below).
-
-The **admin** module (`modules/admin/`) owns no tables — it orchestrates archiving or permanently
-deleting a user, customer or project by calling the owning module's commands, reached only through
-`users.contracts` / `customers.contracts` / `projects.contracts`. `RemoveUser` / `RemoveCustomer` /
-`RemoveProject` (`AdminDep` only, under `/admin`) default to archiving (the same
-`UpdateUser`/`UpdateCustomer`/`UpdateProject` a manager already uses) and, with `permanent=True`,
-permanently delete once nothing blocks it: a customer with any project, or a user deleting
-themselves, raise `RemovalBlockedError` / `SelfRemovalError` (409 / 400) without changing anything;
-deleting a user first removes its project memberships (`RemoveUserFromAllProjects`) so the
-`ON DELETE RESTRICT` foreign key doesn't get in the way, and deleting a project cascades to its
-members. `GetUserRemovalImpact` / `GetCustomerRemovalImpact` / `GetProjectRemovalImpact` report what
-a permanent delete would affect (`blockers`, `effects`) before the user confirms; they're built only
-from each module's own contract queries (`ListProjects`, `ListProjectMembers`), never new
-cross-module queries. A same-outer-command failure (e.g. the delete itself fails after memberships
-were already removed) rolls back the whole `RemoveUser` command, per the bus's transaction rule.
-Archiving stays reachable directly through the owning module's existing `PATCH` endpoint too
-(`ManagerDep`); only the permanent-delete path is admin-only.
-
-`core/passwords.py` (Argon2id via `pwdlib`, hashing off the event loop in a thread), `db/queries.py`
-(`escape_like`) and `db/mixins.py:TimestampMixin` (`created_at`/`updated_at`) are shared kernel, not
-owned by a module.
+Permanently deleting any entity is admin-only and goes through the `admin` module; archiving uses the
+owning module's `PATCH` endpoint (`ManagerDep`).
 
 ### Frontend (`frontend/src/`)
 
@@ -176,61 +133,32 @@ owned by a module.
   `/api/v1` prefix. A middleware sends the `X-Requested-With` CSRF header on every request and, on any
   401, marks the app signed out (sets the `currentUserQueryKey` query data to `null`).
 - **`api/queryClient.ts`** — shared TanStack Query `QueryClient`.
-- **`auth/`** — the web session: `api.ts` (current user, sign in/out, password change, typed errors),
-  `hooks.ts` (`useCurrentUser`, `useAuthenticatedUser`, `useSignIn`, `useSignOut`, `useChangePassword`)
-  and `RequireAuth.tsx` (route guard redirecting to `/login` with the page to return to). Signing in or
-  out drops every cached query, so no data leaks between users; explicit sign-out and password change
-  navigate to `/login` with `flushSync`, so the next sign-in does not return to the page left behind.
-- **`customers/`** / **`users/`** — `api.ts` (typed calls for the endpoints each module needs, plus
-  their own conflict/rule/not-found error classes — `CustomerConflictError`/`UserEmailConflictError`
-  (409), `UserRuleError` (400), `CustomerNotFoundError`/`UserNotFoundError` (404)) and `hooks.ts`
-  (`customerKeys`/`userKeys` + list/detail queries and create/update mutations, e.g. `useCustomers`,
-  `useCreateCustomer`, `useUpdateCustomer`, `useUsers`, `useCreateUser`, `useUpdateUser`,
-  `useResetUserPassword`, `useUserDirectory`). `CustomerFormModal.tsx` (customers/) and
-  `UserFormModal.tsx` + `ResetPasswordModal.tsx` (users/) are the create/edit forms the `/admin`
-  pages use; elsewhere (e.g. the projects customer picker) only the read-only `useCustomers` is
-  needed.
-- **`projects/`** — `api.ts` (typed calls for all `/projects` endpoints plus `ProjectConflictError`
-  (409) / `ProjectRuleError` (400, backend `detail` as the message) / `ProjectNotFoundError` (404)),
-  `hooks.ts` (`projectKeys` + `useProjects`/`useProject`/`useProjectMembers` queries and
-  `useCreateProject`/`useUpdateProject`/`useAddProjectMember`/`useRemoveProjectMember` mutations, all
-  invalidating `projectKeys.all` on success), and `ProjectFormModal.tsx` (shared create/edit form used
-  by `pages/ProjectsPage.tsx`, `pages/ProjectDetailsPage.tsx` and `pages/admin/AdminProjectsPage.tsx`;
-  an optional `onCreated` callback lets the admin page stay put instead of navigating to the new
-  project).
-- **`admin/`** — the shared archive-or-delete UI for all three entities: `api.ts`
-  (`getRemovalImpact`/`removeEntity` against `/api/v1/admin/...`, plus `RemovalBlockedError` (409,
-  carries `blockers`), `RemovalRuleError` (400) and `RemovalNotFoundError` (404)), `hooks.ts`
-  (`useRemovalImpact` — fetched only while a dialog is open — and `useRemoveEntity`, which also
-  invalidates the projects lists for users/customers), and `RemoveEntityModal.tsx`: archives by
-  default, offers a "Delete permanently" checkbox disabled with the blocking reason when other data
-  references the record, and shows what else a permanent delete would remove once checked.
-- **`auth/roles.ts`** — `canManage` (admin or project manager) and `isAdmin`; `auth/RequireRole.tsx`
-  renders its children only for a signed-in user with one of the given roles, the plain not-found
-  page otherwise (so a non-admin can't tell `/admin` exists), and must be nested inside `RequireAuth`.
-- **`pages/admin/`** — `AdminUsersPage`/`AdminCustomersPage`/`AdminProjectsPage`: each lists its
-  entity with a debounced search and an archived/inactive toggle, and a per-row menu (Edit,
-  role/entity-specific actions like Reset password or Restore, Remove… via `RemoveEntityModal`). An
-  admin cannot edit their own role/active status or remove themselves from `AdminUsersPage`.
+- **Feature areas** — `auth/`, `customers/`, `users/`, `projects/`, `calendar/`, `timesheets/`,
+  `admin/`: each typically has `api.ts` (typed calls plus the area's own error classes mapped from
+  HTTP status codes, with the backend's `detail` as the message where it's user-facing), `hooks.ts`
+  (a `<area>Keys` query-key factory plus TanStack Query queries/mutations) and its modals/components.
+  Each area's `CLAUDE.md` has the details.
 - **`router.tsx`** — route tree (`routes`, also used by tests): `/login` is public, everything else sits
-  under `RequireAuth` → `AppLayout`. Page components live in `pages/`, shared chrome in `components/`.
-  `/admin/{users,customers,projects}` sit under `RequireRole roles={["admin"]}`, with `/admin`
-  redirecting to `/admin/users`.
+  under `RequireAuth` → `AppLayout`. Page components live in `pages/` (see `pages/CLAUDE.md`), shared
+  chrome in `components/`. `/` (`DashboardPage`) is the default landing page; `/timesheet` (query
+  params `week`/`user`), `/hours` (`month`), `/projects`, `/projects/:projectId`,
+  `/account/password`; `/approvals` and `/team`
+  sit under `RequireRole roles={["admin","project_manager"]}`;
+  `/admin/{users,customers,projects,calendar,status}` sit under `RequireRole roles={["admin"]}`, with
+  `/admin` redirecting to `/admin/users`.
 - **`components/AppLayout.tsx`** — the signed-in shell: header with the account menu and an
-  `AppShell.Navbar` (collapsible on mobile via a `Burger`) linking to the pages in `pages/`, plus an
-  "Administration" nav group (Users/Customers/Projects) shown only when `isAdmin(user.role)`.
+  `AppShell.Navbar` (collapsible on mobile via a `Burger`) linking to the pages in `pages/`
+  (Dashboard, Timesheet, My hours, Projects, in that order — plus Approvals then Team, inserted
+  right after My hours, shown only when `canManage(user.role)`), plus an "Administration" nav group
+  (Users/Customers/Projects/Calendar/System status) shown only when `isAdmin(user.role)`.
+  `components/DashboardCard.tsx` is the shared frame the dashboard's widget cards render inside
+  (title, content, an optional "Details →" style footer link, a highlight tint via
+  `data-highlighted`).
 - **`App.tsx`** — top-level provider composition: `MantineProvider` → `DatesProvider` →
   `QueryClientProvider` → `RouterProvider` (imported from `react-router/dom`, which `flushSync`
   navigation requires).
-- **`test/setup.ts`** — Vitest setup (jsdom polyfills for `matchMedia`/`ResizeObserver`/`document.fonts`
-  that Mantine needs, RTL cleanup, and cleaning `@mantine/notifications`'s module-level queue — it
-  outlives the React tree, so a toast shown in one test would otherwise still be queued when the next
-  test's `<Notifications />` mounts). Wired in via `vite.config.ts`'s `test.setupFiles`.
-  `test/renderApp.tsx` renders the full route tree in a memory router with a fresh `QueryClient`;
-  tests mock `@/auth/api` and whichever of `@/projects/api` / `@/customers/api` / `@/users/api` /
-  `@/admin/api` the page under test calls. Mantine's `Select` renders an input with
-  `role="combobox"`, not `"textbox"`; a required field's `<label>` includes a trailing `*`, so match
-  it with a prefix regex (e.g. `getByLabelText(/^name/i)`) rather than the exact label text.
+- **`test/`** — Vitest setup and the `renderApp` helper; see `test/CLAUDE.md` before writing a
+  frontend test.
 
 ### API convention
 
@@ -253,6 +181,9 @@ URL is hardcoded in the frontend.
   `DELETE /auth/session` clears it. `get_current_user` accepts a bearer header (which wins) or that
   cookie; cookie-authenticated unsafe requests (not GET/HEAD/OPTIONS) must also carry `X-Requested-With`
   or get 403 (CSRF defense). Signing out only clears the cookie — the JWT stays valid until it expires.
+- Route guards every router uses: `auth/dependencies.py` — `CurrentUserDep`, `require_roles`,
+  `AdminDep`, `ManagerDep` (`admin` or `project_manager`). Role and `is_active` are re-read from the
+  database on every request, so deactivation/role/password changes take effect immediately.
 - Tests need a running, migrated Postgres (`docker compose up -d db`, then `alembic upgrade head`):
   `tests/conftest.py`'s `db_session` fixture runs each test in a rolled-back transaction on a real
   connection, so there is no SQLite/mock fallback.
@@ -265,3 +196,5 @@ URL is hardcoded in the frontend.
 - TypeScript is pinned to `~5.9` (not the latest major) because `typescript-eslint` requires `<6.1` and
   `openapi-typescript` requires `^5.x`.
 - Node 24 is required (see `frontend/.nvmrc`) — `react-router@8` and `jsdom@30` need Node ≥ 22.22.
+- `@mantine/charts` (a `recharts` wrapper) renders the dashboard's hours-per-week chart; its CSS is
+  imported once in `main.tsx` alongside Mantine's other stylesheets.

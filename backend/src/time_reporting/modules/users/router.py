@@ -18,6 +18,7 @@ from time_reporting.modules.users.contracts import (
     SelfModificationError,
     UpdateUser,
     UserNotFoundError,
+    UserRole,
 )
 from time_reporting.modules.users.schemas import (
     PasswordChangeRequest,
@@ -102,9 +103,19 @@ async def search_user_directory(
     bus: BusDep,
     search: Annotated[str | None, Query(max_length=255)] = None,
     limit: Annotated[int, Query(ge=1, le=50)] = 20,
+    role: Annotated[list[UserRole] | None, Query()] = None,
 ) -> list[UserSummaryResponse]:
-    """Minimal, active-only user list for pickers (e.g. adding a project member)."""
-    page = await bus.query(ListUsers(limit=limit, offset=0, search=search, include_inactive=False))
+    """Minimal, active-only user list for pickers (e.g. adding a project member or a project
+    manager, the latter via ``role=admin&role=project_manager``)."""
+    page = await bus.query(
+        ListUsers(
+            limit=limit,
+            offset=0,
+            search=search,
+            include_inactive=False,
+            roles=frozenset(role) if role else None,
+        )
+    )
     return [UserSummaryResponse.model_validate(user) for user in page.items]
 
 

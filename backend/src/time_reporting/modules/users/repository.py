@@ -9,13 +9,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from time_reporting.db.queries import escape_like
-from time_reporting.modules.users.contracts import EmailAlreadyExistsError, UserInUseError
+from time_reporting.modules.users.contracts import EmailAlreadyExistsError, UserInUseError, UserRole
 from time_reporting.modules.users.models import User
 
 _EMAIL_UNIQUE_CONSTRAINT = "uq_users_email"
-# The project_members.user_id foreign key (RESTRICT); referenced by table/constraint name only,
-# never by importing the projects module.
-_MEMBERSHIP_FK_CONSTRAINT = "fk_project_members_user_id_users"
 
 
 def normalize_email(email: str) -> str:
@@ -44,10 +41,18 @@ class UserRepository:
         return result.all()
 
     async def get_page(
-        self, *, limit: int, offset: int, search: str | None, include_inactive: bool
+        self,
+        *,
+        limit: int,
+        offset: int,
+        search: str | None,
+        include_inactive: bool,
+        roles: frozenset[UserRole] | None = None,
     ) -> Sequence[User]:
         statement = (
-            self._filtered(select(User), search=search, include_inactive=include_inactive)
+            self._filtered(
+                select(User), search=search, include_inactive=include_inactive, roles=roles
+            )
             .order_by(User.created_at, User.id)
             .limit(limit)
             .offset(offset)
@@ -55,18 +60,34 @@ class UserRepository:
         result = await self._session.scalars(statement)
         return result.all()
 
-    async def count(self, *, search: str | None, include_inactive: bool) -> int:
+    async def count(
+        self,
+        *,
+        search: str | None,
+        include_inactive: bool,
+        roles: frozenset[UserRole] | None = None,
+    ) -> int:
         statement = self._filtered(
-            select(func.count()).select_from(User), search=search, include_inactive=include_inactive
+            select(func.count()).select_from(User),
+            search=search,
+            include_inactive=include_inactive,
+            roles=roles,
         )
         result = await self._session.execute(statement)
         return result.scalar_one()
 
     def _filtered[T: tuple[Any, ...]](
-        self, statement: Select[T], *, search: str | None, include_inactive: bool
+        self,
+        statement: Select[T],
+        *,
+        search: str | None,
+        include_inactive: bool,
+        roles: frozenset[UserRole] | None,
     ) -> Select[T]:
         if not include_inactive:
             statement = statement.where(User.is_active.is_(True))
+        if roles:
+            statement = statement.where(User.role.in_(roles))
         if search:
             pattern = f"%{escape_like(search)}%"
             statement = statement.where(
@@ -86,12 +107,13 @@ class UserRepository:
             raise
 
     async def delete(self, user: User) -> None:
-        """Delete ``user``. Raises ``UserInUseError`` if it is still a project member."""
+        """Delete ``user``. Raises ``UserInUseError`` if other data (a project membership, a time
+        entry, ...) still references it."""
         user_id = user.id  # read before flush: a failed flush may expire ORM attributes
         await self._session.delete(user)
         try:
             await self._session.flush()
         except IntegrityError as exc:
-            if _MEMBERSHIP_FK_CONSTRAINT in str(exc.orig):
+            if "foreign key constraint" in str(exc.orig):
                 raise UserInUseError(user_id) from exc
             raise

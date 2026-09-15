@@ -5,9 +5,11 @@ import {
   Button,
   Group,
   Loader,
+  Menu,
   Modal,
   Select,
   Stack,
+  Switch,
   Table,
   Text,
   Title,
@@ -18,15 +20,25 @@ import { useState } from "react";
 import { Link, useParams } from "react-router";
 
 import { useAuthenticatedUser } from "@/auth/hooks";
-import { canManage, roleLabels } from "@/auth/roles";
+import { canManage, isAdmin, roleLabels } from "@/auth/roles";
+import { BillingItemFormModal, formatBillingItemPrice } from "@/projects/BillingItemFormModal";
 import { ProjectFormModal } from "@/projects/ProjectFormModal";
-import { ProjectNotFoundError, ProjectRuleError } from "@/projects/api";
+import {
+  type BillingItem,
+  BillingItemInUseError,
+  type Project,
+  ProjectNotFoundError,
+  ProjectRuleError,
+} from "@/projects/api";
 import {
   useAddProjectMember,
+  useDeleteProjectBillingItem,
   useProject,
+  useProjectBillingItems,
   useProjectMembers,
   useRemoveProjectMember,
   useUpdateProject,
+  useUpdateProjectBillingItem,
 } from "@/projects/hooks";
 import { useUserDirectory } from "@/users/hooks";
 
@@ -185,6 +197,255 @@ function AddMemberForm({
   );
 }
 
+function ArchiveBillingItemAction({
+  projectId,
+  item,
+}: {
+  projectId: string;
+  item: BillingItem;
+}) {
+  const updateItem = useUpdateProjectBillingItem(projectId);
+
+  async function handleClick() {
+    try {
+      await updateItem.mutateAsync({ itemId: item.id, body: { is_active: !item.is_active } });
+      notifications.show({
+        title: item.is_active ? "Billing item archived" : "Billing item restored",
+        message: item.name,
+      });
+    } catch (error) {
+      if (error instanceof ProjectRuleError) {
+        notifications.show({
+          color: "red",
+          title: "Could not update billing item",
+          message: error.message,
+        });
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  return (
+    <Menu.Item onClick={() => void handleClick()}>
+      {item.is_active ? "Archive" : "Restore"}
+    </Menu.Item>
+  );
+}
+
+function DeleteBillingItemModal({
+  projectId,
+  item,
+  opened,
+  onClose,
+}: {
+  projectId: string;
+  item: BillingItem;
+  opened: boolean;
+  onClose: () => void;
+}) {
+  const deleteItem = useDeleteProjectBillingItem(projectId);
+  const [blockedReason, setBlockedReason] = useState<string | null>(null);
+
+  function handleClose() {
+    setBlockedReason(null);
+    onClose();
+  }
+
+  async function confirm() {
+    setBlockedReason(null);
+    try {
+      await deleteItem.mutateAsync(item.id);
+      handleClose();
+      notifications.show({ title: "Billing item deleted", message: item.name });
+    } catch (error) {
+      if (error instanceof BillingItemInUseError) {
+        setBlockedReason(error.message);
+        return;
+      }
+      throw error;
+    }
+  }
+
+  return (
+    <Modal opened={opened} onClose={handleClose} title="Delete billing item">
+      <Stack>
+        <Text>
+          Permanently delete <strong>{item.name}</strong>? This cannot be undone.
+        </Text>
+        {blockedReason && (
+          <Alert color="yellow" variant="light">
+            {blockedReason}
+          </Alert>
+        )}
+        <Group justify="flex-end">
+          <Button variant="default" onClick={handleClose}>
+            Cancel
+          </Button>
+          <Button color="red" loading={deleteItem.isPending} onClick={() => void confirm()}>
+            Delete permanently
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+}
+
+function BillingItemRowActions({
+  projectId,
+  currency,
+  item,
+  canDeletePermanently,
+}: {
+  projectId: string;
+  currency: string;
+  item: BillingItem;
+  canDeletePermanently: boolean;
+}) {
+  const [editOpened, { open: openEdit, close: closeEdit }] = useDisclosure(false);
+  // The delete confirmation lives outside <Menu.Dropdown>, like the edit modal above: Mantine
+  // closes (and unmounts) the dropdown as soon as a Menu.Item is clicked, which would tear this
+  // component down — and its "opened" state with it — before the modal ever got to render.
+  const [deleteOpened, { open: openDelete, close: closeDelete }] = useDisclosure(false);
+
+  return (
+    <>
+      <Menu position="bottom-end">
+        <Menu.Target>
+          <Button variant="subtle" size="xs">
+            Actions
+          </Button>
+        </Menu.Target>
+        <Menu.Dropdown>
+          <Menu.Item onClick={openEdit}>Edit</Menu.Item>
+          <ArchiveBillingItemAction projectId={projectId} item={item} />
+          {canDeletePermanently && (
+            <>
+              <Menu.Divider />
+              <Menu.Item color="red" onClick={openDelete}>
+                Delete permanently…
+              </Menu.Item>
+            </>
+          )}
+        </Menu.Dropdown>
+      </Menu>
+      {editOpened && (
+        <BillingItemFormModal
+          mode="edit"
+          opened
+          onClose={closeEdit}
+          projectId={projectId}
+          currency={currency}
+          item={item}
+        />
+      )}
+      {deleteOpened && (
+        <DeleteBillingItemModal
+          projectId={projectId}
+          item={item}
+          opened
+          onClose={closeDelete}
+        />
+      )}
+    </>
+  );
+}
+
+function BillingItemsSection({
+  project,
+  isManager,
+  canDeletePermanently,
+}: {
+  project: Project;
+  isManager: boolean;
+  canDeletePermanently: boolean;
+}) {
+  const [showArchived, setShowArchived] = useState(false);
+  const [addOpened, { open: openAdd, close: closeAdd }] = useDisclosure(false);
+  const billingItems = useProjectBillingItems(project.id, showArchived);
+
+  return (
+    <>
+      <Group justify="space-between" mt="md">
+        <Title order={3}>Billing items</Title>
+        <Group>
+          <Switch
+            label="Show archived"
+            checked={showArchived}
+            onChange={(event) => setShowArchived(event.currentTarget.checked)}
+          />
+          {isManager && (
+            <Button variant="default" onClick={openAdd} disabled={!project.is_active}>
+              Add billing item
+            </Button>
+          )}
+        </Group>
+      </Group>
+      {isManager && !project.is_active && (
+        <Text c="dimmed" size="sm">
+          Restore the project to add billing items.
+        </Text>
+      )}
+
+      {billingItems.isPending && <Loader />}
+      {billingItems.isError && <Alert color="red">Could not load billing items.</Alert>}
+      {billingItems.data && (
+        <Table>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Name</Table.Th>
+              <Table.Th>Unit</Table.Th>
+              <Table.Th>Price</Table.Th>
+              {isManager && <Table.Th />}
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {billingItems.data.map((item) => (
+              <Table.Tr key={item.id}>
+                <Table.Td>
+                  {item.name}
+                  {item.preset !== null && (
+                    <Badge ml="xs" size="xs" variant="light">
+                      Default
+                    </Badge>
+                  )}
+                  {!item.is_active && (
+                    <Badge ml="xs" size="xs" color="gray" variant="light">
+                      Archived
+                    </Badge>
+                  )}
+                </Table.Td>
+                <Table.Td style={{ textTransform: "capitalize" }}>{item.unit}</Table.Td>
+                <Table.Td>{formatBillingItemPrice(item, project.customer.currency)}</Table.Td>
+                {isManager && (
+                  <Table.Td>
+                    <BillingItemRowActions
+                      projectId={project.id}
+                      currency={project.customer.currency}
+                      item={item}
+                      canDeletePermanently={canDeletePermanently}
+                    />
+                  </Table.Td>
+                )}
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      )}
+
+      {addOpened && (
+        <BillingItemFormModal
+          mode="create"
+          opened
+          onClose={closeAdd}
+          projectId={project.id}
+          currency={project.customer.currency}
+        />
+      )}
+    </>
+  );
+}
+
 export function ProjectDetailsPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const user = useAuthenticatedUser();
@@ -223,6 +484,9 @@ export function ProjectDetailsPage() {
             </Badge>
           </Group>
           <Text c="dimmed">{data.customer.name}</Text>
+          <Text c="dimmed" size="sm">
+            Manager: {data.manager ? `${data.manager.name} (${data.manager.email})` : "None"}
+          </Text>
         </div>
         {canManage(user.role) && (
           <Group>
@@ -235,6 +499,12 @@ export function ProjectDetailsPage() {
       </Group>
 
       {data.description && <Text>{data.description}</Text>}
+
+      <BillingItemsSection
+        project={data}
+        isManager={canManage(user.role)}
+        canDeletePermanently={isAdmin(user.role)}
+      />
 
       <Title order={3} mt="md">
         Members

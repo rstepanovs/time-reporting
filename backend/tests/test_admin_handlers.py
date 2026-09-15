@@ -1,4 +1,6 @@
-from uuid import uuid4
+from datetime import date
+from decimal import Decimal
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -21,13 +23,37 @@ from time_reporting.modules.admin.contracts import (
 )
 from time_reporting.modules.customers.contracts import GetCustomerById
 from time_reporting.modules.projects.contracts import (
+    DEFAULT_BILLING_ITEMS,
     AddProjectMember,
+    BillingItemPreset,
     GetProjectById,
+    ListProjectBillingItems,
     ListProjectMembers,
     UpdateProject,
 )
+from time_reporting.modules.timesheets.contracts import SaveTimesheetWeek, TimeEntryChange
 from time_reporting.modules.users import repository as users_repository
 from time_reporting.modules.users.contracts import GetUserById, UserRole
+
+# 2026-09-14 is a Monday.
+A_MONDAY = date(2026, 9, 14)
+
+
+async def _book_normal_hours(bus: Bus, *, project_id: UUID, user_id: UUID) -> None:
+    """Book one hour of normal working time for ``user_id`` on ``project_id``, for tests that need
+    a project/user blocked by a real time entry rather than a project membership."""
+    items = await bus.query(ListProjectBillingItems(project_id=project_id))
+    item = next(i for i in items if i.preset == BillingItemPreset.NORMAL_HOURS)
+    await bus.execute(
+        SaveTimesheetWeek(
+            user_id=user_id,
+            week_start=A_MONDAY,
+            changes=(
+                TimeEntryChange(billing_item_id=item.id, date=A_MONDAY, quantity=Decimal("1")),
+            ),
+        )
+    )
+
 
 # --- Removal impact ---
 
@@ -69,6 +95,38 @@ async def test_user_removal_impact_lists_membership_effect(
     assert impact.can_delete_permanently is True
     assert impact.effects[0].kind == RemovalEffectKind.PROJECT_MEMBERSHIPS
     assert impact.effects[0].count == 1
+
+
+async def test_user_removal_impact_lists_managed_projects_effect(
+    bus: Bus, make_user: UserFactory, make_project: ProjectFactory
+) -> None:
+    admin = await make_user(role=UserRole.ADMIN)
+    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    await make_project(manager_id=manager.id)
+
+    impact = await bus.query(GetUserRemovalImpact(user_id=manager.id, acting_user_id=admin.id))
+
+    assert impact is not None
+    assert impact.can_delete_permanently is True
+    managed = next(e for e in impact.effects if e.kind == RemovalEffectKind.MANAGED_PROJECTS)
+    assert managed.count == 1
+
+
+async def test_user_removal_impact_blocked_by_time_entries(
+    bus: Bus, make_user: UserFactory, make_project: ProjectFactory
+) -> None:
+    admin = await make_user(role=UserRole.ADMIN)
+    user = await make_user()
+    project = await make_project()
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=user.id))
+    await _book_normal_hours(bus, project_id=project.id, user_id=user.id)
+
+    impact = await bus.query(GetUserRemovalImpact(user_id=user.id, acting_user_id=admin.id))
+
+    assert impact is not None
+    assert impact.can_delete_permanently is False
+    blocker = next(b for b in impact.blockers if b.kind == RemovalBlockerKind.TIME_ENTRIES)
+    assert blocker.count == 1
 
 
 async def test_user_removal_impact_unknown_user_returns_none(
@@ -122,6 +180,38 @@ async def test_project_removal_impact_lists_members_effect(
     assert impact.can_delete_permanently is True
     assert impact.effects[0].kind == RemovalEffectKind.PROJECT_MEMBERS
     assert impact.effects[0].count == 1
+
+
+async def test_project_removal_impact_lists_billing_items_effect(
+    bus: Bus, make_project: ProjectFactory
+) -> None:
+    project = await make_project()
+
+    impact = await bus.query(GetProjectRemovalImpact(project_id=project.id))
+
+    assert impact is not None
+    assert impact.can_delete_permanently is True
+    # Every project has the six default billing items, so this effect is never empty.
+    billing_items_effect = next(
+        e for e in impact.effects if e.kind == RemovalEffectKind.PROJECT_BILLING_ITEMS
+    )
+    assert billing_items_effect.count == len(DEFAULT_BILLING_ITEMS)
+
+
+async def test_project_removal_impact_blocked_by_time_entries(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    project = await make_project()
+    user = await make_user()
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=user.id))
+    await _book_normal_hours(bus, project_id=project.id, user_id=user.id)
+
+    impact = await bus.query(GetProjectRemovalImpact(project_id=project.id))
+
+    assert impact is not None
+    assert impact.can_delete_permanently is False
+    blocker = next(b for b in impact.blockers if b.kind == RemovalBlockerKind.TIME_ENTRIES)
+    assert blocker.count == 1
 
 
 async def test_project_removal_impact_unknown_returns_none(bus: Bus) -> None:
@@ -207,6 +297,23 @@ async def test_remove_user_permanently_deletes_and_cascades_memberships(
     assert await bus.query(ListProjectMembers(project_id=project_b.id)) == ()
 
 
+async def test_remove_user_permanently_clears_manager_assignment(
+    bus: Bus, make_user: UserFactory, make_project: ProjectFactory
+) -> None:
+    admin = await make_user(role=UserRole.ADMIN)
+    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    project = await make_project(manager_id=manager.id)
+
+    outcome = await bus.execute(
+        RemoveUser(user_id=manager.id, acting_user_id=admin.id, permanent=True)
+    )
+
+    assert outcome is RemovalOutcome.DELETED
+    refreshed = await bus.query(GetProjectById(project_id=project.id))
+    assert refreshed is not None
+    assert refreshed.manager is None
+
+
 async def test_remove_user_permanently_rolls_back_membership_removal_on_failure(
     bus: Bus, make_user: UserFactory, make_project: ProjectFactory, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -227,6 +334,22 @@ async def test_remove_user_permanently_rolls_back_membership_removal_on_failure(
 
     members = await bus.query(ListProjectMembers(project_id=project.id))
     assert [m.user_id for m in members] == [user.id]
+
+
+async def test_remove_user_permanently_blocked_by_time_entries(
+    bus: Bus, make_user: UserFactory, make_project: ProjectFactory
+) -> None:
+    admin = await make_user(role=UserRole.ADMIN)
+    user = await make_user()
+    project = await make_project()
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=user.id))
+    await _book_normal_hours(bus, project_id=project.id, user_id=user.id)
+
+    with pytest.raises(RemovalBlockedError) as exc_info:
+        await bus.execute(RemoveUser(user_id=user.id, acting_user_id=admin.id, permanent=True))
+
+    assert exc_info.value.blockers[0].kind == RemovalBlockerKind.TIME_ENTRIES
+    assert await bus.query(GetUserById(user_id=user.id)) is not None
 
 
 async def test_remove_customer_permanently_blocked_by_archived_project(
@@ -256,6 +379,21 @@ async def test_remove_project_permanently_deletes_with_members(
 
     assert outcome is RemovalOutcome.DELETED
     assert await bus.query(GetProjectById(project_id=project.id)) is None
+
+
+async def test_remove_project_permanently_blocked_by_time_entries(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    project = await make_project()
+    user = await make_user()
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=user.id))
+    await _book_normal_hours(bus, project_id=project.id, user_id=user.id)
+
+    with pytest.raises(RemovalBlockedError) as exc_info:
+        await bus.execute(RemoveProject(project_id=project.id, permanent=True))
+
+    assert exc_info.value.blockers[0].kind == RemovalBlockerKind.TIME_ENTRIES
+    assert await bus.query(GetProjectById(project_id=project.id)) is not None
 
 
 async def test_remove_unknown_user_raises_not_found(bus: Bus, make_user: UserFactory) -> None:

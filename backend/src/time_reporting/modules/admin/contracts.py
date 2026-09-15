@@ -18,17 +18,20 @@ class RemovalOutcome(StrEnum):
 
 
 class RemovalBlockerKind(StrEnum):
-    """What prevents a permanent delete. More kinds arrive with time entries and invoices."""
+    """What prevents a permanent delete. More kinds arrive with invoices."""
 
     SELF = "self"
     PROJECTS = "projects"
+    TIME_ENTRIES = "time_entries"
 
 
 class RemovalEffectKind(StrEnum):
     """What a permanent delete also removes, in addition to the record itself."""
 
     PROJECT_MEMBERSHIPS = "project_memberships"
+    MANAGED_PROJECTS = "managed_projects"
     PROJECT_MEMBERS = "project_members"
+    PROJECT_BILLING_ITEMS = "project_billing_items"
 
 
 # --- DTOs ---

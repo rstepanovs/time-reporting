@@ -4,8 +4,10 @@ Seeding is idempotent: users whose email, customers whose name, or projects whos
 already exist are left untouched.
 """
 
+from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
+from decimal import Decimal
 from uuid import UUID
 
 from time_reporting.core.cqrs import Bus
@@ -19,18 +21,41 @@ from time_reporting.modules.customers.contracts import (
     UpdateCustomer,
 )
 from time_reporting.modules.projects.contracts import (
+    AddProjectBillingItem,
     AddProjectMember,
+    BillingItemPreset,
+    BillingUnit,
     CreateProject,
+    ListProjectBillingItems,
     ListProjects,
     ProjectCustomerArchivedError,
     ProjectNameAlreadyExistsError,
+    ProjectOptionDTO,
     UpdateProject,
+    UpdateProjectBillingItem,
+)
+from time_reporting.modules.timesheets.contracts import (
+    ApproveTimesheetWeek,
+    CountTimeEntries,
+    ListTimesheetOptions,
+    SaveTimesheetWeek,
+    SubmitTimesheetWeek,
+    TimeEntryChange,
 )
 from time_reporting.modules.users.contracts import (
     CreateUser,
     EmailAlreadyExistsError,
     GetUserCredentialsByEmail,
     UserRole,
+)
+from time_reporting.modules.work_calendar.contracts import (
+    AddNonWorkingDay,
+    GetCalendarDays,
+    HolidayCountryNotSupportedError,
+    ImportPublicHolidays,
+    ListNonWorkingDays,
+    NonWorkingDayAlreadyExistsError,
+    NonWorkingDayKind,
 )
 
 DEFAULT_DEMO_PASSWORD = "demo-password"
@@ -50,12 +75,25 @@ class DemoCustomer:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class DemoBillingItem:
+    """A custom billing item to add to a newly created demo project."""
+
+    name: str
+    unit: BillingUnit
+    unit_rate: Decimal | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class DemoProject:
     customer_name: str
     name: str
     description: str | None = None
     member_emails: tuple[str, ...] = ()
+    manager_email: str | None = None
     archived: bool = False
+    # Give the six default billing items the rates in DEMO_BILLING_RATES/DEMO_PURCHASING_MARKUP.
+    billing_rates: bool = False
+    custom_billing_items: tuple[DemoBillingItem, ...] = ()
 
 
 DEMO_USERS: tuple[DemoUser, ...] = (
@@ -130,18 +168,29 @@ DEMO_PROJECTS: tuple[DemoProject, ...] = (
         name="Website Revamp",
         description="Redesign the public marketing site.",
         member_emails=("manager@example.com", "worker@example.com"),
+        manager_email="manager@example.com",
+        billing_rates=True,
+        custom_billing_items=(
+            DemoBillingItem(
+                name="On-call standby", unit=BillingUnit.HOUR, unit_rate=Decimal("50.00")
+            ),
+        ),
     ),
     DemoProject(
         customer_name="Acme Corporation",
         name="Internal Tooling",
         description="Roll out time tracking internally.",
         member_emails=("worker@example.com",),
+        manager_email="manager@example.com",
+        billing_rates=True,
     ),
     DemoProject(
         customer_name="Globex",
         name="Platform Migration",
         description="Move billing to the new platform.",
         member_emails=("manager@example.com",),
+        manager_email="manager@example.com",
+        billing_rates=True,
     ),
     DemoProject(
         customer_name="Initech",
@@ -149,8 +198,35 @@ DEMO_PROJECTS: tuple[DemoProject, ...] = (
         description="Wind-down support after the contract ended.",
         member_emails=("worker@example.com",),
         archived=True,
+        billing_rates=True,
     ),
 )
+
+# Applied to a newly created demo project's default items when DemoProject.billing_rates is set;
+# rates are in whichever currency the project's customer bills in (a demo simplification — see
+# DemoProject.billing_rates). Purchasing expenses get a markup instead of a rate; other expenses
+# are left unset, like a real project would start out.
+DEMO_BILLING_RATES: dict[BillingItemPreset, Decimal] = {
+    BillingItemPreset.NORMAL_HOURS: Decimal("90.00"),
+    BillingItemPreset.OVERTIME_HOURS: Decimal("135.00"),
+    BillingItemPreset.TRAVEL_TIME: Decimal("45.00"),
+    BillingItemPreset.PER_DIEM: Decimal("60.00"),
+}
+DEMO_PURCHASING_MARKUP = Decimal("10.00")
+
+# The public holiday whose following day becomes the demo bridge day (a Thursday holiday, so the
+# Friday after it is the classic "long weekend" bridge day).
+DEMO_BRIDGE_DAY_AFTER_HOLIDAY = "Ascension Day"
+# Roles that get demo time entries booked, so a fresh checkout has something to look at on the
+# Timesheet page and the worker dashboard's month calendar / year-hours table; admins aren't
+# expected to book their own time.
+DEMO_TIME_ENTRY_ROLES = frozenset({UserRole.WORKER, UserRole.PROJECT_MANAGER})
+DEMO_DAILY_HOURS = Decimal("8")
+DEMO_OVERTIME_HOURS = Decimal("2")
+DEMO_TRAVEL_HOURS = Decimal("3")
+# How many months of history to book (this month plus the two before it), so the dashboard's
+# year-hours table shows more than a single row.
+DEMO_TIME_ENTRY_MONTHS = 3
 
 
 @dataclass(slots=True)
@@ -161,6 +237,12 @@ class SeedReport:
     existing_customers: list[str] = field(default_factory=list)
     created_projects: list[str] = field(default_factory=list)
     existing_projects: list[str] = field(default_factory=list)
+    imported_holidays: int = 0
+    created_bridge_day: bool = False
+    seeded_time_entries_for: list[str] = field(default_factory=list)
+    # Demo workers (not project managers) whose seeded weeks were pushed through the submit/
+    # approve workflow, so a fresh checkout also has an example of that on the Timesheet page.
+    submitted_weeks_for: list[str] = field(default_factory=list)
 
 
 async def _find_customer_id_by_name(bus: Bus, name: str) -> UUID:
@@ -181,6 +263,216 @@ async def _find_customer_id_by_name(bus: Bus, name: str) -> UUID:
         offset += limit
 
 
+async def _apply_demo_billing_rates(bus: Bus, project_id: UUID) -> None:
+    """Give the just-created project's default items their demo rates.
+
+    Only called for a project just created by this run, so it can't yet have been priced.
+    """
+    items = await bus.query(ListProjectBillingItems(project_id=project_id, include_inactive=True))
+    for item in items:
+        if item.preset in DEMO_BILLING_RATES:
+            await bus.execute(
+                UpdateProjectBillingItem(
+                    project_id=project_id,
+                    item_id=item.id,
+                    unit_rate=DEMO_BILLING_RATES[item.preset],
+                )
+            )
+        elif item.preset is BillingItemPreset.PURCHASING_EXPENSES:
+            await bus.execute(
+                UpdateProjectBillingItem(
+                    project_id=project_id, item_id=item.id, markup_percent=DEMO_PURCHASING_MARKUP
+                )
+            )
+
+
+async def _seed_calendar(bus: Bus, report: SeedReport, *, today: date) -> None:
+    """Import this and next year's public holidays, and add one demo bridge day.
+
+    Both steps are idempotent by nature (``ImportPublicHolidays`` only adds missing dates, and a
+    taken date is skipped), so re-running changes nothing once seeded.
+    """
+    for year in (today.year, today.year + 1):
+        try:
+            report.imported_holidays += await bus.execute(ImportPublicHolidays(year=year))
+        except HolidayCountryNotSupportedError:
+            # Demo data is best-effort: an unconfigured HOLIDAY_COUNTRY just skips the calendar.
+            return
+
+    holiday_dates_by_name = {
+        day.name: day.day for day in await bus.query(ListNonWorkingDays(year=today.year))
+    }
+    holiday_date = holiday_dates_by_name.get(DEMO_BRIDGE_DAY_AFTER_HOLIDAY)
+    if holiday_date is None:
+        return
+    try:
+        await bus.execute(
+            AddNonWorkingDay(
+                day=holiday_date + timedelta(days=1),
+                name="Bridge day",
+                kind=NonWorkingDayKind.BRIDGE_DAY,
+            )
+        )
+    except NonWorkingDayAlreadyExistsError:
+        pass
+    else:
+        report.created_bridge_day = True
+
+
+def _month_start_n_months_ago(today: date, months_ago: int) -> date:
+    total_months = today.year * 12 + (today.month - 1) - months_ago
+    return date(total_months // 12, total_months % 12 + 1, 1)
+
+
+def _week_start(day: date) -> date:
+    return day - timedelta(days=day.isoweekday() - 1)
+
+
+def _option_with_normal_hours(
+    options: tuple[ProjectOptionDTO, ...],
+) -> ProjectOptionDTO | None:
+    return next(
+        (
+            option
+            for option in options
+            if any(item.preset is BillingItemPreset.NORMAL_HOURS for item in option.billing_items)
+        ),
+        None,
+    )
+
+
+def _item_id_for_preset(option: ProjectOptionDTO, preset: BillingItemPreset) -> UUID | None:
+    return next((item.id for item in option.billing_items if item.preset is preset), None)
+
+
+def _reviewer_id(users: tuple[DemoUser, ...], user_ids_by_email: dict[str, UUID]) -> UUID | None:
+    """The demo user who reviews a worker's submitted weeks: a project manager, or an admin if
+    none of the given ``users`` has that role. ``None`` if neither role is present."""
+    managers = (UserRole.PROJECT_MANAGER, UserRole.ADMIN)
+    reviewer = min(
+        (user for user in users if user.role in managers),
+        key=lambda user: managers.index(user.role),
+        default=None,
+    )
+    return user_ids_by_email.get(reviewer.email) if reviewer is not None else None
+
+
+async def _submit_and_approve_demo_weeks(
+    bus: Bus,
+    report: SeedReport,
+    user: DemoUser,
+    user_id: UUID,
+    week_starts: list[date],
+    *,
+    reviewer_id: UUID,
+) -> None:
+    """Push a just-seeded demo worker's weeks through the submit/review workflow: every week but
+    the most recent is submitted and then approved, and the most recent is left submitted (so
+    the demo reviewer has something waiting on the approvals page). Only ever called for a
+    freshly seeded user (guarded by the ``CountTimeEntries`` check above), so this always starts
+    from an all-draft state and needs no idempotency check of its own."""
+    for week_start in week_starts[:-1]:
+        await bus.execute(SubmitTimesheetWeek(user_id=user_id, week_start=week_start))
+        await bus.execute(
+            ApproveTimesheetWeek(user_id=user_id, week_start=week_start, reviewer_id=reviewer_id)
+        )
+    await bus.execute(SubmitTimesheetWeek(user_id=user_id, week_start=week_starts[-1]))
+    report.submitted_weeks_for.append(user.email)
+
+
+async def _seed_time_entries(
+    bus: Bus,
+    report: SeedReport,
+    users: tuple[DemoUser, ...],
+    user_ids_by_email: dict[str, UUID],
+    *,
+    today: date,
+) -> None:
+    """Book normal working hours on every working day of the last ``DEMO_TIME_ENTRY_MONTHS``
+    months up to today, plus a little overtime and travel time, for each user with a
+    ``DEMO_TIME_ENTRY_ROLES`` role that doesn't already have any time entries — so a fresh
+    checkout has something to show on both the Timesheet page and the worker dashboard's month
+    calendar and year-hours table."""
+    range_from = _month_start_n_months_ago(today, DEMO_TIME_ENTRY_MONTHS - 1)
+    calendar_days = await bus.query(GetCalendarDays(date_from=range_from, date_to=today))
+    working_days = [
+        day.day for day in calendar_days if not day.is_weekend and day.non_working_day is None
+    ]
+    if not working_days:
+        return
+
+    # The first and last working day booked in each calendar month get a couple of hours of
+    # overtime/travel time on top of the normal hours, so the year-hours table isn't all one
+    # column — a small, deterministic stand-in for "some weeks have a late day or a trip".
+    first_working_day_of_month: dict[tuple[int, int], date] = {}
+    last_working_day_of_month: dict[tuple[int, int], date] = {}
+    for day in working_days:
+        month_key = (day.year, day.month)
+        first_working_day_of_month.setdefault(month_key, day)
+        last_working_day_of_month[month_key] = day
+    overtime_dates = frozenset(first_working_day_of_month.values())
+    travel_dates = frozenset(last_working_day_of_month.values())
+
+    working_days_by_week: dict[date, list[date]] = defaultdict(list)
+    for day in working_days:
+        working_days_by_week[_week_start(day)].append(day)
+
+    for user in users:
+        if user.role not in DEMO_TIME_ENTRY_ROLES:
+            continue
+        user_id = user_ids_by_email.get(user.email)
+        if user_id is None:
+            continue
+        if await bus.query(CountTimeEntries(user_id=user_id)):
+            continue
+        options = await bus.query(ListTimesheetOptions(user_id=user_id))
+        option = _option_with_normal_hours(options)
+        if option is None:
+            continue
+        normal_item_id = _item_id_for_preset(option, BillingItemPreset.NORMAL_HOURS)
+        assert normal_item_id is not None
+        overtime_item_id = _item_id_for_preset(option, BillingItemPreset.OVERTIME_HOURS)
+        travel_item_id = _item_id_for_preset(option, BillingItemPreset.TRAVEL_TIME)
+
+        for week_start, days_in_week in sorted(working_days_by_week.items()):
+            changes = [
+                TimeEntryChange(billing_item_id=normal_item_id, date=day, quantity=DEMO_DAILY_HOURS)
+                for day in days_in_week
+            ]
+            if overtime_item_id is not None:
+                changes += [
+                    TimeEntryChange(
+                        billing_item_id=overtime_item_id, date=day, quantity=DEMO_OVERTIME_HOURS
+                    )
+                    for day in days_in_week
+                    if day in overtime_dates
+                ]
+            if travel_item_id is not None:
+                changes += [
+                    TimeEntryChange(
+                        billing_item_id=travel_item_id, date=day, quantity=DEMO_TRAVEL_HOURS
+                    )
+                    for day in days_in_week
+                    if day in travel_dates
+                ]
+            await bus.execute(
+                SaveTimesheetWeek(user_id=user_id, week_start=week_start, changes=tuple(changes))
+            )
+        report.seeded_time_entries_for.append(user.email)
+
+        if user.role is UserRole.WORKER:
+            reviewer_id = _reviewer_id(users, user_ids_by_email)
+            if reviewer_id is not None:
+                await _submit_and_approve_demo_weeks(
+                    bus,
+                    report,
+                    user,
+                    user_id,
+                    sorted(working_days_by_week),
+                    reviewer_id=reviewer_id,
+                )
+
+
 async def _project_exists(bus: Bus, customer_id: UUID, name: str) -> bool:
     page = await bus.query(
         ListProjects(limit=1, offset=0, customer_id=customer_id, search=name, include_inactive=True)
@@ -195,11 +487,15 @@ async def seed_demo_data(
     users: tuple[DemoUser, ...] = DEMO_USERS,
     customers: tuple[DemoCustomer, ...] = DEMO_CUSTOMERS,
     projects: tuple[DemoProject, ...] = DEMO_PROJECTS,
+    today: date | None = None,
 ) -> SeedReport:
     """Create the missing demo records; each one is committed by its own top-level command."""
     report = SeedReport()
     user_ids_by_email: dict[str, UUID] = {}
     customer_ids_by_name: dict[str, UUID] = {}
+    today = today or date.today()
+
+    await _seed_calendar(bus, report, today=today)
 
     for user in users:
         try:
@@ -232,9 +528,15 @@ async def seed_demo_data(
     for project in projects:
         customer_id = customer_ids_by_name[project.customer_name]
         try:
+            manager_id = (
+                user_ids_by_email.get(project.manager_email) if project.manager_email else None
+            )
             created_project = await bus.execute(
                 CreateProject(
-                    customer_id=customer_id, name=project.name, description=project.description
+                    customer_id=customer_id,
+                    name=project.name,
+                    description=project.description,
+                    manager_id=manager_id,
                 )
             )
         except ProjectNameAlreadyExistsError:
@@ -250,10 +552,21 @@ async def seed_demo_data(
             report.existing_projects.append(project.name)
             continue
         report.created_projects.append(project.name)
-        # The project was just created, so it cannot already have these members.
+        # The project was just created, so it cannot already have these members or billing items.
         for email in project.member_emails:
             await bus.execute(
                 AddProjectMember(project_id=created_project.id, user_id=user_ids_by_email[email])
+            )
+        if project.billing_rates:
+            await _apply_demo_billing_rates(bus, created_project.id)
+        for demo_item in project.custom_billing_items:
+            await bus.execute(
+                AddProjectBillingItem(
+                    project_id=created_project.id,
+                    name=demo_item.name,
+                    unit=demo_item.unit,
+                    unit_rate=demo_item.unit_rate,
+                )
             )
         if project.archived:
             await bus.execute(UpdateProject(project_id=created_project.id, is_active=False))
@@ -265,5 +578,7 @@ async def seed_demo_data(
                     customer_id=customer_ids_by_name[customer.create.name], is_active=False
                 )
             )
+
+    await _seed_time_entries(bus, report, users, user_ids_by_email, today=today)
 
     return report
