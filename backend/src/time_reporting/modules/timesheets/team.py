@@ -30,8 +30,9 @@ from time_reporting.modules.timesheets.contracts import (
     TeamStatusCountsDTO,
     TimesheetWeekStatus,
 )
-from time_reporting.modules.timesheets.models import TimeEntry
+from time_reporting.modules.timesheets.models import ProjectBillingPeriod, TimeEntry
 from time_reporting.modules.timesheets.repository import (
+    ProjectBillingPeriodRepository,
     TimeEntryRepository,
     TimesheetWeekRepository,
 )
@@ -49,11 +50,34 @@ from time_reporting.modules.work_calendar.contracts import CalendarDayDTO, GetCa
 _WEEK_LENGTH_DAYS = 7
 
 
+def billing_readiness(
+    scope_pairs: set[tuple[UUID, date]],
+    status_by_user_week: dict[tuple[UUID, date], TimesheetWeekStatus],
+) -> tuple[BillingPeriodStatus, int, int]:
+    """``(status, blocking_weeks, weeks_in_scope)`` for a project's month: ``scope_pairs`` are the
+    (user, ISO week) pairs with at least one entry on the project in that month; a pair not
+    ``approved`` blocks. Shared by the team overview and ``SendProjectMonthToBilling``'s own
+    readiness check."""
+    blocking_weeks = sum(
+        1
+        for pair in scope_pairs
+        if status_by_user_week.get(pair, TimesheetWeekStatus.DRAFT) != TimesheetWeekStatus.APPROVED
+    )
+    weeks_in_scope = len(scope_pairs)
+    status = (
+        BillingPeriodStatus.READY
+        if weeks_in_scope > 0 and blocking_weeks == 0
+        else BillingPeriodStatus.NOT_READY
+    )
+    return status, blocking_weeks, weeks_in_scope
+
+
 class TeamOverviewService:
     def __init__(self, bus: Bus) -> None:
         self._bus = bus
         self._entries = TimeEntryRepository(bus.session)
         self._weeks = TimesheetWeekRepository(bus.session)
+        self._billing_periods = ProjectBillingPeriodRepository(bus.session)
 
     async def month_overview(self, query: GetTeamMonthOverview) -> TeamMonthOverviewDTO:
         managed = await self._bus.query(ListManagedProjectsWithMembers(manager_id=query.manager_id))
@@ -102,6 +126,17 @@ class TeamOverviewService:
             calendar_days, month_first, month_last, query.today
         )
 
+        sent_periods = await self._billing_periods.list_for_projects_in_range(
+            project_ids, month_first, month_first
+        )
+        sent_period_by_project = {period.project_id: period for period in sent_periods}
+        senders_by_id = {
+            user.id: user
+            for user in await self._bus.query(
+                GetUsersByIds(user_ids=frozenset(period.sent_by_id for period in sent_periods))
+            )
+        }
+
         team_projects = [
             await self._team_project(
                 entry=entry,
@@ -116,6 +151,8 @@ class TeamOverviewService:
                 total_hours_by_user_month=total_hours_by_user_month,
                 expected_hours_by_week=expected_hours_by_week,
                 expected_hours_to_date=expected_hours_to_date,
+                sent_period=sent_period_by_project.get(entry.project.id),
+                senders_by_id=senders_by_id,
             )
             for entry in managed
         ]
@@ -145,6 +182,8 @@ class TeamOverviewService:
         total_hours_by_user_month: dict[UUID, Decimal],
         expected_hours_by_week: dict[date, Decimal],
         expected_hours_to_date: Decimal,
+        sent_period: ProjectBillingPeriod | None,
+        senders_by_id: dict[UUID, UserDTO],
     ) -> TeamProjectDTO:
         project = entry.project
         current_member_ids = frozenset(member.user_id for member in entry.members)
@@ -208,6 +247,8 @@ class TeamOverviewService:
             month_last=month_last,
             entries_for_project=entries_for_project,
             status_by_user_week=status_by_user_week,
+            sent_period=sent_period,
+            sent_by=senders_by_id.get(sent_period.sent_by_id) if sent_period else None,
         )
 
         return TeamProjectDTO(project=project, members=tuple(members), billing=billing)
@@ -221,23 +262,21 @@ class TeamOverviewService:
         month_last: date,
         entries_for_project: list[TimeEntry],
         status_by_user_week: dict[tuple[UUID, date], TimesheetWeekStatus],
+        sent_period: ProjectBillingPeriod | None,
+        sent_by: UserDTO | None,
     ) -> ProjectBillingPeriodDTO:
         scope_pairs = {
             (time_entry.user_id, _start_of_iso_week(time_entry.entry_date))
             for time_entry in entries_for_project
         }
-        blocking_weeks = sum(
-            1
-            for pair in scope_pairs
-            if status_by_user_week.get(pair, TimesheetWeekStatus.DRAFT)
-            != TimesheetWeekStatus.APPROVED
-        )
-        weeks_in_scope = len(scope_pairs)
-        status = (
-            BillingPeriodStatus.READY
-            if weeks_in_scope > 0 and blocking_weeks == 0
-            else BillingPeriodStatus.NOT_READY
-        )
+        if sent_period is not None:
+            status = BillingPeriodStatus.SENT
+            blocking_weeks = 0
+            weeks_in_scope = len(scope_pairs)
+        else:
+            status, blocking_weeks, weeks_in_scope = billing_readiness(
+                scope_pairs, status_by_user_week
+            )
 
         billing_item_ids = frozenset(
             time_entry.billing_item_id for time_entry in entries_for_project
@@ -265,8 +304,8 @@ class TeamOverviewService:
             period_start=month_first,
             period_end=month_last,
             status=status,
-            sent_at=None,
-            sent_by=None,
+            sent_at=sent_period.sent_at if sent_period is not None else None,
+            sent_by=sent_by,
             blocking_weeks=blocking_weeks,
             weeks_in_scope=weeks_in_scope,
             hours=accumulator.freeze_hours(),

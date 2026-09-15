@@ -57,6 +57,8 @@ class TimesheetRowDTO:
     billing item both active); a row can be listed (it has entries, or a comment) without being
     open, e.g. after the project was archived or the user was removed from it. ``comment`` is a
     per (user, week, billing item) note about the row, separate from each cell's own ``note``.
+    ``locked_dates`` are the days in this week that fall inside a sent billing period for this
+    project — read-only regardless of ``is_open``.
     """
 
     project: ProjectDTO
@@ -64,6 +66,7 @@ class TimesheetRowDTO:
     is_open: bool
     entries: tuple[TimeEntryDTO, ...]
     comment: str | None
+    locked_dates: tuple[date, ...] = ()
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -523,6 +526,32 @@ class ReturnTimesheetWeek(Command[TimesheetWeekDTO]):
     comment: str
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class SendProjectMonthToBilling(Command[ProjectBillingPeriodDTO]):
+    """Send ``project_id``'s ``year``/``month`` to billing: a stub that records the handoff
+    (``ProjectBillingPeriod``) and locks the period — invoicing itself doesn't exist yet. Allowed
+    on any day, not only after the month ends. Raises ``TimesheetProjectNotFoundError``,
+    ``UserNotFoundError`` (``sent_by_id``), ``NotProjectManagerError`` (a project manager who isn't
+    this project's manager; admins may send any project), ``BillingPeriodNotReadyError`` (some
+    week in scope isn't approved yet, or there is nothing to send) or
+    ``BillingPeriodAlreadySentError``.
+    """
+
+    project_id: UUID
+    year: int
+    month: int
+    sent_by_id: UUID
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ReopenProjectBillingPeriod(Command[None]):
+    """Delete a sent billing period, unlocking it. Admin only (enforced by the router). Raises
+    ``BillingPeriodNotFoundError``."""
+
+    project_id: UUID
+    period_start: date
+
+
 # --- Exceptions ---
 
 
@@ -617,3 +646,49 @@ class SelfReviewError(TimesheetError):
 class ReturnCommentRequiredError(TimesheetError):
     def __init__(self) -> None:
         super().__init__("Returning a week requires a non-empty comment")
+
+
+class TimesheetProjectNotFoundError(TimesheetError):
+    def __init__(self, project_id: UUID) -> None:
+        super().__init__(f"Project {project_id} not found")
+        self.project_id = project_id
+
+
+class NotProjectManagerError(TimesheetError):
+    def __init__(self, project_id: UUID) -> None:
+        super().__init__(f"You are not project {project_id}'s manager")
+        self.project_id = project_id
+
+
+class BillingPeriodNotReadyError(TimesheetError):
+    def __init__(self, blocking_weeks: int) -> None:
+        super().__init__(
+            f"This period is not ready to send: {blocking_weeks} week(s) still need approval"
+            if blocking_weeks
+            else "This period has no time booked yet"
+        )
+        self.blocking_weeks = blocking_weeks
+
+
+class BillingPeriodAlreadySentError(TimesheetError):
+    def __init__(self, project_id: UUID, period_start: date) -> None:
+        super().__init__(f"Project {project_id}'s period starting {period_start} was already sent")
+        self.project_id = project_id
+        self.period_start = period_start
+
+
+class BillingPeriodNotFoundError(TimesheetError):
+    def __init__(self, project_id: UUID, period_start: date) -> None:
+        super().__init__(f"Project {project_id} has no sent period starting {period_start}")
+        self.project_id = project_id
+        self.period_start = period_start
+
+
+class BillingPeriodLockedError(TimesheetError):
+    """Raised by ``SaveTimesheetWeek``/``ReturnTimesheetWeek`` when a change touches a date, or a
+    week, already sent to billing for that project."""
+
+    def __init__(self, project_id: UUID, entry_date: date) -> None:
+        super().__init__(f"Project {project_id} is locked on {entry_date}: already sent to billing")
+        self.project_id = project_id
+        self.entry_date = entry_date

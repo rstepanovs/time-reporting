@@ -24,6 +24,7 @@ from time_reporting.modules.timesheets.contracts import (
     MAX_DAY_ENTRY_QUANTITY,
     MAX_HOUR_ENTRY_QUANTITY,
     ApproveTimesheetWeek,
+    BillingPeriodLockedError,
     DailyHoursExceededError,
     DuplicateChangeError,
     EntryDateOutsideWeekError,
@@ -45,8 +46,14 @@ from time_reporting.modules.timesheets.contracts import (
     TimesheetWeekStatus,
     WeekStartNotMondayError,
 )
-from time_reporting.modules.timesheets.models import TimeEntry, TimesheetRowComment, TimesheetWeek
+from time_reporting.modules.timesheets.models import (
+    ProjectBillingPeriod,
+    TimeEntry,
+    TimesheetRowComment,
+    TimesheetWeek,
+)
 from time_reporting.modules.timesheets.repository import (
+    ProjectBillingPeriodRepository,
     RowCommentRepository,
     TimeEntryRepository,
     TimesheetWeekRepository,
@@ -66,6 +73,7 @@ class TimesheetService:
         self._entries = TimeEntryRepository(bus.session)
         self._weeks = TimesheetWeekRepository(bus.session)
         self._comments = RowCommentRepository(bus.session)
+        self._billing_periods = ProjectBillingPeriodRepository(bus.session)
 
     async def get_week(
         self, *, user_id: UUID, week_start: date, viewer_id: UUID
@@ -101,6 +109,9 @@ class TimesheetService:
             for option in await self._bus.query(ListMemberProjectsWithBillingItems(user_id=user_id))
             for item in option.billing_items
         )
+        locked_dates_by_project = await self._locked_dates_by_project(
+            project_ids, week_start, week_end
+        )
 
         entries_by_item: dict[UUID, list[TimeEntryDTO]] = defaultdict(list)
         for entry in entries:
@@ -116,6 +127,7 @@ class TimesheetService:
                     is_open=item_id in open_item_ids,
                     entries=tuple(entries_by_item[item_id]),
                     comment=comments_by_item.get(item_id),
+                    locked_dates=locked_dates_by_project.get(billing_item.project_id, ()),
                 )
                 for item_id, billing_item in items_by_id.items()
             ),
@@ -128,11 +140,15 @@ class TimesheetService:
         status = week_row.status if week_row is not None else TimesheetWeekStatus.DRAFT
         reviewed_by_name = await self._reviewer_name(week_row)
         is_owner_editable = viewer_id == user_id and status in _EDITABLE_STATUSES
+        # A locked project (sent to billing) can't be returned — a return would be rejected, so
+        # hide the review actions entirely rather than let the caller hit a 409.
+        is_locked = any(locked_dates_by_project.values())
         can_review = (
             viewer is not None
             and viewer.role in _MANAGER_ROLES
             and status in _REVIEWABLE_STATUSES
             and not (viewer.role == UserRole.PROJECT_MANAGER and viewer_id == user_id)
+            and not is_locked
         )
 
         return TimesheetWeekDTO(
@@ -184,6 +200,9 @@ class TimesheetService:
             if change.quantity is not None:
                 billing_item = open_items[change.billing_item_id]
                 _ensure_quantity_in_range(billing_item.unit, change, change.quantity)
+        await self._ensure_not_locked(
+            week_start, week_end, command.changes, command.row_comments, projects_by_item
+        )
 
         await self._apply_changes(command.user_id, command.changes, open_items, projects_by_item)
         await self._apply_row_comments(command.user_id, week_start, command.row_comments)
@@ -262,6 +281,7 @@ class TimesheetService:
         status = week_row.status if week_row is not None else TimesheetWeekStatus.DRAFT
         if week_row is None or status not in _REVIEWABLE_STATUSES:
             raise InvalidWeekStatusTransitionError(week_start, status, "return")
+        await self._ensure_week_not_billed(command.user_id, week_start)
 
         week_row.status = TimesheetWeekStatus.RETURNED
         week_row.reviewed_at = utc_now()
@@ -288,6 +308,72 @@ class TimesheetService:
         week_row = await self._weeks.get(user_id=user_id, week_start=week_start)
         if week_row is not None and week_row.status not in _EDITABLE_STATUSES:
             raise TimesheetWeekLockedError(week_start, week_row.status)
+
+    async def _ensure_week_not_billed(self, user_id: UUID, week_start: date) -> None:
+        """Raise ``BillingPeriodLockedError`` if the week has entries on a project already sent to
+        billing (returning it would un-approve hours already handed off)."""
+        week_end = _week_end(week_start)
+        entries = await self._entries.list_for_user_in_range(user_id, week_start, week_end)
+        project_ids = frozenset(entry.project_id for entry in entries)
+        if not project_ids:
+            return
+        periods = await self._billing_periods.list_overlapping(project_ids, week_start, week_end)
+        if periods:
+            raise BillingPeriodLockedError(periods[0].project_id, periods[0].period_start)
+
+    async def _ensure_not_locked(
+        self,
+        week_start: date,
+        week_end: date,
+        changes: tuple[TimeEntryChange, ...],
+        row_comments: tuple[RowCommentChange, ...],
+        projects_by_item: dict[UUID, ProjectDTO],
+    ) -> None:
+        """Raise ``BillingPeriodLockedError`` if any change touches a date already sent to billing
+        for its project, or any row-comment change touches a project with any sent period
+        overlapping the week (a comment has no single date, so the whole week is off-limits)."""
+        touched_item_ids = frozenset(c.billing_item_id for c in changes) | frozenset(
+            c.billing_item_id for c in row_comments
+        )
+        project_ids = frozenset(
+            projects_by_item[item_id].id
+            for item_id in touched_item_ids
+            if item_id in projects_by_item
+        )
+        if not project_ids:
+            return
+        periods = await self._billing_periods.list_overlapping(project_ids, week_start, week_end)
+        periods_by_project: dict[UUID, list[ProjectBillingPeriod]] = defaultdict(list)
+        for period in periods:
+            periods_by_project[period.project_id].append(period)
+
+        for change in changes:
+            project_id = projects_by_item[change.billing_item_id].id
+            for period in periods_by_project.get(project_id, ()):
+                if period.period_start <= change.date <= period.period_end:
+                    raise BillingPeriodLockedError(project_id, change.date)
+        for row_comment in row_comments:
+            project_id = projects_by_item[row_comment.billing_item_id].id
+            for period in periods_by_project.get(project_id, ()):
+                raise BillingPeriodLockedError(project_id, period.period_start)
+
+    async def _locked_dates_by_project(
+        self, project_ids: frozenset[UUID], week_start: date, week_end: date
+    ) -> dict[UUID, tuple[date, ...]]:
+        """For each of ``project_ids``, the days in [``week_start``, ``week_end``] that fall inside
+        a billing period already sent for that project."""
+        if not project_ids:
+            return {}
+        periods = await self._billing_periods.list_overlapping(project_ids, week_start, week_end)
+        locked_by_project: dict[UUID, set[date]] = defaultdict(set)
+        for period in periods:
+            locked_from = max(period.period_start, week_start)
+            locked_to = min(period.period_end, week_end)
+            current = locked_from
+            while current <= locked_to:
+                locked_by_project[period.project_id].add(current)
+                current += timedelta(days=1)
+        return {project_id: tuple(sorted(dates)) for project_id, dates in locked_by_project.items()}
 
     async def _apply_row_comments(
         self, user_id: UUID, week_start: date, row_comments: tuple[RowCommentChange, ...]

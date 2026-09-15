@@ -15,6 +15,7 @@ from time_reporting.modules.timesheets.contracts import (
     BillingPeriodStatus,
     GetTeamMonthOverview,
     SaveTimesheetWeek,
+    SendProjectMonthToBilling,
     SubmitTimesheetWeek,
     TeamMemberWarning,
     TimeEntryChange,
@@ -289,3 +290,43 @@ async def test_billing_readiness_ready_once_every_week_in_scope_is_approved(
     assert billing.weeks_in_scope == 1
     assert billing.blocking_weeks == 0
     assert billing.hours.normal_hours == Decimal("4")
+
+
+async def test_billing_status_is_sent_once_a_period_has_been_sent(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    worker = await make_user()
+    project = await make_project(manager_id=manager.id)
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
+    item_id = await _normal_hours_item_id(bus, project.id)
+    await bus.execute(
+        SaveTimesheetWeek(
+            user_id=worker.id,
+            week_start=SEPTEMBER_WEEKS[1],
+            changes=(
+                TimeEntryChange(
+                    billing_item_id=item_id, date=SEPTEMBER_WEEKS[1], quantity=Decimal("4")
+                ),
+            ),
+        )
+    )
+    await bus.execute(SubmitTimesheetWeek(user_id=worker.id, week_start=SEPTEMBER_WEEKS[1]))
+    await bus.execute(
+        ApproveTimesheetWeek(
+            user_id=worker.id, week_start=SEPTEMBER_WEEKS[1], reviewer_id=manager.id
+        )
+    )
+    await bus.execute(
+        SendProjectMonthToBilling(project_id=project.id, year=2026, month=9, sent_by_id=manager.id)
+    )
+
+    overview = await bus.query(
+        GetTeamMonthOverview(manager_id=manager.id, year=2026, month=9, today=date(2026, 9, 16))
+    )
+
+    billing = overview.projects[0].billing
+    assert billing.status is BillingPeriodStatus.SENT
+    assert billing.sent_by is not None
+    assert billing.sent_by.id == manager.id
+    assert billing.sent_at is not None

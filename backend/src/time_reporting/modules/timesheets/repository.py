@@ -12,7 +12,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from time_reporting.modules.projects.contracts import BillingUnit
 from time_reporting.modules.timesheets.contracts import TimesheetWeekStatus
-from time_reporting.modules.timesheets.models import TimeEntry, TimesheetRowComment, TimesheetWeek
+from time_reporting.modules.timesheets.models import (
+    ProjectBillingPeriod,
+    TimeEntry,
+    TimesheetRowComment,
+    TimesheetWeek,
+)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -278,4 +283,62 @@ class RowCommentRepository:
 
     async def delete(self, comment: TimesheetRowComment) -> None:
         await self._session.delete(comment)
+        await self._session.flush()
+
+
+class ProjectBillingPeriodRepository:
+    """Persistence of ``ProjectBillingPeriod`` — a project's month sent to billing. No row means
+    not sent."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get(self, *, project_id: UUID, period_start: date) -> ProjectBillingPeriod | None:
+        result = await self._session.scalars(
+            select(ProjectBillingPeriod).where(
+                ProjectBillingPeriod.project_id == project_id,
+                ProjectBillingPeriod.period_start == period_start,
+            )
+        )
+        return result.one_or_none()
+
+    async def list_for_projects_in_range(
+        self, project_ids: frozenset[UUID], date_from: date, date_to: date
+    ) -> Sequence[ProjectBillingPeriod]:
+        """Periods for ``project_ids`` whose ``period_start`` falls in the range — used to look up
+        a specific month's sent status for several projects in one query."""
+        if not project_ids:
+            return ()
+        result = await self._session.scalars(
+            select(ProjectBillingPeriod).where(
+                ProjectBillingPeriod.project_id.in_(project_ids),
+                ProjectBillingPeriod.period_start >= date_from,
+                ProjectBillingPeriod.period_start <= date_to,
+            )
+        )
+        return result.all()
+
+    async def list_overlapping(
+        self, project_ids: frozenset[UUID], date_from: date, date_to: date
+    ) -> Sequence[ProjectBillingPeriod]:
+        """Periods for ``project_ids`` whose range overlaps [``date_from``, ``date_to``] — used to
+        check whether a week's dates fall inside a sent period, for the lock rules."""
+        if not project_ids:
+            return ()
+        result = await self._session.scalars(
+            select(ProjectBillingPeriod).where(
+                ProjectBillingPeriod.project_id.in_(project_ids),
+                ProjectBillingPeriod.period_start <= date_to,
+                ProjectBillingPeriod.period_end >= date_from,
+            )
+        )
+        return result.all()
+
+    async def save(self, period: ProjectBillingPeriod) -> None:
+        """Add ``period`` to the session and flush."""
+        self._session.add(period)
+        await self._session.flush()
+
+    async def delete(self, period: ProjectBillingPeriod) -> None:
+        await self._session.delete(period)
         await self._session.flush()

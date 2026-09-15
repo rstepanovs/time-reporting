@@ -10,6 +10,7 @@ from time_reporting.modules.projects.contracts import (
     ListMemberProjectsWithBillingItems,
     ProjectOptionDTO,
 )
+from time_reporting.modules.timesheets.billing import BillingService
 from time_reporting.modules.timesheets.contracts import (
     ApproveTimesheetWeek,
     CountTimeEntries,
@@ -23,8 +24,11 @@ from time_reporting.modules.timesheets.contracts import (
     ListTimesheetOptions,
     MonthCalendarDTO,
     MonthTimeSummaryDTO,
+    ProjectBillingPeriodDTO,
+    ReopenProjectBillingPeriod,
     ReturnTimesheetWeek,
     SaveTimesheetWeek,
+    SendProjectMonthToBilling,
     SubmitTimesheetWeek,
     TeamMonthOverviewDTO,
     TimesheetWeekDTO,
@@ -151,6 +155,22 @@ class GetTeamMonthOverviewHandler:
 
     async def handle(self, query: GetTeamMonthOverview) -> TeamMonthOverviewDTO:
         return await self._service.month_overview(query)
+
+
+class SendProjectMonthToBillingHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._service = BillingService(bus)
+
+    async def handle(self, command: SendProjectMonthToBilling) -> ProjectBillingPeriodDTO:
+        return await self._service.send_to_billing(command)
+
+
+class ReopenProjectBillingPeriodHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._service = BillingService(bus)
+
+    async def handle(self, command: ReopenProjectBillingPeriod) -> None:
+        await self._service.reopen_period(command)
 
 
 class ListSubmittedTimesheetWeeksHandler:

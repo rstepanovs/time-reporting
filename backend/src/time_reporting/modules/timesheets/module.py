@@ -12,8 +12,10 @@ from time_reporting.modules.timesheets.contracts import (
     GetYearHours,
     ListSubmittedTimesheetWeeks,
     ListTimesheetOptions,
+    ReopenProjectBillingPeriod,
     ReturnTimesheetWeek,
     SaveTimesheetWeek,
+    SendProjectMonthToBilling,
     SubmitTimesheetWeek,
 )
 from time_reporting.modules.timesheets.handlers import (
@@ -27,8 +29,10 @@ from time_reporting.modules.timesheets.handlers import (
     GetYearHoursHandler,
     ListSubmittedTimesheetWeeksHandler,
     ListTimesheetOptionsHandler,
+    ReopenProjectBillingPeriodHandler,
     ReturnTimesheetWeekHandler,
     SaveTimesheetWeekHandler,
+    SendProjectMonthToBillingHandler,
     SubmitTimesheetWeekHandler,
 )
 
@@ -48,3 +52,5 @@ def register(registry: HandlerRegistry) -> None:
     registry.command(SubmitTimesheetWeek, SubmitTimesheetWeekHandler)
     registry.command(ApproveTimesheetWeek, ApproveTimesheetWeekHandler)
     registry.command(ReturnTimesheetWeek, ReturnTimesheetWeekHandler)
+    registry.command(SendProjectMonthToBilling, SendProjectMonthToBillingHandler)
+    registry.command(ReopenProjectBillingPeriod, ReopenProjectBillingPeriodHandler)
