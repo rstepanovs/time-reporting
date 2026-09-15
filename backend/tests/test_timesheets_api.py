@@ -316,3 +316,123 @@ async def test_calendar_and_year_hours_require_authentication(client: AsyncClien
 
     assert calendar.status_code == 401
     assert year.status_code == 401
+
+
+async def test_worker_can_read_own_month_summary_and_weekly_hours(
+    client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
+) -> None:
+    worker = await make_user(role=UserRole.WORKER)
+    headers = auth_headers(worker)
+
+    summary = await client.get("/api/v1/timesheets/months/2026/9/summary", headers=headers)
+    weekly = await client.get(
+        "/api/v1/timesheets/weekly-hours", headers=headers, params={"weeks": 4}
+    )
+
+    assert summary.status_code == 200
+    assert summary.json()["user"]["id"] == str(worker.id)
+    assert summary.json()["year"] == 2026
+    assert summary.json()["month"] == 9
+    assert weekly.status_code == 200
+    assert weekly.json()["user"]["id"] == str(worker.id)
+    assert len(weekly.json()["weeks"]) == 4
+
+
+async def test_worker_cannot_view_someone_elses_month_summary_or_weekly_hours(
+    client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
+) -> None:
+    worker = await make_user(role=UserRole.WORKER)
+    other = await make_user(role=UserRole.WORKER)
+    headers = auth_headers(worker)
+
+    summary = await client.get(
+        "/api/v1/timesheets/months/2026/9/summary",
+        headers=headers,
+        params={"user_id": str(other.id)},
+    )
+    weekly = await client.get(
+        "/api/v1/timesheets/weekly-hours", headers=headers, params={"user_id": str(other.id)}
+    )
+
+    assert summary.status_code == 403
+    assert weekly.status_code == 403
+
+
+@pytest.mark.parametrize("role", [UserRole.ADMIN, UserRole.PROJECT_MANAGER])
+async def test_manager_can_view_someone_elses_month_summary_and_weekly_hours(
+    client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders, role: UserRole
+) -> None:
+    manager_headers = auth_headers(await make_user(role=role))
+    worker = await make_user(role=UserRole.WORKER)
+
+    summary = await client.get(
+        "/api/v1/timesheets/months/2026/9/summary",
+        headers=manager_headers,
+        params={"user_id": str(worker.id)},
+    )
+    weekly = await client.get(
+        "/api/v1/timesheets/weekly-hours",
+        headers=manager_headers,
+        params={"user_id": str(worker.id)},
+    )
+
+    assert summary.status_code == 200
+    assert summary.json()["user"]["id"] == str(worker.id)
+    assert weekly.status_code == 200
+    assert weekly.json()["user"]["id"] == str(worker.id)
+
+
+async def test_weekly_hours_defaults_to_six_weeks(
+    client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
+) -> None:
+    headers = auth_headers(await make_user(role=UserRole.WORKER))
+
+    weekly = await client.get("/api/v1/timesheets/weekly-hours", headers=headers)
+
+    assert weekly.status_code == 200
+    assert len(weekly.json()["weeks"]) == 6
+
+
+async def test_month_summary_and_weekly_hours_for_unknown_user_return_404(
+    client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
+) -> None:
+    admin_headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    unknown_user_id = "00000000-0000-0000-0000-000000000000"
+
+    summary = await client.get(
+        "/api/v1/timesheets/months/2026/9/summary",
+        headers=admin_headers,
+        params={"user_id": unknown_user_id},
+    )
+    weekly = await client.get(
+        "/api/v1/timesheets/weekly-hours",
+        headers=admin_headers,
+        params={"user_id": unknown_user_id},
+    )
+
+    assert summary.status_code == 404
+    assert weekly.status_code == 404
+
+
+async def test_month_summary_and_weekly_hours_reject_out_of_range_query_params(
+    client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
+) -> None:
+    headers = auth_headers(await make_user(role=UserRole.WORKER))
+
+    bad_month = await client.get("/api/v1/timesheets/months/2026/13/summary", headers=headers)
+    bad_weeks = await client.get(
+        "/api/v1/timesheets/weekly-hours", headers=headers, params={"weeks": 27}
+    )
+
+    assert bad_month.status_code == 422
+    assert bad_weeks.status_code == 422
+
+
+async def test_month_summary_and_weekly_hours_require_authentication(
+    client: AsyncClient,
+) -> None:
+    summary = await client.get("/api/v1/timesheets/months/2026/9/summary")
+    weekly = await client.get("/api/v1/timesheets/weekly-hours")
+
+    assert summary.status_code == 401
+    assert weekly.status_code == 401

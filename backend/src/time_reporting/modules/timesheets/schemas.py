@@ -201,3 +201,45 @@ class YearHoursResponse(BaseModel):
     expected_hours: Decimal
     expected_hours_to_date: Decimal
     totals: HoursTotalsResponse
+
+
+class CurrencyAmountResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    currency: str
+    amount: Decimal
+
+
+class MonthTimeSummaryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user: TimesheetUserResponse
+    year: int
+    month: int
+    is_current: bool
+    working_days: int
+    expected_hours: Decimal
+    expected_hours_to_date: Decimal
+    hours: HoursTotalsResponse
+    per_diem_days: Decimal
+    expenses: list[CurrencyAmountResponse]
+
+
+class WeekHoursResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    week_start: date
+    iso_year: int
+    iso_week: int
+    is_current: bool
+    expected_hours: Decimal
+    expected_hours_to_date: Decimal
+    totals: HoursTotalsResponse
+
+
+class WeeklyHoursResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user: TimesheetUserResponse
+    weeks: list[WeekHoursResponse]
+    projects: list[ProjectHoursResponse]

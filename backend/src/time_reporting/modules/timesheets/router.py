@@ -17,7 +17,9 @@ from time_reporting.modules.timesheets.contracts import (
     DuplicateChangeError,
     EntryDateOutsideWeekError,
     GetMonthCalendar,
+    GetMonthTimeSummary,
     GetTimesheetWeek,
+    GetWeeklyHours,
     GetYearHours,
     ListTimesheetOptions,
     QuantityOutOfRangeError,
@@ -25,13 +27,16 @@ from time_reporting.modules.timesheets.contracts import (
     TimeEntryChange,
     TimesheetBillingItemNotFoundError,
     TimesheetRowClosedError,
+    WeekRangeOutOfBoundsError,
     WeekStartNotMondayError,
 )
 from time_reporting.modules.timesheets.schemas import (
     MonthCalendarResponse,
+    MonthTimeSummaryResponse,
     SaveTimesheetWeekRequest,
     TimesheetOptionResponse,
     TimesheetWeekResponse,
+    WeeklyHoursResponse,
     YearHoursResponse,
 )
 from time_reporting.modules.users.contracts import UserDTO, UserNotFoundError, UserRole
@@ -177,3 +182,42 @@ async def get_year_hours(
     except UserNotFoundError as exc:
         raise _user_not_found() from exc
     return YearHoursResponse.model_validate(result)
+
+
+@router.get("/months/{year}/{month}/summary", responses=_USER_NOT_FOUND_RESPONSE)
+async def get_month_time_summary(
+    year: Annotated[int, Path(ge=2000, le=2100)],
+    month: Annotated[int, Path(ge=1, le=12)],
+    current_user: CurrentUserDep,
+    bus: BusDep,
+    user_id: Annotated[UUID | None, Query()] = None,
+) -> MonthTimeSummaryResponse:
+    target_user_id = _resolve_target_user(current_user, user_id)
+
+    try:
+        summary = await bus.query(
+            GetMonthTimeSummary(user_id=target_user_id, year=year, month=month, today=date.today())
+        )
+    except UserNotFoundError as exc:
+        raise _user_not_found() from exc
+    return MonthTimeSummaryResponse.model_validate(summary)
+
+
+@router.get("/weekly-hours", responses={**_USER_NOT_FOUND_RESPONSE, **_RULE_RESPONSE})
+async def get_weekly_hours(
+    current_user: CurrentUserDep,
+    bus: BusDep,
+    weeks: Annotated[int, Query(ge=1, le=26)] = 6,
+    user_id: Annotated[UUID | None, Query()] = None,
+) -> WeeklyHoursResponse:
+    target_user_id = _resolve_target_user(current_user, user_id)
+
+    try:
+        result = await bus.query(
+            GetWeeklyHours(user_id=target_user_id, weeks=weeks, today=date.today())
+        )
+    except UserNotFoundError as exc:
+        raise _user_not_found() from exc
+    except WeekRangeOutOfBoundsError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return WeeklyHoursResponse.model_validate(result)
