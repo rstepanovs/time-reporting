@@ -1,16 +1,26 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fetchCurrentUser } from "@/auth/api";
 import {
+  testAdmin,
   testMonthTimeSummary,
   testMonthTimeSummaryPrevious,
+  testReadyBillingPeriod,
+  testTeamMonthOverview,
   testTimesheetOption,
+  testUser,
   testWeeklyHours,
   testWorker,
 } from "@/test/fixtures";
 import { renderApp } from "@/test/renderApp";
-import { getMonthTimeSummary, getWeeklyHours, listTimesheetOptions } from "@/timesheets/api";
+import {
+  getMonthTimeSummary,
+  getTeamMonthOverview,
+  getWeeklyHours,
+  listTimesheetOptions,
+  sendProjectMonthToBilling,
+} from "@/timesheets/api";
 
 vi.mock("@/auth/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/auth/api")>()),
@@ -22,6 +32,8 @@ vi.mock("@/timesheets/api", async (importOriginal) => ({
   getMonthTimeSummary: vi.fn(),
   getWeeklyHours: vi.fn(),
   listTimesheetOptions: vi.fn(),
+  getTeamMonthOverview: vi.fn(),
+  sendProjectMonthToBilling: vi.fn(),
 }));
 
 beforeEach(() => {
@@ -34,6 +46,7 @@ beforeEach(() => {
   });
   vi.mocked(getWeeklyHours).mockResolvedValue(testWeeklyHours);
   vi.mocked(listTimesheetOptions).mockResolvedValue([testTimesheetOption]);
+  vi.mocked(getTeamMonthOverview).mockResolvedValue(testTeamMonthOverview);
 });
 
 describe("DashboardPage", () => {
@@ -121,5 +134,49 @@ describe("DashboardPage", () => {
 
     const link = await screen.findByRole("link", { name: /Website Revamp/ });
     expect(link.getAttribute("href")).toBe(`/projects/${testTimesheetOption.project.id}`);
+  });
+
+  it("does not show a team section to a worker", async () => {
+    renderApp("/");
+
+    await screen.findByText(/Website Revamp/);
+    expect(screen.queryByRole("heading", { name: "My team" })).toBeNull();
+  });
+
+  it("shows the team section to a project manager, without a scope toggle", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    renderApp("/");
+
+    await screen.findByRole("heading", { name: "My team" });
+    expect(await screen.findByText("Awaiting approval")).toBeTruthy();
+    expect(screen.getByText("Not submitted")).toBeTruthy();
+    expect(screen.queryByRole("radio", { name: "All" })).toBeNull();
+  });
+
+  it("shows an admin the scope toggle", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testAdmin);
+    renderApp("/");
+
+    await screen.findByRole("heading", { name: "My team" });
+    expect(await screen.findByRole("radio", { name: "My projects" })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "All" })).toBeTruthy();
+  });
+
+  it("lets a manager send a ready project's month to billing", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(sendProjectMonthToBilling).mockResolvedValue(testReadyBillingPeriod);
+    renderApp("/");
+    await screen.findByRole("heading", { name: "My team" });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Send →" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(sendProjectMonthToBilling).toHaveBeenCalledWith(
+        { projectId: testReadyBillingPeriod.project_id, year: 2026, month: 9 },
+        expect.anything(),
+      );
+    });
   });
 });
