@@ -63,6 +63,7 @@ def _unique_projects(suffix: str) -> tuple[DemoProject, ...]:
             customer_name=f"{project.customer_name} {suffix}",
             name=f"{project.name} {suffix}",
             member_emails=tuple(f"{suffix}.{email}" for email in project.member_emails),
+            manager_email=(f"{suffix}.{project.manager_email}" if project.manager_email else None),
         )
         for project in DEMO_PROJECTS
     )
@@ -118,6 +119,11 @@ async def test_seed_creates_users_customers_and_projects(bus: Bus) -> None:
         stored_project = projects_by_name[project.name]
         assert stored_project.is_active is not project.archived
         assert stored_project.customer.name == project.customer_name
+        if project.manager_email:
+            assert stored_project.manager is not None
+            assert stored_project.manager.email == project.manager_email
+        else:
+            assert stored_project.manager is None
 
         members = await bus.query(ListProjectMembers(project_id=stored_project.id))
         assert {member.email for member in members} == set(project.member_emails)

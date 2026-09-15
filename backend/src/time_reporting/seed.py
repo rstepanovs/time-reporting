@@ -89,6 +89,7 @@ class DemoProject:
     name: str
     description: str | None = None
     member_emails: tuple[str, ...] = ()
+    manager_email: str | None = None
     archived: bool = False
     # Give the six default billing items the rates in DEMO_BILLING_RATES/DEMO_PURCHASING_MARKUP.
     billing_rates: bool = False
@@ -167,6 +168,7 @@ DEMO_PROJECTS: tuple[DemoProject, ...] = (
         name="Website Revamp",
         description="Redesign the public marketing site.",
         member_emails=("manager@example.com", "worker@example.com"),
+        manager_email="manager@example.com",
         billing_rates=True,
         custom_billing_items=(
             DemoBillingItem(
@@ -179,6 +181,7 @@ DEMO_PROJECTS: tuple[DemoProject, ...] = (
         name="Internal Tooling",
         description="Roll out time tracking internally.",
         member_emails=("worker@example.com",),
+        manager_email="manager@example.com",
         billing_rates=True,
     ),
     DemoProject(
@@ -186,6 +189,7 @@ DEMO_PROJECTS: tuple[DemoProject, ...] = (
         name="Platform Migration",
         description="Move billing to the new platform.",
         member_emails=("manager@example.com",),
+        manager_email="manager@example.com",
         billing_rates=True,
     ),
     DemoProject(
@@ -524,9 +528,15 @@ async def seed_demo_data(
     for project in projects:
         customer_id = customer_ids_by_name[project.customer_name]
         try:
+            manager_id = (
+                user_ids_by_email.get(project.manager_email) if project.manager_email else None
+            )
             created_project = await bus.execute(
                 CreateProject(
-                    customer_id=customer_id, name=project.name, description=project.description
+                    customer_id=customer_id,
+                    name=project.name,
+                    description=project.description,
+                    manager_id=manager_id,
                 )
             )
         except ProjectNameAlreadyExistsError:

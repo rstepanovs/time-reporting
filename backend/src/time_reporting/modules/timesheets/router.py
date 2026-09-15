@@ -5,35 +5,44 @@ may also read (but not write) another user's data.
 """
 
 from datetime import date
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Path, Query, status
 
 from time_reporting.api.deps import BusDep
-from time_reporting.modules.auth.dependencies import CurrentUserDep, ManagerDep
+from time_reporting.modules.auth.dependencies import AdminDep, CurrentUserDep, ManagerDep
 from time_reporting.modules.timesheets.contracts import (
     ApproveTimesheetWeek,
+    BillingPeriodAlreadySentError,
+    BillingPeriodLockedError,
+    BillingPeriodNotFoundError,
+    BillingPeriodNotReadyError,
     DailyHoursExceededError,
     DuplicateChangeError,
     EntryDateOutsideWeekError,
     GetMonthCalendar,
     GetMonthTimeSummary,
+    GetTeamMonthOverview,
     GetTimesheetWeek,
     GetWeeklyHours,
     GetYearHours,
     InvalidWeekStatusTransitionError,
     ListSubmittedTimesheetWeeks,
     ListTimesheetOptions,
+    NotProjectManagerError,
     QuantityOutOfRangeError,
+    ReopenProjectBillingPeriod,
     ReturnCommentRequiredError,
     ReturnTimesheetWeek,
     RowCommentChange,
     SaveTimesheetWeek,
     SelfReviewError,
+    SendProjectMonthToBilling,
     SubmitTimesheetWeek,
     TimeEntryChange,
     TimesheetBillingItemNotFoundError,
+    TimesheetProjectNotFoundError,
     TimesheetRowClosedError,
     TimesheetWeekLockedError,
     WeekRangeOutOfBoundsError,
@@ -42,8 +51,11 @@ from time_reporting.modules.timesheets.contracts import (
 from time_reporting.modules.timesheets.schemas import (
     MonthCalendarResponse,
     MonthTimeSummaryResponse,
+    ProjectBillingPeriodResponse,
     ReturnTimesheetWeekRequest,
     SaveTimesheetWeekRequest,
+    SendProjectMonthToBillingRequest,
+    TeamMonthOverviewResponse,
     TimesheetOptionResponse,
     TimesheetWeekResponse,
     TimesheetWeekSummaryResponse,
@@ -51,6 +63,8 @@ from time_reporting.modules.timesheets.schemas import (
     YearHoursResponse,
 )
 from time_reporting.modules.users.contracts import UserDTO, UserNotFoundError, UserRole
+
+Scope = Literal["mine", "all"]
 
 router = APIRouter(prefix="/timesheets", tags=["timesheets"])
 
@@ -149,7 +163,7 @@ async def save_timesheet_week(
         raise _user_not_found() from exc
     except TimesheetBillingItemNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except TimesheetWeekLockedError as exc:
+    except (TimesheetWeekLockedError, BillingPeriodLockedError) as exc:
         raise _conflict(str(exc)) from exc
     except (
         EntryDateOutsideWeekError,
@@ -237,17 +251,90 @@ async def return_timesheet_week(
         raise _forbidden(str(exc)) from exc
     except ReturnCommentRequiredError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except InvalidWeekStatusTransitionError as exc:
+    except (InvalidWeekStatusTransitionError, BillingPeriodLockedError) as exc:
         raise _conflict(str(exc)) from exc
     return TimesheetWeekResponse.model_validate(week)
 
 
 @router.get("/submissions")
 async def list_submitted_timesheet_weeks(
-    _manager: ManagerDep, bus: BusDep
+    current_user: ManagerDep,
+    bus: BusDep,
+    scope: Annotated[Scope, Query()] = "all",
 ) -> list[TimesheetWeekSummaryResponse]:
-    summaries = await bus.query(ListSubmittedTimesheetWeeks())
+    manager_id = None if scope == "all" else current_user.id
+    summaries = await bus.query(ListSubmittedTimesheetWeeks(manager_id=manager_id))
     return [TimesheetWeekSummaryResponse.model_validate(summary) for summary in summaries]
+
+
+_ALL_SCOPE_FORBIDDEN_RESPONSE: dict[int | str, dict[str, Any]] = {
+    status.HTTP_403_FORBIDDEN: {"description": "Only an admin can view every project"}
+}
+
+
+@router.get("/team/{year}/{month}", responses=_ALL_SCOPE_FORBIDDEN_RESPONSE)
+async def get_team_month_overview(
+    year: Annotated[int, Path(ge=2000, le=2100)],
+    month: Annotated[int, Path(ge=1, le=12)],
+    current_user: ManagerDep,
+    bus: BusDep,
+    scope: Annotated[Scope, Query()] = "mine",
+) -> TeamMonthOverviewResponse:
+    if scope == "all" and current_user.role != UserRole.ADMIN:
+        raise _forbidden("Only an admin can view every project")
+    manager_id = None if scope == "all" else current_user.id
+    overview = await bus.query(
+        GetTeamMonthOverview(manager_id=manager_id, year=year, month=month, today=date.today())
+    )
+    return TeamMonthOverviewResponse.model_validate(overview)
+
+
+@router.post(
+    "/billing-periods",
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        **_USER_NOT_FOUND_RESPONSE,
+        status.HTTP_403_FORBIDDEN: {"description": "Not this project's manager"},
+        status.HTTP_409_CONFLICT: {"description": "Not ready to send, or already sent"},
+    },
+)
+async def send_project_month_to_billing(
+    body: SendProjectMonthToBillingRequest, current_user: ManagerDep, bus: BusDep
+) -> ProjectBillingPeriodResponse:
+    try:
+        period = await bus.execute(
+            SendProjectMonthToBilling(
+                project_id=body.project_id,
+                year=body.year,
+                month=body.month,
+                sent_by_id=current_user.id,
+            )
+        )
+    except TimesheetProjectNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except UserNotFoundError as exc:
+        raise _user_not_found() from exc
+    except NotProjectManagerError as exc:
+        raise _forbidden(str(exc)) from exc
+    except (BillingPeriodNotReadyError, BillingPeriodAlreadySentError) as exc:
+        raise _conflict(str(exc)) from exc
+    return ProjectBillingPeriodResponse.model_validate(period)
+
+
+@router.delete(
+    "/billing-periods/{project_id}/{period_start}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={status.HTTP_404_NOT_FOUND: {"description": "No sent period found"}},
+)
+async def reopen_project_billing_period(
+    project_id: UUID, period_start: date, _admin: AdminDep, bus: BusDep
+) -> None:
+    try:
+        await bus.execute(
+            ReopenProjectBillingPeriod(project_id=project_id, period_start=period_start)
+        )
+    except BillingPeriodNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 @router.get("/options")

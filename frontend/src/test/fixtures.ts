@@ -167,6 +167,7 @@ export const testTimesheetRow: TimesheetRow = {
   is_open: true,
   entries: [{ date: "2026-09-14", quantity: "8.00", note: null }],
   comment: null,
+  locked_dates: [],
 };
 
 export const testTimesheetWeek: TimesheetWeek = {

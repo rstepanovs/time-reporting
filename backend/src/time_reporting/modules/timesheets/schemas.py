@@ -14,7 +14,11 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from time_reporting.modules.projects.contracts import BillingItemPreset, BillingUnit
-from time_reporting.modules.timesheets.contracts import TimesheetWeekStatus
+from time_reporting.modules.timesheets.contracts import (
+    BillingPeriodStatus,
+    TeamMemberWarning,
+    TimesheetWeekStatus,
+)
 from time_reporting.modules.work_calendar.contracts import NonWorkingDayKind
 
 Note = Annotated[str, StringConstraints(strip_whitespace=True, max_length=10_000)]
@@ -103,6 +107,7 @@ class TimesheetRowResponse(BaseModel):
     is_open: bool
     entries: list[TimeEntryResponse]
     comment: str | None
+    locked_dates: list[date] = []
 
 
 class TimesheetUserResponse(BaseModel):
@@ -289,3 +294,78 @@ class WeeklyHoursResponse(BaseModel):
     user: TimesheetUserResponse
     weeks: list[WeekHoursResponse]
     projects: list[ProjectHoursResponse]
+
+
+class TeamMemberWeekResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    week_start: date
+    iso_year: int
+    iso_week: int
+    status: TimesheetWeekStatus
+    project_hours: Decimal
+    total_hours: Decimal
+    expected_hours: Decimal
+
+
+class TeamMemberResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user: TimesheetUserResponse
+    is_member: bool
+    project_hours: Decimal
+    total_hours_in_month: Decimal
+    expected_hours_to_date: Decimal
+    weeks: list[TeamMemberWeekResponse]
+    warning: TeamMemberWarning | None
+
+
+class ProjectBillingPeriodResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    project_id: UUID
+    period_start: date
+    period_end: date
+    status: BillingPeriodStatus
+    sent_at: datetime | None
+    sent_by: TimesheetUserResponse | None
+    blocking_weeks: int
+    weeks_in_scope: int
+    hours: HoursTotalsResponse
+    per_diem_days: Decimal
+    expenses: list[CurrencyAmountResponse]
+
+
+class TeamProjectResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    project: TimesheetProjectResponse
+    members: list[TeamMemberResponse]
+    billing: ProjectBillingPeriodResponse
+
+
+class TeamStatusCountsResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    awaiting_approval: int
+    returned: int
+    not_submitted: int
+    approved: int
+
+
+class TeamMonthOverviewResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    year: int
+    month: int
+    weeks: list[date]
+    projects: list[TeamProjectResponse]
+    counts: TeamStatusCountsResponse
+
+
+class SendProjectMonthToBillingRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: UUID
+    year: Annotated[int, Field(ge=2000, le=2100)]
+    month: Annotated[int, Field(ge=1, le=12)]

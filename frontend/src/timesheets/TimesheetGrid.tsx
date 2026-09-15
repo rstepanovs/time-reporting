@@ -175,6 +175,7 @@ export function TimesheetGrid({ userId, weekStart, onDirtyChange }: Props) {
           is_open: true,
           entries: [],
           comment: null,
+          locked_dates: [],
         });
       }
     }

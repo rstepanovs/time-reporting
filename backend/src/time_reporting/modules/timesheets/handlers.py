@@ -3,10 +3,14 @@
 Handlers translate between bus messages and the service/repository and never return ORM entities.
 """
 
+from collections.abc import Sequence
+from datetime import timedelta
 from decimal import Decimal
+from uuid import UUID
 
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.projects.contracts import (
+    ListManagedProjectsWithMembers,
     ListMemberProjectsWithBillingItems,
     ProjectOptionDTO,
 )
@@ -37,12 +41,13 @@ from time_reporting.modules.timesheets.contracts import (
     WeeklyHoursDTO,
     YearHoursDTO,
 )
+from time_reporting.modules.timesheets.models import TimesheetWeek
 from time_reporting.modules.timesheets.repository import (
     TimeEntryRepository,
     TimesheetWeekRepository,
 )
 from time_reporting.modules.timesheets.service import TimesheetService
-from time_reporting.modules.timesheets.summary import TimesheetSummaryService
+from time_reporting.modules.timesheets.summary import TimesheetSummaryService, _start_of_iso_week
 from time_reporting.modules.timesheets.team import TeamOverviewService
 from time_reporting.modules.users.contracts import GetUsersByIds
 
@@ -183,6 +188,8 @@ class ListSubmittedTimesheetWeeksHandler:
         self, query: ListSubmittedTimesheetWeeks
     ) -> tuple[TimesheetWeekSummaryDTO, ...]:
         week_rows = await self._weeks.list_by_status(TimesheetWeekStatus.SUBMITTED)
+        if query.manager_id is not None:
+            week_rows = await self._filter_by_manager(week_rows, query.manager_id)
         user_ids = frozenset(week_row.user_id for week_row in week_rows)
         users_by_id = {
             user.id: user for user in await self._bus.query(GetUsersByIds(user_ids=user_ids))
@@ -205,3 +212,21 @@ class ListSubmittedTimesheetWeeksHandler:
                 )
             )
         return tuple(summaries)
+
+    async def _filter_by_manager(
+        self, week_rows: Sequence[TimesheetWeek], manager_id: UUID
+    ) -> Sequence[TimesheetWeek]:
+        """Keep only weeks with at least one entry on a project ``manager_id`` manages."""
+        managed = await self._bus.query(ListManagedProjectsWithMembers(manager_id=manager_id))
+        managed_project_ids = frozenset(entry.project.id for entry in managed)
+        if not managed_project_ids or not week_rows:
+            return ()
+        date_from = min(week_row.week_start for week_row in week_rows)
+        date_to = max(week_row.week_start for week_row in week_rows) + timedelta(days=6)
+        entries = await self._entries.list_for_projects_in_range(
+            managed_project_ids, date_from, date_to
+        )
+        covered = {(entry.user_id, _start_of_iso_week(entry.entry_date)) for entry in entries}
+        return [
+            week_row for week_row in week_rows if (week_row.user_id, week_row.week_start) in covered
+        ]

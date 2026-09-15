@@ -619,3 +619,219 @@ async def test_submissions_list_includes_a_submitted_week(
     assert matching["week_start"] == A_MONDAY
     assert matching["status"] == "submitted"
     assert matching["total_hours"] == "8.00"
+
+
+async def test_submissions_scope_mine_excludes_other_managers_projects(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    other_manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    manager_headers = auth_headers(manager)
+    worker = await make_user(role=UserRole.WORKER)
+    worker_headers = auth_headers(worker)
+    project = await make_project(manager_id=other_manager.id)
+    await _add_member(client, manager_headers, str(project.id), str(worker.id))
+    item_id = await _normal_hours_item_id(client, manager_headers, str(project.id))
+    await client.put(
+        f"/api/v1/timesheets/weeks/{A_MONDAY}/entries",
+        headers=worker_headers,
+        json={"changes": [{"billing_item_id": item_id, "date": A_MONDAY, "quantity": "8.00"}]},
+    )
+    await client.post(f"/api/v1/timesheets/weeks/{A_MONDAY}/submit", headers=worker_headers)
+
+    mine = await client.get(
+        "/api/v1/timesheets/submissions", headers=manager_headers, params={"scope": "mine"}
+    )
+    everyone = await client.get(
+        "/api/v1/timesheets/submissions", headers=manager_headers, params={"scope": "all"}
+    )
+
+    assert mine.status_code == 200
+    assert mine.json() == []
+    assert everyone.status_code == 200
+    assert any(s["user"]["id"] == str(worker.id) for s in everyone.json())
+
+
+# --- Team overview ---
+
+
+async def test_team_overview_defaults_to_the_managers_own_projects(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    manager_headers = auth_headers(manager)
+    other_manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    mine = await make_project(manager_id=manager.id, name="Mine")
+    await make_project(manager_id=other_manager.id, name="Theirs")
+
+    response = await client.get("/api/v1/timesheets/team/2026/9", headers=manager_headers)
+
+    assert response.status_code == 200
+    body = response.json()
+    project_ids = {p["project"]["id"] for p in body["projects"]}
+    assert project_ids == {str(mine.id)}
+    assert "counts" in body and "weeks" in body
+
+
+async def test_team_overview_scope_all_requires_admin(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    admin = await make_user(role=UserRole.ADMIN)
+    await make_project(manager_id=manager.id)
+
+    as_manager = await client.get(
+        "/api/v1/timesheets/team/2026/9",
+        headers=auth_headers(manager),
+        params={"scope": "all"},
+    )
+    as_admin = await client.get(
+        "/api/v1/timesheets/team/2026/9", headers=auth_headers(admin), params={"scope": "all"}
+    )
+
+    assert as_manager.status_code == 403
+    assert as_admin.status_code == 200
+
+
+async def test_team_overview_requires_manager_access(
+    client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
+) -> None:
+    worker = await make_user(role=UserRole.WORKER)
+    response = await client.get("/api/v1/timesheets/team/2026/9", headers=auth_headers(worker))
+    assert response.status_code == 403
+
+
+# --- Billing periods ---
+
+
+async def test_send_project_month_to_billing_and_reopen(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    admin = await make_user(role=UserRole.ADMIN)
+    admin_headers = auth_headers(admin)
+    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    manager_headers = auth_headers(manager)
+    worker = await make_user(role=UserRole.WORKER)
+    worker_headers = auth_headers(worker)
+    project = await make_project(manager_id=manager.id)
+    await _add_member(client, manager_headers, str(project.id), str(worker.id))
+    item_id = await _normal_hours_item_id(client, manager_headers, str(project.id))
+    await client.put(
+        f"/api/v1/timesheets/weeks/{A_MONDAY}/entries",
+        headers=worker_headers,
+        json={"changes": [{"billing_item_id": item_id, "date": A_MONDAY, "quantity": "8.00"}]},
+    )
+    await client.post(f"/api/v1/timesheets/weeks/{A_MONDAY}/submit", headers=worker_headers)
+    worker_id = (await client.get("/api/v1/users/me", headers=worker_headers)).json()["id"]
+    await client.post(
+        f"/api/v1/timesheets/weeks/{A_MONDAY}/approve",
+        headers=manager_headers,
+        params={"user_id": worker_id},
+    )
+
+    sent = await client.post(
+        "/api/v1/timesheets/billing-periods",
+        headers=manager_headers,
+        json={"project_id": str(project.id), "year": 2026, "month": 9},
+    )
+    assert sent.status_code == 201
+    assert sent.json()["status"] == "sent"
+
+    already_sent = await client.post(
+        "/api/v1/timesheets/billing-periods",
+        headers=manager_headers,
+        json={"project_id": str(project.id), "year": 2026, "month": 9},
+    )
+    assert already_sent.status_code == 409
+
+    forbidden_reopen = await client.request(
+        "DELETE",
+        f"/api/v1/timesheets/billing-periods/{project.id}/2026-09-01",
+        headers=manager_headers,
+    )
+    assert forbidden_reopen.status_code == 403
+
+    reopened = await client.request(
+        "DELETE",
+        f"/api/v1/timesheets/billing-periods/{project.id}/2026-09-01",
+        headers=admin_headers,
+    )
+    assert reopened.status_code == 204
+
+
+async def test_send_project_month_to_billing_not_ready(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    project = await make_project(manager_id=manager.id)
+
+    response = await client.post(
+        "/api/v1/timesheets/billing-periods",
+        headers=auth_headers(manager),
+        json={"project_id": str(project.id), "year": 2026, "month": 9},
+    )
+
+    assert response.status_code == 409
+
+
+async def test_send_project_month_to_billing_by_a_different_manager_is_forbidden(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    other_manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    project = await make_project(manager_id=manager.id)
+
+    response = await client.post(
+        "/api/v1/timesheets/billing-periods",
+        headers=auth_headers(other_manager),
+        json={"project_id": str(project.id), "year": 2026, "month": 9},
+    )
+
+    assert response.status_code == 403
+
+
+async def test_reopen_unknown_billing_period_returns_404(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    admin = await make_user(role=UserRole.ADMIN)
+    project = await make_project()
+
+    response = await client.request(
+        "DELETE",
+        f"/api/v1/timesheets/billing-periods/{project.id}/2026-09-01",
+        headers=auth_headers(admin),
+    )
+
+    assert response.status_code == 404
+
+
+async def test_billing_periods_require_manager_access(
+    client: AsyncClient, make_user: UserFactory, make_project: ProjectFactory
+) -> None:
+    project = await make_project()
+    response = await client.post(
+        "/api/v1/timesheets/billing-periods",
+        json={"project_id": str(project.id), "year": 2026, "month": 9},
+    )
+    assert response.status_code == 401

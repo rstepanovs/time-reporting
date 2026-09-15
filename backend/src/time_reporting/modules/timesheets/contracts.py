@@ -439,7 +439,11 @@ class GetWeeklyHours(Query[WeeklyHoursDTO]):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ListSubmittedTimesheetWeeks(Query[tuple[TimesheetWeekSummaryDTO, ...]]):
-    """Weeks awaiting review, oldest submission first, for a manager's approvals list."""
+    """Weeks awaiting review, oldest submission first, for a manager's approvals list.
+    ``manager_id=None`` covers every project (today's behavior); otherwise only weeks with an
+    entry on a project that manager manages."""
+
+    manager_id: UUID | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
