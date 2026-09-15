@@ -6,8 +6,8 @@ import {
   testAdmin,
   testReadyBillingPeriod,
   testTeamMonthOverview,
-  testUser,
-  testWorker,
+  testManager,
+  testEmployee,
 } from "@/test/fixtures";
 import { renderApp } from "@/test/renderApp";
 import {
@@ -34,24 +34,24 @@ beforeEach(() => {
 });
 
 describe("TeamPage", () => {
-  it("is not reachable by a worker", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+  it("is not reachable by a plain employee", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
     renderApp("/team");
 
     await screen.findByRole("heading", { name: "Page not found" });
   });
 
   it("lists each managed project with its members' weeks", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     renderApp("/team");
 
     await screen.findByText("Website Revamp", { exact: false });
     expect(screen.getByText("Platform Migration", { exact: false })).toBeTruthy();
-    expect(screen.getAllByText(testWorker.name).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(testEmployee.name).length).toBeGreaterThan(0);
   });
 
   it("navigates between months", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     renderApp("/team");
     await screen.findByText("Website Revamp", { exact: false });
 
@@ -66,7 +66,7 @@ describe("TeamPage", () => {
   });
 
   it("lets a manager send a ready project's month to billing", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     vi.mocked(sendProjectMonthToBilling).mockResolvedValue(testReadyBillingPeriod);
     renderApp("/team");
     await screen.findByText("Platform Migration", { exact: false });
@@ -94,7 +94,7 @@ describe("TeamPage", () => {
                 ...project.billing,
                 status: "sent" as const,
                 sent_at: "2026-08-05T09:00:00Z",
-                sent_by: { id: testUser.id, name: testUser.name, email: testUser.email },
+                sent_by: { id: testManager.id, name: testManager.name, email: testManager.email },
               },
             }
           : project,
@@ -102,7 +102,7 @@ describe("TeamPage", () => {
     };
     vi.mocked(getTeamMonthOverview).mockResolvedValue(sentOverview);
 
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     renderApp("/team");
     await screen.findByText("Platform Migration", { exact: false });
     expect(screen.queryByRole("button", { name: "Reopen" })).toBeNull();

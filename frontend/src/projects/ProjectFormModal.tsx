@@ -13,7 +13,7 @@ import type { UserRole } from "@/users/api";
 import { useUserDirectory } from "@/users/hooks";
 
 const DEFAULT_NORMAL_WORKING_HOURS = 8;
-const MANAGER_ROLES: UserRole[] = ["admin", "project_manager"];
+const MANAGER_ROLES: UserRole[] = ["manager"];
 
 type FormValues = {
   customerId: string;

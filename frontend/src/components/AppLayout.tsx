@@ -15,11 +15,13 @@ import { useDisclosure } from "@mantine/hooks";
 import { Link, Outlet, useLocation } from "react-router";
 
 import { useAuthenticatedUser, useSignOut } from "@/auth/hooks";
-import { canManage, isAdmin, roleLabels } from "@/auth/roles";
+import { EMPLOYEE_LABEL, canManage, isAdmin, roleLabels } from "@/auth/roles";
 
 function AccountMenu() {
   const user = useAuthenticatedUser();
   const signOut = useSignOut();
+  const levelLabels =
+    user.roles.length > 0 ? user.roles.map((role) => roleLabels[role]) : [EMPLOYEE_LABEL];
 
   return (
     <Menu position="bottom-end" width={260}>
@@ -41,9 +43,13 @@ function AccountMenu() {
           <Text size="xs" c="dimmed">
             {user.email}
           </Text>
-          <Badge size="xs" variant="light" mt={6}>
-            {roleLabels[user.role]}
-          </Badge>
+          <Group gap={4} mt={6}>
+            {levelLabels.map((label) => (
+              <Badge key={label} size="xs" variant="light">
+                {label}
+              </Badge>
+            ))}
+          </Group>
         </Box>
         <Menu.Divider />
         <Menu.Item component={Link} to="/account/password">
@@ -79,7 +85,7 @@ const ADMIN_NAV_ITEMS = [
 function Navigation({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
   const user = useAuthenticatedUser();
-  const navItems = canManage(user.role)
+  const navItems = canManage(user)
     ? [...NAV_ITEMS.slice(0, 3), APPROVALS_NAV_ITEM, TEAM_NAV_ITEM, ...NAV_ITEMS.slice(3)]
     : NAV_ITEMS;
 
@@ -97,7 +103,7 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
           onClick={onNavigate}
         />
       ))}
-      {isAdmin(user.role) && (
+      {isAdmin(user) && (
         <NavLink
           label="Administration"
           defaultOpened={location.pathname.startsWith("/admin")}

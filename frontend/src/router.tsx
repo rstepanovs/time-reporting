@@ -33,12 +33,12 @@ export const routes: RouteObject[] = [
           { path: "hours", element: <HoursPage /> },
           {
             path: "approvals",
-            element: <RequireRole roles={["admin", "project_manager"]} />,
+            element: <RequireRole roles={["manager"]} />,
             children: [{ index: true, element: <ApprovalsPage /> }],
           },
           {
             path: "team",
-            element: <RequireRole roles={["admin", "project_manager"]} />,
+            element: <RequireRole roles={["manager"]} />,
             children: [{ index: true, element: <TeamPage /> }],
           },
           { path: "projects", element: <ProjectsPage /> },

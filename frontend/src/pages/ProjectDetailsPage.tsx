@@ -20,7 +20,7 @@ import { useState } from "react";
 import { Link, useParams } from "react-router";
 
 import { useAuthenticatedUser } from "@/auth/hooks";
-import { canManage, isAdmin, roleLabels } from "@/auth/roles";
+import { EMPLOYEE_LABEL, canManage, isAdmin, roleLabels } from "@/auth/roles";
 import { BillingItemFormModal, formatBillingItemPrice } from "@/projects/BillingItemFormModal";
 import { ProjectFormModal } from "@/projects/ProjectFormModal";
 import {
@@ -488,7 +488,7 @@ export function ProjectDetailsPage() {
             Manager: {data.manager ? `${data.manager.name} (${data.manager.email})` : "None"}
           </Text>
         </div>
-        {canManage(user.role) && (
+        {canManage(user) && (
           <Group>
             <Button variant="default" onClick={openEdit}>
               Edit
@@ -502,8 +502,8 @@ export function ProjectDetailsPage() {
 
       <BillingItemsSection
         project={data}
-        isManager={canManage(user.role)}
-        canDeletePermanently={isAdmin(user.role)}
+        isManager={canManage(user)}
+        canDeletePermanently={isAdmin(user)}
       />
 
       <Title order={3} mt="md">
@@ -518,7 +518,7 @@ export function ProjectDetailsPage() {
               <Table.Th>Name</Table.Th>
               <Table.Th>Email</Table.Th>
               <Table.Th>Role</Table.Th>
-              {canManage(user.role) && <Table.Th />}
+              {canManage(user) && <Table.Th />}
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -533,8 +533,12 @@ export function ProjectDetailsPage() {
                   )}
                 </Table.Td>
                 <Table.Td>{member.email}</Table.Td>
-                <Table.Td>{roleLabels[member.role]}</Table.Td>
-                {canManage(user.role) && (
+                <Table.Td>
+                  {member.roles.length > 0
+                    ? member.roles.map((role) => roleLabels[role]).join(", ")
+                    : EMPLOYEE_LABEL}
+                </Table.Td>
+                {canManage(user) && (
                   <Table.Td>
                     <RemoveMemberButton
                       projectId={data.id}
@@ -549,7 +553,7 @@ export function ProjectDetailsPage() {
         </Table>
       )}
 
-      {canManage(user.role) && (
+      {canManage(user) && (
         <AddMemberForm projectId={data.id} isProjectActive={data.is_active} memberIds={memberIds} />
       )}
 

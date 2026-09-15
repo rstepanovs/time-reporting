@@ -163,7 +163,7 @@ function ProjectSection({
             )}
           </Badge>
           {billing.status === "ready" && <SendButton project={project} year={year} month={month} />}
-          {billing.status === "sent" && isAdmin(user.role) && <ReopenButton project={project} />}
+          {billing.status === "sent" && isAdmin(user) && <ReopenButton project={project} />}
         </Group>
       </Group>
       <TeamWeekMatrix project={project} weekStarts={weekStarts} year={year} month={month} />

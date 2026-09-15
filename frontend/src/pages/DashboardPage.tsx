@@ -39,7 +39,7 @@ export function DashboardPage() {
         <MyProjectsCard />
       </SimpleGrid>
 
-      {canManage(user.role) && (
+      {canManage(user) && (
         <>
           <Group justify="space-between">
             <Title order={3}>My team</Title>

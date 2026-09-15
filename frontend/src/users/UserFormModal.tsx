@@ -2,12 +2,23 @@ import { Alert, Button, Modal, PasswordInput, Select, Stack, TextInput } from "@
 import { hasLength, isEmail, isNotEmpty, useForm } from "@mantine/form";
 
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "@/auth/passwords";
-import { roleLabels } from "@/auth/roles";
-import type { User } from "@/users/api";
+import { EMPLOYEE_LABEL, roleLabels } from "@/auth/roles";
+import type { User, UserRole } from "@/users/api";
 import { UserEmailConflictError, UserRuleError } from "@/users/api";
 import { useCreateUser, useUpdateUser } from "@/users/hooks";
 
-const ROLE_OPTIONS = Object.entries(roleLabels).map(([value, label]) => ({ value, label }));
+// A plain employee holds no access level, so it isn't a `UserRole` value.
+const EMPLOYEE_VALUE = "employee";
+const ROLE_OPTIONS = [
+  { value: EMPLOYEE_VALUE, label: EMPLOYEE_LABEL },
+  ...Object.entries(roleLabels).map(([value, label]) => ({ value, label })),
+];
+
+// This single-select is a stand-in for `roles` (a user can hold several levels at once) until
+// T5's checkbox group; it can only set/clear one level at a time.
+function rolesFromValue(value: string): UserRole[] {
+  return value === EMPLOYEE_VALUE ? [] : [value as UserRole];
+}
 
 type FormValues = {
   name: string;
@@ -29,8 +40,13 @@ export function UserFormModal(props: Props) {
     mode: "uncontrolled",
     initialValues:
       props.mode === "edit"
-        ? { name: props.user.name, email: props.user.email, role: props.user.role, password: "" }
-        : { name: "", email: "", role: "worker", password: "" },
+        ? {
+            name: props.user.name,
+            email: props.user.email,
+            role: props.user.roles[0] ?? EMPLOYEE_VALUE,
+            password: "",
+          }
+        : { name: "", email: "", role: EMPLOYEE_VALUE, password: "" },
     validate: {
       name: isNotEmpty("Enter a name"),
       email: isEmail("Enter a valid email"),
@@ -52,15 +68,16 @@ export function UserFormModal(props: Props) {
         await createUser.mutateAsync({
           name: values.name,
           email: values.email,
-          role: values.role as User["role"],
+          roles: rolesFromValue(values.role),
           password: values.password,
         });
       } else {
         const original = props.user;
-        const body: { name?: string; email?: string; role?: User["role"] } = {};
+        const body: { name?: string; email?: string; roles?: UserRole[] } = {};
         if (values.name !== original.name) body.name = values.name;
         if (values.email !== original.email) body.email = values.email;
-        if (values.role !== original.role) body.role = values.role as User["role"];
+        const originalValue = original.roles[0] ?? EMPLOYEE_VALUE;
+        if (values.role !== originalValue) body.roles = rolesFromValue(values.role);
         await updateUser.mutateAsync(body);
       }
       onClose();

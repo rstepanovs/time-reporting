@@ -13,7 +13,7 @@ Backend: `modules/projects`.
 - `ProjectFormModal.tsx` — shared create/edit form used by `pages/ProjectsPage.tsx`,
   `pages/ProjectDetailsPage.tsx` and `pages/admin/AdminProjectsPage.tsx`; an optional `onCreated`
   callback lets the admin page stay put instead of navigating to the new project. A searchable,
-  clearable "Manager" picker (`useUserDirectory` with `roles: ["admin","project_manager"]`)
+  clearable "Manager" picker (`useUserDirectory` with `roles: ["manager"]`)
   sets/clears `manager_id`, keeping the current manager selectable even when a search narrows the
   directory past them.
 - `BillingItemFormModal.tsx` — create/edit a billing item; the unit is locked once editing, and its

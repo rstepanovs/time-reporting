@@ -56,7 +56,7 @@ export function ProjectsPage() {
     <Stack>
       <Group justify="space-between">
         <Title order={2}>Projects</Title>
-        {canManage(user.role) && <Button onClick={openCreate}>New project</Button>}
+        {canManage(user) && <Button onClick={openCreate}>New project</Button>}
       </Group>
 
       <Group align="flex-end">
@@ -95,7 +95,7 @@ export function ProjectsPage() {
           }}
           mb={8}
         />
-        {canManage(user.role) && (
+        {canManage(user) && (
           <Switch
             label="Managed by me"
             checked={managedByMe}

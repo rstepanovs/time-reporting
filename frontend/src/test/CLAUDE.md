@@ -7,6 +7,11 @@
 - `renderApp.tsx` — renders the full route tree in a memory router with a fresh `QueryClient`.
   Tests mock `@/auth/api` and whichever of `@/projects/api` / `@/customers/api` / `@/users/api` /
   `@/admin/api` / `@/calendar/api` / `@/timesheets/api` the page under test calls.
+- `fixtures.ts` — one `CurrentUser` per access-level persona used across tests: `testManager`
+  (`["manager"]`), `testEmployee` (`[]`, the implicit baseline — no levels), `testAdmin`
+  (`["admin","manager"]`, so it passes both `AdminDep`- and `ManagerDep`-gated views at once) and
+  `testAdminOnly` (`["admin"]`, for asserting the admin-without-manager case, e.g. Administration
+  visible but Approvals/Team hidden).
 
 ## Mantine gotchas
 

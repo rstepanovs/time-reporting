@@ -16,8 +16,8 @@ import {
   testTimesheetOption,
   testTimesheetRow,
   testTimesheetWeek,
-  testUser,
-  testWorker,
+  testManager,
+  testEmployee,
 } from "@/test/fixtures";
 import { renderApp } from "@/test/renderApp";
 import { searchUserDirectory } from "@/users/api";
@@ -54,7 +54,7 @@ const TUESDAY_CELL_NAME = `${testTimesheetRow.billing_item.name} 2026-09-15`;
 
 describe("TimesheetPage", () => {
   it("marks weekend and non-working-day columns", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
     renderApp("/timesheet");
 
     await screen.findByText(testTimesheetRow.billing_item.name);
@@ -69,7 +69,7 @@ describe("TimesheetPage", () => {
   });
 
   it("lets the owner enter and save a value", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
     vi.mocked(saveTimesheetWeek).mockResolvedValue(testTimesheetWeek);
     renderApp("/timesheet");
     await screen.findByText(testTimesheetRow.billing_item.name);
@@ -96,7 +96,7 @@ describe("TimesheetPage", () => {
   });
 
   it("sends quantity: null when clearing an existing cell", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
     vi.mocked(saveTimesheetWeek).mockResolvedValue({ ...testTimesheetWeek, rows: [] });
     renderApp("/timesheet");
     await screen.findByText(testTimesheetRow.billing_item.name);
@@ -121,7 +121,7 @@ describe("TimesheetPage", () => {
   });
 
   it("renders a closed row read-only", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
     vi.mocked(getTimesheetWeek).mockResolvedValue({
       ...testTimesheetWeek,
       rows: [{ ...testTimesheetRow, is_open: false }],
@@ -134,7 +134,7 @@ describe("TimesheetPage", () => {
   });
 
   it("renders a row's billed dates read-only and shows a locked notice", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
     vi.mocked(getTimesheetWeek).mockResolvedValue({
       ...testTimesheetWeek,
       rows: [{ ...testTimesheetRow, locked_dates: ["2026-09-14"] }],
@@ -154,7 +154,7 @@ describe("TimesheetPage", () => {
   });
 
   it("shows a rule error from the server", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
     vi.mocked(saveTimesheetWeek).mockRejectedValue(new TimesheetRuleError("Total hours too high"));
     renderApp("/timesheet");
     await screen.findByText(testTimesheetRow.billing_item.name);
@@ -168,9 +168,9 @@ describe("TimesheetPage", () => {
   });
 
   it("a project manager viewing another user's week sees no inputs", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser); // a project manager
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager); // a project manager
     vi.mocked(getTimesheetWeek).mockResolvedValue({ ...testTimesheetWeek, can_edit: false });
-    renderApp(`/timesheet?user=${testWorker.id}`);
+    renderApp(`/timesheet?user=${testEmployee.id}`);
 
     await screen.findByText(testTimesheetRow.billing_item.name);
     expect(screen.getByText(/read-only/)).toBeTruthy();
@@ -178,8 +178,8 @@ describe("TimesheetPage", () => {
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
   });
 
-  it("a worker cannot pick another user", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+  it("a plain employee cannot pick another user", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
     renderApp("/timesheet");
 
     await screen.findByText(testTimesheetRow.billing_item.name);
@@ -187,7 +187,7 @@ describe("TimesheetPage", () => {
   });
 
   it("adds a row via the Add row modal", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
     renderApp("/timesheet");
     await screen.findByText(testTimesheetRow.billing_item.name);
 
@@ -208,7 +208,7 @@ describe("TimesheetPage", () => {
   });
 
   it("copies open rows from the previous week that aren't already shown", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
     const overtimeRow = {
       ...testTimesheetRow,
       billing_item: testTimesheetOption.billing_items[1],
@@ -229,7 +229,7 @@ describe("TimesheetPage", () => {
   });
 
   it("prefills an empty draft week with normal hours when there's exactly one open project", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
     vi.mocked(getTimesheetWeek).mockResolvedValue({ ...testTimesheetWeek, rows: [] });
     renderApp("/timesheet");
 
@@ -247,7 +247,7 @@ describe("TimesheetPage", () => {
   });
 
   it("does not prefill when the user has more than one open project", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
     vi.mocked(getTimesheetWeek).mockResolvedValue({ ...testTimesheetWeek, rows: [] });
     vi.mocked(listTimesheetOptions).mockResolvedValue([
       testTimesheetOption,
@@ -260,7 +260,7 @@ describe("TimesheetPage", () => {
   });
 
   it("sends a row comment on save", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
     vi.mocked(saveTimesheetWeek).mockResolvedValue(testTimesheetWeek);
     renderApp("/timesheet");
     await screen.findByText(testTimesheetRow.billing_item.name);
@@ -284,7 +284,7 @@ describe("TimesheetPage", () => {
   });
 
   it("deletes a saved row on save", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
     vi.mocked(saveTimesheetWeek).mockResolvedValue({ ...testTimesheetWeek, rows: [] });
     renderApp("/timesheet");
     await screen.findByText(testTimesheetRow.billing_item.name);
@@ -305,7 +305,7 @@ describe("TimesheetPage", () => {
   });
 
   it("renders a submitted week read-only with no Save or Submit button", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
     vi.mocked(getTimesheetWeek).mockResolvedValue({
       ...testTimesheetWeek,
       status: "submitted",
@@ -323,7 +323,7 @@ describe("TimesheetPage", () => {
   });
 
   it("lets a submitted week be submitted after confirmation", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
     vi.mocked(submitTimesheetWeek).mockResolvedValue({
       ...testTimesheetWeek,
       status: "submitted",
@@ -343,7 +343,7 @@ describe("TimesheetPage", () => {
   });
 
   it("a manager must enter a comment before returning a week", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser); // a project manager
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager); // a project manager
     vi.mocked(getTimesheetWeek).mockResolvedValue({
       ...testTimesheetWeek,
       status: "submitted",
@@ -351,7 +351,7 @@ describe("TimesheetPage", () => {
       can_submit: false,
       can_review: true,
     });
-    renderApp(`/timesheet?user=${testWorker.id}`);
+    renderApp(`/timesheet?user=${testEmployee.id}`);
     await screen.findByText(testTimesheetRow.billing_item.name);
 
     fireEvent.click(screen.getByRole("button", { name: "Return…" }));
@@ -373,14 +373,14 @@ describe("TimesheetPage", () => {
     await waitFor(() => {
       expect(returnTimesheetWeek).toHaveBeenCalledWith({
         weekStart: TEST_WEEK_START,
-        userId: testWorker.id,
+        userId: testEmployee.id,
         comment: "Please add the missing hours",
       });
     });
   });
 
   it("a manager can approve a submitted week", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser); // a project manager
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager); // a project manager
     vi.mocked(getTimesheetWeek).mockResolvedValue({
       ...testTimesheetWeek,
       status: "submitted",
@@ -393,7 +393,7 @@ describe("TimesheetPage", () => {
       status: "approved",
       can_review: false,
     });
-    renderApp(`/timesheet?user=${testWorker.id}`);
+    renderApp(`/timesheet?user=${testEmployee.id}`);
     await screen.findByText(testTimesheetRow.billing_item.name);
 
     fireEvent.click(screen.getByRole("button", { name: "Approve" }));
@@ -401,13 +401,13 @@ describe("TimesheetPage", () => {
     await waitFor(() => {
       expect(approveTimesheetWeek).toHaveBeenCalledWith({
         weekStart: TEST_WEEK_START,
-        userId: testWorker.id,
+        userId: testEmployee.id,
       });
     });
   });
 
   it("asks for confirmation before discarding unsaved changes on navigation", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
     renderApp("/timesheet");
     await screen.findByText(testTimesheetRow.billing_item.name);
 

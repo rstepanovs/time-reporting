@@ -19,7 +19,7 @@ import { useState } from "react";
 
 import { RemoveEntityModal } from "@/admin/RemoveEntityModal";
 import { useAuthenticatedUser } from "@/auth/hooks";
-import { roleLabels } from "@/auth/roles";
+import { EMPLOYEE_LABEL, roleLabels } from "@/auth/roles";
 import { ResetPasswordModal } from "@/users/ResetPasswordModal";
 import { type User, UserRuleError } from "@/users/api";
 import { useUpdateUser, useUsers } from "@/users/hooks";
@@ -164,7 +164,11 @@ export function AdminUsersPage() {
                   <Table.Tr key={user.id}>
                     <Table.Td>{user.name}</Table.Td>
                     <Table.Td>{user.email}</Table.Td>
-                    <Table.Td>{roleLabels[user.role]}</Table.Td>
+                    <Table.Td>
+                      {user.roles.length > 0
+                        ? user.roles.map((role) => roleLabels[role]).join(", ")
+                        : EMPLOYEE_LABEL}
+                    </Table.Td>
                     <Table.Td>
                       <Badge color={user.is_active ? "green" : "gray"} variant="light">
                         {user.is_active ? "Active" : "Inactive"}

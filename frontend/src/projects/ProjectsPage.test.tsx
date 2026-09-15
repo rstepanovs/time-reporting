@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fetchCurrentUser } from "@/auth/api";
 import { listCustomers } from "@/customers/api";
 import { createProject, listProjects, ProjectConflictError } from "@/projects/api";
-import { testCustomer, testProject, testUser, testWorker } from "@/test/fixtures";
+import { testCustomer, testProject, testManager, testEmployee } from "@/test/fixtures";
 import { renderApp } from "@/test/renderApp";
 import { searchUserDirectory } from "@/users/api";
 
@@ -41,7 +41,7 @@ beforeEach(() => {
 
 describe("ProjectsPage", () => {
   it("renders the project name, customer and status", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     renderApp("/projects");
 
     await screen.findByText(testProject.name);
@@ -51,7 +51,7 @@ describe("ProjectsPage", () => {
   });
 
   it("toggling 'Show archived' requests archived projects too", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     renderApp("/projects");
     await screen.findByText(testProject.name);
 
@@ -65,7 +65,7 @@ describe("ProjectsPage", () => {
   });
 
   it("shows the project's manager, or 'None'", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     vi.mocked(listProjects).mockResolvedValue({
       items: [
         {
@@ -84,7 +84,7 @@ describe("ProjectsPage", () => {
   });
 
   it("'Managed by me' filters projects by the current user", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     renderApp("/projects");
     await screen.findByText(testProject.name);
 
@@ -92,21 +92,21 @@ describe("ProjectsPage", () => {
 
     await waitFor(() => {
       expect(listProjects).toHaveBeenCalledWith(
-        expect.objectContaining({ managerId: testUser.id }),
+        expect.objectContaining({ managerId: testManager.id }),
       );
     });
   });
 
-  it("does not show 'Managed by me' to a worker", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+  it("does not show 'Managed by me' to a plain employee", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
     renderApp("/projects");
 
     await screen.findByText(testProject.name);
     expect(screen.queryByRole("switch", { name: "Managed by me" })).toBeNull();
   });
 
-  it("does not show 'New project' to a worker", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+  it("does not show 'New project' to a plain employee", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
     renderApp("/projects");
 
     await screen.findByText(testProject.name);
@@ -114,7 +114,7 @@ describe("ProjectsPage", () => {
   });
 
   it("lets a manager create a project and navigates to its details", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     const created = { ...testProject, id: "new-project-id", name: "New Project" };
     vi.mocked(createProject).mockResolvedValue(created);
     renderApp("/projects");
@@ -144,7 +144,7 @@ describe("ProjectsPage", () => {
   });
 
   it("shows a name conflict error from the create form", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     vi.mocked(createProject).mockRejectedValue(new ProjectConflictError());
     renderApp("/projects");
     await screen.findByText(testProject.name);

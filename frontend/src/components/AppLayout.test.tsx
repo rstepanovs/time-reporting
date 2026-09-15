@@ -2,7 +2,7 @@ import { screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fetchCurrentUser } from "@/auth/api";
-import { testAdmin, testUser, testWorker } from "@/test/fixtures";
+import { testAdmin, testAdminOnly, testManager, testEmployee } from "@/test/fixtures";
 import { renderApp } from "@/test/renderApp";
 
 vi.mock("@/auth/api", async (importOriginal) => ({
@@ -16,7 +16,7 @@ beforeEach(() => {
 
 describe("navigation", () => {
   it("shows links to Dashboard and Projects", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     renderApp("/");
 
     await screen.findByRole("heading", { name: "Time Reporting" });
@@ -34,44 +34,54 @@ describe("navigation", () => {
     expect(screen.getByText("Administration")).toBeTruthy();
   });
 
-  it("hides the Administration menu for a project manager and a worker", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+  it("hides the Administration menu for a project manager and a plain employee", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     renderApp("/");
     await screen.findByRole("heading", { name: "Time Reporting" });
     expect(screen.queryByText("Administration")).toBeNull();
 
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
     renderApp("/");
     await screen.findByRole("heading", { name: "Time Reporting" });
     expect(screen.queryByText("Administration")).toBeNull();
   });
 
   it("shows Approvals to a project manager and an admin", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser); // a project manager
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager); // a project manager
     renderApp("/");
     await screen.findByRole("heading", { name: "Time Reporting" });
     expect(screen.getByRole("link", { name: "Approvals" })).toBeTruthy();
   });
 
-  it("hides Approvals from a worker", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+  it("hides Approvals from a plain employee", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
     renderApp("/");
     await screen.findByRole("heading", { name: "Time Reporting" });
     expect(screen.queryByRole("link", { name: "Approvals" })).toBeNull();
   });
 
   it("shows Team, right after Approvals, to a project manager and an admin", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser); // a project manager
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager); // a project manager
     renderApp("/");
     await screen.findByRole("heading", { name: "Time Reporting" });
     const links = screen.getAllByRole("link").map((link) => link.textContent);
     expect(links.indexOf("Team")).toBe(links.indexOf("Approvals") + 1);
   });
 
-  it("hides Team from a worker", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+  it("hides Team from a plain employee", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
     renderApp("/");
     await screen.findByRole("heading", { name: "Time Reporting" });
+    expect(screen.queryByRole("link", { name: "Team" })).toBeNull();
+  });
+
+  it("shows Administration but hides Approvals/Team to a user holding only admin", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testAdminOnly);
+    renderApp("/");
+    await screen.findByRole("heading", { name: "Time Reporting" });
+
+    expect(screen.getByText("Administration")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Approvals" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Team" })).toBeNull();
   });
 });

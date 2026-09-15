@@ -2,7 +2,7 @@ import { screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fetchCurrentUser } from "@/auth/api";
-import { testAdmin, testUser } from "@/test/fixtures";
+import { testAdmin, testManager } from "@/test/fixtures";
 import { renderApp } from "@/test/renderApp";
 
 vi.mock("@/auth/api", async (importOriginal) => ({
@@ -16,7 +16,7 @@ beforeEach(() => {
 
 describe("/admin routes", () => {
   it("shows the not-found page to a non-admin", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     renderApp("/admin/users");
 
     expect(await screen.findByText("Page not found")).toBeTruthy();

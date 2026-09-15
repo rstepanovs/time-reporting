@@ -42,8 +42,7 @@ async function userAwareError(response: Response): Promise<Error> {
 }
 
 /** Active users matching `search` (name or email substring), for pickers such as adding a
- * project member or a project manager (`roles`). Requires manager access (admin or project
- * manager). */
+ * project member or a project's manager (`roles`, any-of). Requires manager access. */
 export async function searchUserDirectory(params: {
   search?: string;
   limit?: number;
@@ -80,7 +79,7 @@ export async function listUsers(params: {
 export async function createUser(body: {
   name: string;
   email: string;
-  role: UserRole;
+  roles: UserRole[];
   password: string;
 }): Promise<User> {
   const { data, response } = await api.POST("/api/v1/users", { body });
@@ -90,7 +89,7 @@ export async function createUser(body: {
 
 export async function updateUser(
   userId: string,
-  body: { name?: string; email?: string; role?: UserRole; is_active?: boolean },
+  body: { name?: string; email?: string; roles?: UserRole[]; is_active?: boolean },
 ): Promise<User> {
   const { data, response } = await api.PATCH("/api/v1/users/{user_id}", {
     params: { path: { user_id: userId } },

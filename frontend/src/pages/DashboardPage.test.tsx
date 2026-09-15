@@ -3,15 +3,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fetchCurrentUser } from "@/auth/api";
 import {
-  testAdmin,
+  testAdminOnly,
   testMonthTimeSummary,
   testMonthTimeSummaryPrevious,
   testReadyBillingPeriod,
   testTeamMonthOverview,
   testTimesheetOption,
-  testUser,
+  testManager,
   testWeeklyHours,
-  testWorker,
+  testEmployee,
 } from "@/test/fixtures";
 import { renderApp } from "@/test/renderApp";
 import {
@@ -38,7 +38,7 @@ vi.mock("@/timesheets/api", async (importOriginal) => ({
 
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+  vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
   vi.mocked(getMonthTimeSummary).mockImplementation(async ({ month }) => {
     if (month === 9) return testMonthTimeSummary;
     if (month === 8) return testMonthTimeSummaryPrevious;
@@ -136,34 +136,34 @@ describe("DashboardPage", () => {
     expect(link.getAttribute("href")).toBe(`/projects/${testTimesheetOption.project.id}`);
   });
 
-  it("does not show a team section to a worker", async () => {
+  it("does not show a team section to a plain employee", async () => {
     renderApp("/");
 
     await screen.findByText(/Website Revamp/);
     expect(screen.queryByRole("heading", { name: "My team" })).toBeNull();
   });
 
-  it("shows the team section to a project manager, without a scope toggle", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+  it("shows the team section and a scope toggle to a manager", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     renderApp("/");
 
     await screen.findByRole("heading", { name: "My team" });
     expect(await screen.findByText("Awaiting approval")).toBeTruthy();
     expect(screen.getByText("Not submitted")).toBeTruthy();
-    expect(screen.queryByRole("radio", { name: "All" })).toBeNull();
-  });
-
-  it("shows an admin the scope toggle", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testAdmin);
-    renderApp("/");
-
-    await screen.findByRole("heading", { name: "My team" });
     expect(await screen.findByRole("radio", { name: "My projects" })).toBeTruthy();
     expect(screen.getByRole("radio", { name: "All" })).toBeTruthy();
   });
 
+  it("does not show a team section to an admin who isn't also a manager", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testAdminOnly);
+    renderApp("/");
+
+    await screen.findByText(/Website Revamp/);
+    expect(screen.queryByRole("heading", { name: "My team" })).toBeNull();
+  });
+
   it("lets a manager send a ready project's month to billing", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     vi.mocked(sendProjectMonthToBilling).mockResolvedValue(testReadyBillingPeriod);
     renderApp("/");
     await screen.findByRole("heading", { name: "My team" });

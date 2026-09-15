@@ -9,7 +9,7 @@ import {
   signIn,
   signOut,
 } from "@/auth/api";
-import { testUser } from "@/test/fixtures";
+import { testManager } from "@/test/fixtures";
 import { renderApp } from "@/test/renderApp";
 
 vi.mock("@/auth/api", async (importOriginal) => ({
@@ -32,7 +32,7 @@ describe("signing in", () => {
   it("sends a signed-out visitor to the sign-in page and back after signing in", async () => {
     vi.mocked(fetchCurrentUser).mockResolvedValue(null);
     vi.mocked(signIn).mockImplementation(async () => {
-      vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+      vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     });
     const { router } = renderApp("/account/password");
 
@@ -75,14 +75,14 @@ describe("signing in", () => {
 
 describe("account menu", () => {
   it("shows the signed-in user and signs out", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     vi.mocked(signOut).mockResolvedValue();
     const { router } = renderApp("/account/password");
 
     await screen.findByRole("heading", { name: "Time Reporting" });
     fireEvent.click(screen.getByRole("button", { name: "Account menu" }));
     expect(await screen.findByText("ada@example.com")).toBeTruthy();
-    expect(screen.getByText("Project manager")).toBeTruthy();
+    expect(screen.getByText("Manager")).toBeTruthy();
     fireEvent.click(screen.getByRole("menuitem", { name: "Sign out" }));
 
     await screen.findByRole("heading", { name: "Sign in" });
@@ -95,7 +95,7 @@ describe("account menu", () => {
 
 describe("changing the password", () => {
   it("signs out and asks to sign in with the new password", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     vi.mocked(changePassword).mockResolvedValue();
     vi.mocked(signOut).mockResolvedValue();
     const { router } = renderApp("/account/password");
@@ -117,7 +117,7 @@ describe("changing the password", () => {
   });
 
   it("reports a wrong current password on its field", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     vi.mocked(changePassword).mockRejectedValue(new InvalidCurrentPasswordError());
     renderApp("/account/password");
 
@@ -132,7 +132,7 @@ describe("changing the password", () => {
   });
 
   it("validates the new password before submitting", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     renderApp("/account/password");
 
     await screen.findByRole("heading", { name: "Change password" });

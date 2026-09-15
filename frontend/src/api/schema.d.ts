@@ -150,7 +150,7 @@ export interface paths {
         /**
          * Search User Directory
          * @description Minimal, active-only user list for pickers (e.g. adding a project member or a project
-         *     manager, the latter via ``role=admin&role=project_manager``).
+         *     manager, the latter via ``role=manager``).
          */
         get: operations["search_user_directory_api_v1_users_directory_get"];
         put?: never;
@@ -1330,7 +1330,8 @@ export interface components {
             name: string;
             /** Email */
             email: string;
-            role: components["schemas"]["UserRole"];
+            /** Roles */
+            roles: components["schemas"]["UserRole"][];
             /** Is Active */
             is_active: boolean;
             /**
@@ -1763,7 +1764,8 @@ export interface components {
              * Format: email
              */
             email: string;
-            role: components["schemas"]["UserRole"];
+            /** Roles */
+            roles: components["schemas"]["UserRole"][];
             /** Password */
             password: string;
         };
@@ -1789,7 +1791,8 @@ export interface components {
             name: string;
             /** Email */
             email: string;
-            role: components["schemas"]["UserRole"];
+            /** Roles */
+            roles: components["schemas"]["UserRole"][];
             /** Is Active */
             is_active: boolean;
             /** Last Login At */
@@ -1807,9 +1810,11 @@ export interface components {
         };
         /**
          * UserRole
+         * @description An access level a user can hold, in addition to the implicit "employee" baseline every
+         *     account has (reports time, can be a project member, sees the personal dashboard).
          * @enum {string}
          */
-        UserRole: "admin" | "project_manager" | "worker";
+        UserRole: "admin" | "manager" | "accountant";
         /**
          * UserSummaryResponse
          * @description Minimal user fields for pickers (e.g. the project member directory).
@@ -1824,7 +1829,8 @@ export interface components {
             name: string;
             /** Email */
             email: string;
-            role: components["schemas"]["UserRole"];
+            /** Roles */
+            roles: components["schemas"]["UserRole"][];
         };
         /**
          * UserUpdateRequest
@@ -1835,7 +1841,8 @@ export interface components {
             name?: string | null;
             /** Email */
             email?: string | null;
-            role?: components["schemas"]["UserRole"] | null;
+            /** Roles */
+            roles?: components["schemas"]["UserRole"][] | null;
             /** Is Active */
             is_active?: boolean | null;
         };
@@ -2273,7 +2280,7 @@ export interface operations {
                     "application/json": components["schemas"]["UserResponse"];
                 };
             };
-            /** @description Administrators cannot change their own role or deactivate themselves */
+            /** @description Users cannot remove their own administrator access, or deactivate or delete themselves */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3540,13 +3547,6 @@ export interface operations {
                     "application/json": components["schemas"]["TeamMonthOverviewResponse"];
                 };
             };
-            /** @description Only an admin can view every project */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -3579,13 +3579,6 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ProjectBillingPeriodResponse"];
                 };
-            };
-            /** @description Not this project's manager */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description User not found */
             404: {

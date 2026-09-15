@@ -144,14 +144,15 @@ owning module's `PATCH` endpoint (`ManagerDep`).
   chrome in `components/`. `/` (`DashboardPage`) is the default landing page; `/timesheet` (query
   params `week`/`user`), `/hours` (`month`), `/projects`, `/projects/:projectId`,
   `/account/password`; `/approvals` and `/team`
-  sit under `RequireRole roles={["admin","project_manager"]}`;
+  sit under `RequireRole roles={["manager"]}` (any-of, so an admin who is also a manager passes too);
   `/admin/{users,customers,projects,calendar,status}` sit under `RequireRole roles={["admin"]}`, with
   `/admin` redirecting to `/admin/users`.
-- **`components/AppLayout.tsx`** — the signed-in shell: header with the account menu and an
-  `AppShell.Navbar` (collapsible on mobile via a `Burger`) linking to the pages in `pages/`
-  (Dashboard, Timesheet, My hours, Projects, in that order — plus Approvals then Team, inserted
-  right after My hours, shown only when `canManage(user.role)`), plus an "Administration" nav group
-  (Users/Customers/Projects/Calendar/System status) shown only when `isAdmin(user.role)`.
+- **`components/AppLayout.tsx`** — the signed-in shell: header with the account menu (shows a badge
+  per access level the user holds, or "Employee" if none) and an `AppShell.Navbar` (collapsible on
+  mobile via a `Burger`) linking to the pages in `pages/` (Dashboard, Timesheet, My hours, Projects,
+  in that order — plus Approvals then Team, inserted right after My hours, shown only when
+  `canManage(user)`), plus an "Administration" nav group (Users/Customers/Projects/Calendar/System
+  status) shown only when `isAdmin(user)`.
   `components/DashboardCard.tsx` is the shared frame the dashboard's widget cards render inside
   (title, content, an optional "Details →" style footer link, a highlight tint via
   `data-highlighted`).

@@ -47,7 +47,7 @@ export function useUpdateUser(userId: string) {
     mutationFn: (body: {
       name?: string;
       email?: string;
-      role?: UserRole;
+      roles?: UserRole[];
       is_active?: boolean;
     }): Promise<User> => updateUser(userId, body),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: userKeys.all }),
