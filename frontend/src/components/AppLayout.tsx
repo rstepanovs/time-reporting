@@ -58,8 +58,8 @@ function AccountMenu() {
 }
 
 const NAV_ITEMS = [
+  { to: "/", label: "Dashboard" },
   { to: "/timesheet", label: "Timesheet" },
-  { to: "/", label: "Home" },
   { to: "/projects", label: "Projects" },
 ];
 
@@ -68,6 +68,7 @@ const ADMIN_NAV_ITEMS = [
   { to: "/admin/customers", label: "Customers" },
   { to: "/admin/projects", label: "Projects" },
   { to: "/admin/calendar", label: "Calendar" },
+  { to: "/admin/status", label: "System status" },
 ];
 
 function Navigation({ onNavigate }: { onNavigate?: () => void }) {

@@ -6,9 +6,10 @@ import { AppLayout } from "@/components/AppLayout";
 import { AdminCalendarPage } from "@/pages/admin/AdminCalendarPage";
 import { AdminCustomersPage } from "@/pages/admin/AdminCustomersPage";
 import { AdminProjectsPage } from "@/pages/admin/AdminProjectsPage";
+import { AdminSystemStatusPage } from "@/pages/admin/AdminSystemStatusPage";
 import { AdminUsersPage } from "@/pages/admin/AdminUsersPage";
 import { ChangePasswordPage } from "@/pages/ChangePasswordPage";
-import { HomePage } from "@/pages/HomePage";
+import { DashboardPage } from "@/pages/DashboardPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { ProjectDetailsPage } from "@/pages/ProjectDetailsPage";
@@ -24,7 +25,7 @@ export const routes: RouteObject[] = [
         path: "/",
         element: <AppLayout />,
         children: [
-          { index: true, element: <HomePage /> },
+          { index: true, element: <DashboardPage /> },
           { path: "timesheet", element: <TimesheetPage /> },
           { path: "projects", element: <ProjectsPage /> },
           { path: "projects/:projectId", element: <ProjectDetailsPage /> },
@@ -38,6 +39,7 @@ export const routes: RouteObject[] = [
               { path: "customers", element: <AdminCustomersPage /> },
               { path: "projects", element: <AdminProjectsPage /> },
               { path: "calendar", element: <AdminCalendarPage /> },
+              { path: "status", element: <AdminSystemStatusPage /> },
             ],
           },
           { path: "*", element: <NotFoundPage /> },

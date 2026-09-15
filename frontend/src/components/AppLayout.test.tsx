@@ -15,13 +15,13 @@ beforeEach(() => {
 });
 
 describe("navigation", () => {
-  it("shows links to Home and Projects", async () => {
+  it("shows links to Dashboard and Projects", async () => {
     vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
     renderApp("/");
 
     await screen.findByRole("heading", { name: "Time Reporting" });
 
-    expect(screen.getByRole("link", { name: "Home" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Dashboard" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Projects" })).toBeTruthy();
   });
 

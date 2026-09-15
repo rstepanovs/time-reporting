@@ -30,7 +30,7 @@ function ProbeRow({ name, probe }: { name: string; probe: UseQueryResult<boolean
   );
 }
 
-export function HomePage() {
+export function AdminSystemStatusPage() {
   const liveness = useProbe("live", () => api.GET("/api/v1/health"));
   const readiness = useProbe("ready", () => api.GET("/api/v1/health/ready"));
 
