@@ -1,4 +1,4 @@
-import { Alert, Button, Modal, Select, Stack, Textarea, TextInput } from "@mantine/core";
+import { Alert, Button, Modal, NumberInput, Select, Stack, Textarea, TextInput } from "@mantine/core";
 import { isNotEmpty, useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
 import { useNavigate } from "react-router";
@@ -8,10 +8,13 @@ import type { Project } from "@/projects/api";
 import { ProjectConflictError, ProjectRuleError } from "@/projects/api";
 import { useCreateProject, useUpdateProject } from "@/projects/hooks";
 
+const DEFAULT_NORMAL_WORKING_HOURS = 8;
+
 type FormValues = {
   customerId: string;
   name: string;
   description: string;
+  normalWorkingHours: number | string;
 };
 
 type Props =
@@ -40,11 +43,21 @@ export function ProjectFormModal(props: Props) {
             customerId: props.project.customer.id,
             name: props.project.name,
             description: props.project.description ?? "",
+            normalWorkingHours: props.project.normal_working_hours,
           }
-        : { customerId: props.defaultCustomerId ?? "", name: "", description: "" },
+        : {
+            customerId: props.defaultCustomerId ?? "",
+            name: "",
+            description: "",
+            normalWorkingHours: DEFAULT_NORMAL_WORKING_HOURS,
+          },
     validate: {
       customerId: isNotEmpty("Choose a customer"),
       name: isNotEmpty("Enter a project name"),
+      normalWorkingHours: (value) =>
+        value === "" || Number(value) <= 0 || Number(value) > 24
+          ? "Enter a value between 0 and 24"
+          : null,
     },
   });
 
@@ -57,6 +70,7 @@ export function ProjectFormModal(props: Props) {
           customerId: values.customerId,
           name: values.name,
           description: values.description || null,
+          normalWorkingHours: values.normalWorkingHours,
         });
         onClose();
         notifications.show({ title: "Project created", message: created.name });
@@ -67,10 +81,17 @@ export function ProjectFormModal(props: Props) {
         }
       } else {
         const original = props.project;
-        const body: { name?: string; description?: string | null } = {};
+        const body: {
+          name?: string;
+          description?: string | null;
+          normal_working_hours?: number | string;
+        } = {};
         if (values.name !== original.name) body.name = values.name;
         const newDescription = values.description || null;
         if (newDescription !== original.description) body.description = newDescription;
+        if (String(values.normalWorkingHours) !== original.normal_working_hours) {
+          body.normal_working_hours = values.normalWorkingHours;
+        }
         await updateProject.mutateAsync(body);
         onClose();
         notifications.show({ title: "Project updated", message: values.name });
@@ -125,6 +146,17 @@ export function ProjectFormModal(props: Props) {
             minRows={2}
             key={form.key("description")}
             {...form.getInputProps("description")}
+          />
+          <NumberInput
+            label="Normal working hours per day"
+            description="Used to prefill a new timesheet week when the worker has just this one project"
+            required
+            min={0.25}
+            max={24}
+            step={0.25}
+            decimalScale={2}
+            key={form.key("normalWorkingHours")}
+            {...form.getInputProps("normalWorkingHours")}
           />
           <Button type="submit" loading={mutation.isPending} style={{ alignSelf: "flex-start" }}>
             {props.mode === "create" ? "Create project" : "Save changes"}

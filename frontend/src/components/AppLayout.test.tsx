@@ -45,4 +45,18 @@ describe("navigation", () => {
     await screen.findByRole("heading", { name: "Time Reporting" });
     expect(screen.queryByText("Administration")).toBeNull();
   });
+
+  it("shows Approvals to a project manager and an admin", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser); // a project manager
+    renderApp("/");
+    await screen.findByRole("heading", { name: "Time Reporting" });
+    expect(screen.getByRole("link", { name: "Approvals" })).toBeTruthy();
+  });
+
+  it("hides Approvals from a worker", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+    renderApp("/");
+    await screen.findByRole("heading", { name: "Time Reporting" });
+    expect(screen.queryByRole("link", { name: "Approvals" })).toBeNull();
+  });
 });

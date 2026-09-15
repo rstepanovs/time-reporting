@@ -8,6 +8,7 @@ import { AdminCustomersPage } from "@/pages/admin/AdminCustomersPage";
 import { AdminProjectsPage } from "@/pages/admin/AdminProjectsPage";
 import { AdminSystemStatusPage } from "@/pages/admin/AdminSystemStatusPage";
 import { AdminUsersPage } from "@/pages/admin/AdminUsersPage";
+import { ApprovalsPage } from "@/pages/ApprovalsPage";
 import { ChangePasswordPage } from "@/pages/ChangePasswordPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { HoursPage } from "@/pages/HoursPage";
@@ -29,6 +30,11 @@ export const routes: RouteObject[] = [
           { index: true, element: <DashboardPage /> },
           { path: "timesheet", element: <TimesheetPage /> },
           { path: "hours", element: <HoursPage /> },
+          {
+            path: "approvals",
+            element: <RequireRole roles={["admin", "project_manager"]} />,
+            children: [{ index: true, element: <ApprovalsPage /> }],
+          },
           { path: "projects", element: <ProjectsPage /> },
           { path: "projects/:projectId", element: <ProjectDetailsPage /> },
           { path: "account/password", element: <ChangePasswordPage /> },

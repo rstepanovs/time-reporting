@@ -2,24 +2,32 @@
 
 from time_reporting.core.cqrs import HandlerRegistry
 from time_reporting.modules.timesheets.contracts import (
+    ApproveTimesheetWeek,
     CountTimeEntries,
     GetMonthCalendar,
     GetMonthTimeSummary,
     GetTimesheetWeek,
     GetWeeklyHours,
     GetYearHours,
+    ListSubmittedTimesheetWeeks,
     ListTimesheetOptions,
+    ReturnTimesheetWeek,
     SaveTimesheetWeek,
+    SubmitTimesheetWeek,
 )
 from time_reporting.modules.timesheets.handlers import (
+    ApproveTimesheetWeekHandler,
     CountTimeEntriesHandler,
     GetMonthCalendarHandler,
     GetMonthTimeSummaryHandler,
     GetTimesheetWeekHandler,
     GetWeeklyHoursHandler,
     GetYearHoursHandler,
+    ListSubmittedTimesheetWeeksHandler,
     ListTimesheetOptionsHandler,
+    ReturnTimesheetWeekHandler,
     SaveTimesheetWeekHandler,
+    SubmitTimesheetWeekHandler,
 )
 
 
@@ -31,5 +39,9 @@ def register(registry: HandlerRegistry) -> None:
     registry.query(GetYearHours, GetYearHoursHandler)
     registry.query(GetMonthTimeSummary, GetMonthTimeSummaryHandler)
     registry.query(GetWeeklyHours, GetWeeklyHoursHandler)
+    registry.query(ListSubmittedTimesheetWeeks, ListSubmittedTimesheetWeeksHandler)
 
     registry.command(SaveTimesheetWeek, SaveTimesheetWeekHandler)
+    registry.command(SubmitTimesheetWeek, SubmitTimesheetWeekHandler)
+    registry.command(ApproveTimesheetWeek, ApproveTimesheetWeekHandler)
+    registry.command(ReturnTimesheetWeek, ReturnTimesheetWeekHandler)

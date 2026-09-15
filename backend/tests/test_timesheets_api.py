@@ -436,3 +436,186 @@ async def test_month_summary_and_weekly_hours_require_authentication(
 
     assert summary.status_code == 401
     assert weekly.status_code == 401
+
+
+# --- Row comments ---
+
+
+async def test_save_week_creates_and_clears_a_row_comment(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    admin_headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    worker = await make_user(role=UserRole.WORKER)
+    worker_headers = auth_headers(worker)
+    project = await make_project()
+    await _add_member(client, admin_headers, str(project.id), str(worker.id))
+    item_id = await _normal_hours_item_id(client, admin_headers, str(project.id))
+
+    saved = await client.put(
+        f"/api/v1/timesheets/weeks/{A_MONDAY}/entries",
+        headers=worker_headers,
+        json={
+            "changes": [],
+            "row_comments": [{"billing_item_id": item_id, "comment": "Please review"}],
+        },
+    )
+    assert saved.status_code == 200
+    row = next(r for r in saved.json()["rows"] if r["billing_item"]["id"] == item_id)
+    assert row["comment"] == "Please review"
+    assert row["entries"] == []
+
+    cleared = await client.put(
+        f"/api/v1/timesheets/weeks/{A_MONDAY}/entries",
+        headers=worker_headers,
+        json={"changes": [], "row_comments": [{"billing_item_id": item_id, "comment": None}]},
+    )
+    assert cleared.status_code == 200
+    assert cleared.json()["rows"] == []
+
+
+# --- Submit / approve / return workflow ---
+
+
+async def _setup_worker_with_hours(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> tuple[dict[str, str], dict[str, str]]:
+    """A worker with 8 booked hours in ``A_MONDAY``'s week, plus a project manager's headers."""
+    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    manager_headers = auth_headers(manager)
+    worker = await make_user(role=UserRole.WORKER)
+    worker_headers = auth_headers(worker)
+    project = await make_project()
+    await _add_member(client, manager_headers, str(project.id), str(worker.id))
+    item_id = await _normal_hours_item_id(client, manager_headers, str(project.id))
+    await client.put(
+        f"/api/v1/timesheets/weeks/{A_MONDAY}/entries",
+        headers=worker_headers,
+        json={"changes": [{"billing_item_id": item_id, "date": A_MONDAY, "quantity": "8.00"}]},
+    )
+    return worker_headers, manager_headers
+
+
+async def test_worker_can_submit_and_manager_can_approve(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    worker_headers, manager_headers = await _setup_worker_with_hours(
+        client, make_user, make_project, auth_headers
+    )
+    worker_id = (await client.get("/api/v1/users/me", headers=worker_headers)).json()["id"]
+
+    submitted = await client.post(
+        f"/api/v1/timesheets/weeks/{A_MONDAY}/submit", headers=worker_headers
+    )
+    assert submitted.status_code == 200
+    assert submitted.json()["status"] == "submitted"
+
+    locked = await client.put(
+        f"/api/v1/timesheets/weeks/{A_MONDAY}/entries",
+        headers=worker_headers,
+        json={"changes": []},
+    )
+    assert locked.status_code == 409
+
+    approved = await client.post(
+        f"/api/v1/timesheets/weeks/{A_MONDAY}/approve",
+        headers=manager_headers,
+        params={"user_id": worker_id},
+    )
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "approved"
+
+
+async def test_manager_can_return_a_week_with_a_comment(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    worker_headers, manager_headers = await _setup_worker_with_hours(
+        client, make_user, make_project, auth_headers
+    )
+    worker_id = (await client.get("/api/v1/users/me", headers=worker_headers)).json()["id"]
+    await client.post(f"/api/v1/timesheets/weeks/{A_MONDAY}/submit", headers=worker_headers)
+
+    # A whitespace-only comment is stripped to empty by the schema's `min_length=1`, so this is
+    # rejected at the HTTP boundary (422) before ever reaching the domain-level check.
+    missing_comment = await client.post(
+        f"/api/v1/timesheets/weeks/{A_MONDAY}/return",
+        headers=manager_headers,
+        params={"user_id": worker_id},
+        json={"comment": "   "},
+    )
+    assert missing_comment.status_code == 422
+
+    returned = await client.post(
+        f"/api/v1/timesheets/weeks/{A_MONDAY}/return",
+        headers=manager_headers,
+        params={"user_id": worker_id},
+        json={"comment": "Please add the missing hours"},
+    )
+    assert returned.status_code == 200
+    assert returned.json()["status"] == "returned"
+    assert returned.json()["return_comment"] == "Please add the missing hours"
+
+    reread = await client.get(f"/api/v1/timesheets/weeks/{A_MONDAY}", headers=worker_headers)
+    assert reread.json()["can_edit"] is True
+
+
+async def test_worker_cannot_approve_return_or_list_submissions(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    worker_headers, _manager_headers = await _setup_worker_with_hours(
+        client, make_user, make_project, auth_headers
+    )
+    worker_id = (await client.get("/api/v1/users/me", headers=worker_headers)).json()["id"]
+    await client.post(f"/api/v1/timesheets/weeks/{A_MONDAY}/submit", headers=worker_headers)
+
+    approve = await client.post(
+        f"/api/v1/timesheets/weeks/{A_MONDAY}/approve",
+        headers=worker_headers,
+        params={"user_id": worker_id},
+    )
+    ret = await client.post(
+        f"/api/v1/timesheets/weeks/{A_MONDAY}/return",
+        headers=worker_headers,
+        params={"user_id": worker_id},
+        json={"comment": "..."},
+    )
+    submissions = await client.get("/api/v1/timesheets/submissions", headers=worker_headers)
+
+    assert approve.status_code == 403
+    assert ret.status_code == 403
+    assert submissions.status_code == 403
+
+
+async def test_submissions_list_includes_a_submitted_week(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    worker_headers, manager_headers = await _setup_worker_with_hours(
+        client, make_user, make_project, auth_headers
+    )
+    worker_id = (await client.get("/api/v1/users/me", headers=worker_headers)).json()["id"]
+    await client.post(f"/api/v1/timesheets/weeks/{A_MONDAY}/submit", headers=worker_headers)
+
+    submissions = await client.get("/api/v1/timesheets/submissions", headers=manager_headers)
+
+    assert submissions.status_code == 200
+    matching = next(s for s in submissions.json() if s["user"]["id"] == worker_id)
+    assert matching["week_start"] == A_MONDAY
+    assert matching["status"] == "submitted"
+    assert matching["total_hours"] == "8.00"

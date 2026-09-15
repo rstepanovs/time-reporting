@@ -3,10 +3,13 @@ import { ApiError } from "@/api/errors";
 import type { components } from "@/api/schema";
 
 export type TimesheetWeek = components["schemas"]["TimesheetWeekResponse"];
+export type TimesheetWeekStatus = components["schemas"]["TimesheetWeekStatus"];
+export type TimesheetWeekSummary = components["schemas"]["TimesheetWeekSummaryResponse"];
 export type TimesheetRow = components["schemas"]["TimesheetRowResponse"];
 export type TimesheetOption = components["schemas"]["TimesheetOptionResponse"];
 export type TimeEntry = components["schemas"]["TimeEntryResponse"];
 export type TimeEntryChange = components["schemas"]["TimeEntryChangeRequest"];
+export type RowCommentChange = components["schemas"]["RowCommentChangeRequest"];
 
 export type MonthCalendar = components["schemas"]["MonthCalendarResponse"];
 export type CalendarWeekHours = components["schemas"]["CalendarWeekHoursResponse"];
@@ -28,8 +31,8 @@ export type PickedRow = {
   billing_item: TimesheetOption["billing_items"][number];
 };
 
-/** A rule was violated while reading/saving a week (400/403/404). The backend's message, or a
- * generic one for the 403 "not your timesheet" case (which carries no body). */
+/** A rule was violated while reading/saving/reviewing a week (400/403/404). The backend's
+ * message, or a generic one for a 403 that carries no body. */
 export class TimesheetRuleError extends Error {
   constructor(message: string) {
     super(message);
@@ -37,13 +40,27 @@ export class TimesheetRuleError extends Error {
   }
 }
 
+/** The week's status doesn't allow this action (409) — e.g. saving a submitted week, or
+ * submitting/approving/returning from the wrong status. The backend's message. */
+export class TimesheetConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TimesheetConflictError";
+  }
+}
+
 async function timesheetAwareError(response: Response): Promise<Error> {
+  if (response.status === 409) {
+    const body = (await response.clone().json().catch(() => null)) as { detail?: string } | null;
+    return new TimesheetConflictError(body?.detail ?? "This week's status has changed");
+  }
   if (response.status === 400 || response.status === 404) {
     const body = (await response.clone().json().catch(() => null)) as { detail?: string } | null;
     return new TimesheetRuleError(body?.detail ?? "This action is not allowed");
   }
   if (response.status === 403) {
-    return new TimesheetRuleError("You cannot view another user's timesheet");
+    const body = (await response.clone().json().catch(() => null)) as { detail?: string } | null;
+    return new TimesheetRuleError(body?.detail ?? "You cannot view another user's timesheet");
   }
   return new ApiError(response);
 }
@@ -62,11 +79,54 @@ export async function getTimesheetWeek(params: {
 export async function saveTimesheetWeek(
   weekStart: string,
   changes: TimeEntryChange[],
+  rowComments: RowCommentChange[] = [],
 ): Promise<TimesheetWeek> {
   const { data, response } = await api.PUT("/api/v1/timesheets/weeks/{week_start}/entries", {
     params: { path: { week_start: weekStart } },
-    body: { changes },
+    body: { changes, row_comments: rowComments },
   });
+  if (!data) throw await timesheetAwareError(response);
+  return data;
+}
+
+/** Submit the caller's own week for review. */
+export async function submitTimesheetWeek(weekStart: string): Promise<TimesheetWeek> {
+  const { data, response } = await api.POST("/api/v1/timesheets/weeks/{week_start}/submit", {
+    params: { path: { week_start: weekStart } },
+  });
+  if (!data) throw await timesheetAwareError(response);
+  return data;
+}
+
+/** Approve `userId`'s submitted week (admin/project manager only). */
+export async function approveTimesheetWeek(params: {
+  weekStart: string;
+  userId: string;
+}): Promise<TimesheetWeek> {
+  const { data, response } = await api.POST("/api/v1/timesheets/weeks/{week_start}/approve", {
+    params: { path: { week_start: params.weekStart }, query: { user_id: params.userId } },
+  });
+  if (!data) throw await timesheetAwareError(response);
+  return data;
+}
+
+/** Return `userId`'s submitted/approved week for corrections, with an explanatory comment. */
+export async function returnTimesheetWeek(params: {
+  weekStart: string;
+  userId: string;
+  comment: string;
+}): Promise<TimesheetWeek> {
+  const { data, response } = await api.POST("/api/v1/timesheets/weeks/{week_start}/return", {
+    params: { path: { week_start: params.weekStart }, query: { user_id: params.userId } },
+    body: { comment: params.comment },
+  });
+  if (!data) throw await timesheetAwareError(response);
+  return data;
+}
+
+/** Weeks awaiting review, oldest submission first — a manager's approvals list. */
+export async function listSubmittedTimesheetWeeks(): Promise<TimesheetWeekSummary[]> {
+  const { data, response } = await api.GET("/api/v1/timesheets/submissions");
   if (!data) throw await timesheetAwareError(response);
   return data;
 }

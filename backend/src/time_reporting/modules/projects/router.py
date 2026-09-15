@@ -114,7 +114,10 @@ async def create_project(
     try:
         project = await bus.execute(
             CreateProject(
-                customer_id=body.customer_id, name=body.name, description=body.description
+                customer_id=body.customer_id,
+                name=body.name,
+                description=body.description,
+                normal_working_hours=body.normal_working_hours,
             )
         )
     except (ProjectCustomerNotFoundError, ProjectCustomerArchivedError) as exc:
@@ -151,6 +154,7 @@ async def update_project(
                 name=body.name,
                 description=body.description,
                 is_active=body.is_active,
+                normal_working_hours=body.normal_working_hours,
                 clear_fields=clear_fields,
             )
         )

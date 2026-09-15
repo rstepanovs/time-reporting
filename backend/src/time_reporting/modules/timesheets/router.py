@@ -11,8 +11,9 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Path, Query, status
 
 from time_reporting.api.deps import BusDep
-from time_reporting.modules.auth.dependencies import CurrentUserDep
+from time_reporting.modules.auth.dependencies import CurrentUserDep, ManagerDep
 from time_reporting.modules.timesheets.contracts import (
+    ApproveTimesheetWeek,
     DailyHoursExceededError,
     DuplicateChangeError,
     EntryDateOutsideWeekError,
@@ -21,21 +22,31 @@ from time_reporting.modules.timesheets.contracts import (
     GetTimesheetWeek,
     GetWeeklyHours,
     GetYearHours,
+    InvalidWeekStatusTransitionError,
+    ListSubmittedTimesheetWeeks,
     ListTimesheetOptions,
     QuantityOutOfRangeError,
+    ReturnCommentRequiredError,
+    ReturnTimesheetWeek,
+    RowCommentChange,
     SaveTimesheetWeek,
+    SelfReviewError,
+    SubmitTimesheetWeek,
     TimeEntryChange,
     TimesheetBillingItemNotFoundError,
     TimesheetRowClosedError,
+    TimesheetWeekLockedError,
     WeekRangeOutOfBoundsError,
     WeekStartNotMondayError,
 )
 from time_reporting.modules.timesheets.schemas import (
     MonthCalendarResponse,
     MonthTimeSummaryResponse,
+    ReturnTimesheetWeekRequest,
     SaveTimesheetWeekRequest,
     TimesheetOptionResponse,
     TimesheetWeekResponse,
+    TimesheetWeekSummaryResponse,
     WeeklyHoursResponse,
     YearHoursResponse,
 )
@@ -51,6 +62,9 @@ _USER_NOT_FOUND_RESPONSE: dict[int | str, dict[str, Any]] = {
 _RULE_RESPONSE: dict[int | str, dict[str, Any]] = {
     status.HTTP_400_BAD_REQUEST: {"description": "The week/entries violate a timesheet rule"}
 }
+_STATUS_CONFLICT_RESPONSE: dict[int | str, dict[str, Any]] = {
+    status.HTTP_409_CONFLICT: {"description": "The week's status does not allow this action"}
+}
 
 
 def _week_not_monday(exc: WeekStartNotMondayError) -> HTTPException:
@@ -63,6 +77,10 @@ def _user_not_found() -> HTTPException:
 
 def _forbidden(detail: str) -> HTTPException:
     return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+
+
+def _conflict(detail: str) -> HTTPException:
+    return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
 
 
 def _resolve_target_user(current_user: UserDTO, user_id: UUID | None) -> UUID:
@@ -98,7 +116,7 @@ async def get_timesheet_week(
 
 @router.put(
     "/weeks/{week_start}/entries",
-    responses={**_USER_NOT_FOUND_RESPONSE, **_RULE_RESPONSE},
+    responses={**_USER_NOT_FOUND_RESPONSE, **_RULE_RESPONSE, **_STATUS_CONFLICT_RESPONSE},
 )
 async def save_timesheet_week(
     week_start: date, body: SaveTimesheetWeekRequest, current_user: CurrentUserDep, bus: BusDep
@@ -112,9 +130,18 @@ async def save_timesheet_week(
         )
         for change in body.changes
     )
+    row_comments = tuple(
+        RowCommentChange(billing_item_id=change.billing_item_id, comment=change.comment)
+        for change in body.row_comments
+    )
     try:
         week = await bus.execute(
-            SaveTimesheetWeek(user_id=current_user.id, week_start=week_start, changes=changes)
+            SaveTimesheetWeek(
+                user_id=current_user.id,
+                week_start=week_start,
+                changes=changes,
+                row_comments=row_comments,
+            )
         )
     except WeekStartNotMondayError as exc:
         raise _week_not_monday(exc) from exc
@@ -122,6 +149,8 @@ async def save_timesheet_week(
         raise _user_not_found() from exc
     except TimesheetBillingItemNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except TimesheetWeekLockedError as exc:
+        raise _conflict(str(exc)) from exc
     except (
         EntryDateOutsideWeekError,
         DuplicateChangeError,
@@ -131,6 +160,94 @@ async def save_timesheet_week(
     ) as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return TimesheetWeekResponse.model_validate(week)
+
+
+@router.post(
+    "/weeks/{week_start}/submit",
+    responses={**_USER_NOT_FOUND_RESPONSE, **_STATUS_CONFLICT_RESPONSE},
+)
+async def submit_timesheet_week(
+    week_start: date, current_user: CurrentUserDep, bus: BusDep
+) -> TimesheetWeekResponse:
+    try:
+        week = await bus.execute(
+            SubmitTimesheetWeek(user_id=current_user.id, week_start=week_start)
+        )
+    except WeekStartNotMondayError as exc:
+        raise _week_not_monday(exc) from exc
+    except UserNotFoundError as exc:
+        raise _user_not_found() from exc
+    except InvalidWeekStatusTransitionError as exc:
+        raise _conflict(str(exc)) from exc
+    return TimesheetWeekResponse.model_validate(week)
+
+
+@router.post(
+    "/weeks/{week_start}/approve",
+    responses={**_USER_NOT_FOUND_RESPONSE, **_STATUS_CONFLICT_RESPONSE},
+)
+async def approve_timesheet_week(
+    week_start: date,
+    current_user: ManagerDep,
+    bus: BusDep,
+    user_id: Annotated[UUID, Query()],
+) -> TimesheetWeekResponse:
+    try:
+        week = await bus.execute(
+            ApproveTimesheetWeek(
+                user_id=user_id, week_start=week_start, reviewer_id=current_user.id
+            )
+        )
+    except WeekStartNotMondayError as exc:
+        raise _week_not_monday(exc) from exc
+    except UserNotFoundError as exc:
+        raise _user_not_found() from exc
+    except SelfReviewError as exc:
+        raise _forbidden(str(exc)) from exc
+    except InvalidWeekStatusTransitionError as exc:
+        raise _conflict(str(exc)) from exc
+    return TimesheetWeekResponse.model_validate(week)
+
+
+@router.post(
+    "/weeks/{week_start}/return",
+    responses={**_USER_NOT_FOUND_RESPONSE, **_RULE_RESPONSE, **_STATUS_CONFLICT_RESPONSE},
+)
+async def return_timesheet_week(
+    week_start: date,
+    body: ReturnTimesheetWeekRequest,
+    current_user: ManagerDep,
+    bus: BusDep,
+    user_id: Annotated[UUID, Query()],
+) -> TimesheetWeekResponse:
+    try:
+        week = await bus.execute(
+            ReturnTimesheetWeek(
+                user_id=user_id,
+                week_start=week_start,
+                reviewer_id=current_user.id,
+                comment=body.comment,
+            )
+        )
+    except WeekStartNotMondayError as exc:
+        raise _week_not_monday(exc) from exc
+    except UserNotFoundError as exc:
+        raise _user_not_found() from exc
+    except SelfReviewError as exc:
+        raise _forbidden(str(exc)) from exc
+    except ReturnCommentRequiredError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except InvalidWeekStatusTransitionError as exc:
+        raise _conflict(str(exc)) from exc
+    return TimesheetWeekResponse.model_validate(week)
+
+
+@router.get("/submissions")
+async def list_submitted_timesheet_weeks(
+    _manager: ManagerDep, bus: BusDep
+) -> list[TimesheetWeekSummaryResponse]:
+    summaries = await bus.query(ListSubmittedTimesheetWeeks())
+    return [TimesheetWeekSummaryResponse.model_validate(summary) for summary in summaries]
 
 
 @router.get("/options")

@@ -9,6 +9,7 @@ import type {
   TimesheetOption,
   TimesheetRow,
   TimesheetWeek,
+  TimesheetWeekSummary,
   WeeklyHours,
   YearHours,
 } from "@/timesheets/api";
@@ -74,6 +75,7 @@ export const testProject: Project = {
   name: "Website Revamp",
   description: "Redesign the public marketing site.",
   is_active: true,
+  normal_working_hours: "8.00",
   created_at: "2026-02-01T08:00:00Z",
   updated_at: "2026-02-01T08:00:00Z",
 };
@@ -148,6 +150,7 @@ export const testTimesheetRow: TimesheetRow = {
     },
     name: testProject.name,
     is_active: true,
+    normal_working_hours: "8.00",
   },
   billing_item: {
     id: testBillingItem.id,
@@ -162,12 +165,20 @@ export const testTimesheetRow: TimesheetRow = {
   },
   is_open: true,
   entries: [{ date: "2026-09-14", quantity: "8.00", note: null }],
+  comment: null,
 };
 
 export const testTimesheetWeek: TimesheetWeek = {
   user: { id: testWorker.id, name: testWorker.name, email: testWorker.email },
   week_start: TEST_WEEK_START,
+  status: "draft",
+  submitted_at: null,
+  reviewed_at: null,
+  reviewed_by_name: null,
+  return_comment: null,
   can_edit: true,
+  can_submit: true,
+  can_review: false,
   days: testCalendarDays,
   rows: [testTimesheetRow],
 };
@@ -520,6 +531,14 @@ export const testWeeklyHours: WeeklyHours = {
       },
     },
   ],
+};
+
+export const testTimesheetWeekSummary: TimesheetWeekSummary = {
+  user: { id: testWorker.id, name: testWorker.name, email: testWorker.email },
+  week_start: TEST_WEEK_START,
+  status: "submitted",
+  submitted_at: "2026-09-14T09:00:00Z",
+  total_hours: "40.00",
 };
 
 export const testTimesheetOption: TimesheetOption = {

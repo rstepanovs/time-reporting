@@ -31,16 +31,18 @@ async def test_manager_full_project_lifecycle(
     assert body["description"] is None
     assert body["is_active"] is True
     assert body["customer"]["id"] == str(customer.id)
+    assert body["normal_working_hours"] == "8.00"
     project_id = body["id"]
 
     patched = await client.patch(
         f"/api/v1/projects/{project_id}",
         headers=headers,
-        json={"description": "Redesign the marketing site"},
+        json={"description": "Redesign the marketing site", "normal_working_hours": "6.50"},
     )
     assert patched.status_code == 200
     assert patched.json()["description"] == "Redesign the marketing site"
     assert patched.json()["name"] == "Website Revamp"
+    assert patched.json()["normal_working_hours"] == "6.50"
 
     added = await client.post(
         f"/api/v1/projects/{project_id}/members",
@@ -172,11 +174,35 @@ async def test_update_rejects_null_for_name_and_is_active(
     headers = auth_headers(await make_user(role=UserRole.ADMIN))
     project = await make_project()
 
-    for field in ("name", "is_active"):
+    for field in ("name", "is_active", "normal_working_hours"):
         response = await client.patch(
             f"/api/v1/projects/{project.id}", headers=headers, json={field: None}
         )
         assert response.status_code == 422
+
+
+@pytest.mark.parametrize("normal_working_hours", ["0", "-1", "24.01"])
+async def test_normal_working_hours_out_of_range_returns_422(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_customer: CustomerFactory,
+    auth_headers: AuthHeaders,
+    normal_working_hours: str,
+) -> None:
+    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    customer = await make_customer()
+
+    response = await client.post(
+        "/api/v1/projects",
+        headers=headers,
+        json={
+            "customer_id": str(customer.id),
+            "name": "Out Of Range",
+            "normal_working_hours": normal_working_hours,
+        },
+    )
+
+    assert response.status_code == 422
 
 
 async def test_add_member_with_inactive_user_returns_400_and_duplicate_returns_409(

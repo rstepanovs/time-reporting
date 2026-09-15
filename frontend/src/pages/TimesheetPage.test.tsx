@@ -3,9 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fetchCurrentUser } from "@/auth/api";
 import {
+  approveTimesheetWeek,
   getTimesheetWeek,
   listTimesheetOptions,
+  returnTimesheetWeek,
   saveTimesheetWeek,
+  submitTimesheetWeek,
   TimesheetRuleError,
 } from "@/timesheets/api";
 import {
@@ -29,6 +32,9 @@ vi.mock("@/timesheets/api", async (importOriginal) => ({
   getTimesheetWeek: vi.fn(),
   saveTimesheetWeek: vi.fn(),
   listTimesheetOptions: vi.fn(),
+  submitTimesheetWeek: vi.fn(),
+  approveTimesheetWeek: vi.fn(),
+  returnTimesheetWeek: vi.fn(),
 }));
 
 vi.mock("@/users/api", async (importOriginal) => ({
@@ -74,14 +80,18 @@ describe("TimesheetPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {
-      expect(saveTimesheetWeek).toHaveBeenCalledWith(TEST_WEEK_START, [
-        {
-          billing_item_id: testTimesheetRow.billing_item.id,
-          date: "2026-09-15",
-          quantity: 6,
-          note: null,
-        },
-      ]);
+      expect(saveTimesheetWeek).toHaveBeenCalledWith(
+        TEST_WEEK_START,
+        [
+          {
+            billing_item_id: testTimesheetRow.billing_item.id,
+            date: "2026-09-15",
+            quantity: 6,
+            note: null,
+          },
+        ],
+        [],
+      );
     });
   });
 
@@ -95,9 +105,18 @@ describe("TimesheetPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {
-      expect(saveTimesheetWeek).toHaveBeenCalledWith(TEST_WEEK_START, [
-        { billing_item_id: testTimesheetRow.billing_item.id, date: "2026-09-14", quantity: null, note: null },
-      ]);
+      expect(saveTimesheetWeek).toHaveBeenCalledWith(
+        TEST_WEEK_START,
+        [
+          {
+            billing_item_id: testTimesheetRow.billing_item.id,
+            date: "2026-09-14",
+            quantity: null,
+            note: null,
+          },
+        ],
+        [],
+      );
     });
   });
 
@@ -187,6 +206,184 @@ describe("TimesheetPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Copy rows from previous week" }));
 
     await screen.findByText("Overtime working hours");
+  });
+
+  it("prefills an empty draft week with normal hours when there's exactly one open project", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+    vi.mocked(getTimesheetWeek).mockResolvedValue({ ...testTimesheetWeek, rows: [] });
+    renderApp("/timesheet");
+
+    const mondayCell = (await screen.findByRole("textbox", {
+      name: CELL_NAME,
+    })) as HTMLInputElement;
+    expect(mondayCell.value).toBe("8");
+    const tuesdayCell = screen.getByRole("textbox", { name: TUESDAY_CELL_NAME }) as HTMLInputElement;
+    expect(tuesdayCell.value).toBe("8");
+    // 2026-09-16 is the custom non-working day in testCalendarDays — not prefilled.
+    const wednesdayCell = screen.getByRole("textbox", {
+      name: `${testTimesheetRow.billing_item.name} 2026-09-16`,
+    }) as HTMLInputElement;
+    expect(wednesdayCell.value).toBe("");
+  });
+
+  it("does not prefill when the user has more than one open project", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+    vi.mocked(getTimesheetWeek).mockResolvedValue({ ...testTimesheetWeek, rows: [] });
+    vi.mocked(listTimesheetOptions).mockResolvedValue([
+      testTimesheetOption,
+      { ...testTimesheetOption, project: { ...testTimesheetOption.project, id: "other-project" } },
+    ]);
+    renderApp("/timesheet");
+
+    await screen.findByText("No rows yet. Add one to start booking time.");
+    expect(screen.queryByRole("textbox", { name: CELL_NAME })).toBeNull();
+  });
+
+  it("sends a row comment on save", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+    vi.mocked(saveTimesheetWeek).mockResolvedValue(testTimesheetWeek);
+    renderApp("/timesheet");
+    await screen.findByText(testTimesheetRow.billing_item.name);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: `Comment for ${testTimesheetRow.billing_item.name}` }),
+    );
+    fireEvent.change(
+      screen.getByRole("textbox", {
+        name: `Comment text for ${testTimesheetRow.billing_item.name}`,
+      }),
+      { target: { value: "Please review" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(saveTimesheetWeek).toHaveBeenCalledWith(TEST_WEEK_START, [], [
+        { billing_item_id: testTimesheetRow.billing_item.id, comment: "Please review" },
+      ]);
+    });
+  });
+
+  it("deletes a saved row on save", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+    vi.mocked(saveTimesheetWeek).mockResolvedValue({ ...testTimesheetWeek, rows: [] });
+    renderApp("/timesheet");
+    await screen.findByText(testTimesheetRow.billing_item.name);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: `Delete row ${testTimesheetRow.billing_item.name}` }),
+    );
+    expect(screen.queryByText(testTimesheetRow.billing_item.name)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(saveTimesheetWeek).toHaveBeenCalledWith(
+        TEST_WEEK_START,
+        [{ billing_item_id: testTimesheetRow.billing_item.id, date: "2026-09-14", quantity: null }],
+        [],
+      );
+    });
+  });
+
+  it("renders a submitted week read-only with no Save or Submit button", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+    vi.mocked(getTimesheetWeek).mockResolvedValue({
+      ...testTimesheetWeek,
+      status: "submitted",
+      submitted_at: "2026-09-14T09:00:00Z",
+      can_edit: false,
+      can_submit: false,
+    });
+    renderApp("/timesheet");
+
+    await screen.findByText(testTimesheetRow.billing_item.name);
+    expect(screen.getByText("Submitted")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Submit" })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: CELL_NAME })).toBeNull();
+  });
+
+  it("lets a submitted week be submitted after confirmation", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+    vi.mocked(submitTimesheetWeek).mockResolvedValue({
+      ...testTimesheetWeek,
+      status: "submitted",
+      can_edit: false,
+      can_submit: false,
+    });
+    renderApp("/timesheet");
+    await screen.findByText(testTimesheetRow.billing_item.name);
+
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Submit" }));
+
+    await waitFor(() => {
+      expect(submitTimesheetWeek).toHaveBeenCalled();
+    });
+  });
+
+  it("a manager must enter a comment before returning a week", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser); // a project manager
+    vi.mocked(getTimesheetWeek).mockResolvedValue({
+      ...testTimesheetWeek,
+      status: "submitted",
+      can_edit: false,
+      can_submit: false,
+      can_review: true,
+    });
+    renderApp(`/timesheet?user=${testWorker.id}`);
+    await screen.findByText(testTimesheetRow.billing_item.name);
+
+    fireEvent.click(screen.getByRole("button", { name: "Return…" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("button", { name: "Return" }).hasAttribute("disabled")).toBe(
+      true,
+    );
+
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Comment" }), {
+      target: { value: "Please add the missing hours" },
+    });
+    vi.mocked(returnTimesheetWeek).mockResolvedValue({
+      ...testTimesheetWeek,
+      status: "returned",
+      return_comment: "Please add the missing hours",
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Return" }));
+
+    await waitFor(() => {
+      expect(returnTimesheetWeek).toHaveBeenCalledWith({
+        weekStart: TEST_WEEK_START,
+        userId: testWorker.id,
+        comment: "Please add the missing hours",
+      });
+    });
+  });
+
+  it("a manager can approve a submitted week", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser); // a project manager
+    vi.mocked(getTimesheetWeek).mockResolvedValue({
+      ...testTimesheetWeek,
+      status: "submitted",
+      can_edit: false,
+      can_submit: false,
+      can_review: true,
+    });
+    vi.mocked(approveTimesheetWeek).mockResolvedValue({
+      ...testTimesheetWeek,
+      status: "approved",
+      can_review: false,
+    });
+    renderApp(`/timesheet?user=${testWorker.id}`);
+    await screen.findByText(testTimesheetRow.billing_item.name);
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+
+    await waitFor(() => {
+      expect(approveTimesheetWeek).toHaveBeenCalledWith({
+        weekStart: TEST_WEEK_START,
+        userId: testWorker.id,
+      });
+    });
   });
 
   it("asks for confirmation before discarding unsaved changes on navigation", async () => {

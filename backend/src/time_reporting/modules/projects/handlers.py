@@ -69,6 +69,7 @@ def _to_dto(project: Project, customer: ProjectCustomerDTO) -> ProjectDTO:
         name=project.name,
         description=project.description,
         is_active=project.is_active,
+        normal_working_hours=project.normal_working_hours,
         created_at=project.created_at,
         updated_at=project.updated_at,
     )
@@ -245,7 +246,10 @@ class CreateProjectHandler(_BaseHandler):
 
     async def handle(self, command: CreateProject) -> ProjectDTO:
         project = await self._service.create_project(
-            customer_id=command.customer_id, name=command.name, description=command.description
+            customer_id=command.customer_id,
+            name=command.name,
+            description=command.description,
+            normal_working_hours=command.normal_working_hours,
         )
         return await self._project_dto(project)
 

@@ -15,7 +15,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { Link, Outlet, useLocation } from "react-router";
 
 import { useAuthenticatedUser, useSignOut } from "@/auth/hooks";
-import { isAdmin, roleLabels } from "@/auth/roles";
+import { canManage, isAdmin, roleLabels } from "@/auth/roles";
 
 function AccountMenu() {
   const user = useAuthenticatedUser();
@@ -64,6 +64,9 @@ const NAV_ITEMS = [
   { to: "/projects", label: "Projects" },
 ];
 
+// Shown only to admins/project managers, right after "My hours".
+const APPROVALS_NAV_ITEM = { to: "/approvals", label: "Approvals" };
+
 const ADMIN_NAV_ITEMS = [
   { to: "/admin/users", label: "Users" },
   { to: "/admin/customers", label: "Customers" },
@@ -75,10 +78,13 @@ const ADMIN_NAV_ITEMS = [
 function Navigation({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
   const user = useAuthenticatedUser();
+  const navItems = canManage(user.role)
+    ? [...NAV_ITEMS.slice(0, 3), APPROVALS_NAV_ITEM, ...NAV_ITEMS.slice(3)]
+    : NAV_ITEMS;
 
   return (
     <>
-      {NAV_ITEMS.map((item) => (
+      {navItems.map((item) => (
         <NavLink
           key={item.to}
           component={Link}

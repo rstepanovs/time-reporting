@@ -445,6 +445,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/timesheets/weeks/{week_start}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit Timesheet Week */
+        post: operations["submit_timesheet_week_api_v1_timesheets_weeks__week_start__submit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/timesheets/weeks/{week_start}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve Timesheet Week */
+        post: operations["approve_timesheet_week_api_v1_timesheets_weeks__week_start__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/timesheets/weeks/{week_start}/return": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Return Timesheet Week */
+        post: operations["return_timesheet_week_api_v1_timesheets_weeks__week_start__return_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/timesheets/submissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Submitted Timesheet Weeks */
+        get: operations["list_submitted_timesheet_weeks_api_v1_timesheets_submissions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/timesheets/options": {
         parameters: {
             query?: never;
@@ -1111,6 +1179,11 @@ export interface components {
             name: string;
             /** Description */
             description?: string | null;
+            /**
+             * Normal Working Hours
+             * @default 8.00
+             */
+            normal_working_hours: number | string;
         };
         /** ProjectCustomerResponse */
         ProjectCustomerResponse: {
@@ -1184,6 +1257,8 @@ export interface components {
             description: string | null;
             /** Is Active */
             is_active: boolean;
+            /** Normal Working Hours */
+            normal_working_hours: string;
             /**
              * Created At
              * Format: date-time
@@ -1200,7 +1275,7 @@ export interface components {
          * @description Partial update: omitted fields are left unchanged.
          *
          *     ``customer_id`` is immutable and not part of this request. ``null`` clears ``description``; it
-         *     is rejected for ``name`` and ``is_active``.
+         *     is rejected for ``name``, ``is_active`` and ``normal_working_hours``.
          */
         ProjectUpdateRequest: {
             /** Name */
@@ -1209,6 +1284,8 @@ export interface components {
             description?: string | null;
             /** Is Active */
             is_active?: boolean | null;
+            /** Normal Working Hours */
+            normal_working_hours?: number | string | null;
         };
         /**
          * RemovalBlockerKind
@@ -1249,10 +1326,34 @@ export interface components {
         RemovalResponse: {
             outcome: components["schemas"]["RemovalOutcome"];
         };
+        /** ReturnTimesheetWeekRequest */
+        ReturnTimesheetWeekRequest: {
+            /** Comment */
+            comment: string;
+        };
+        /**
+         * RowCommentChangeRequest
+         * @description A row's new comment. Omit ``comment`` (or send it as ``null``) to delete it — the row's
+         *     other fields (deleting every cell) usually accompany this when deleting the whole row.
+         */
+        RowCommentChangeRequest: {
+            /**
+             * Billing Item Id
+             * Format: uuid
+             */
+            billing_item_id: string;
+            /** Comment */
+            comment?: string | null;
+        };
         /** SaveTimesheetWeekRequest */
         SaveTimesheetWeekRequest: {
             /** Changes */
             changes: components["schemas"]["TimeEntryChangeRequest"][];
+            /**
+             * Row Comments
+             * @default []
+             */
+            row_comments: components["schemas"]["RowCommentChangeRequest"][];
         };
         /** SessionCreateRequest */
         SessionCreateRequest: {
@@ -1358,6 +1459,8 @@ export interface components {
             name: string;
             /** Is Active */
             is_active: boolean;
+            /** Normal Working Hours */
+            normal_working_hours: string;
         };
         /** TimesheetRowResponse */
         TimesheetRowResponse: {
@@ -1367,6 +1470,8 @@ export interface components {
             is_open: boolean;
             /** Entries */
             entries: components["schemas"]["TimeEntryResponse"][];
+            /** Comment */
+            comment: string | null;
         };
         /** TimesheetUserResponse */
         TimesheetUserResponse: {
@@ -1388,12 +1493,52 @@ export interface components {
              * Format: date
              */
             week_start: string;
+            status: components["schemas"]["TimesheetWeekStatus"];
+            /** Submitted At */
+            submitted_at: string | null;
+            /** Reviewed At */
+            reviewed_at: string | null;
+            /** Reviewed By Name */
+            reviewed_by_name: string | null;
+            /** Return Comment */
+            return_comment: string | null;
             /** Can Edit */
             can_edit: boolean;
+            /** Can Submit */
+            can_submit: boolean;
+            /** Can Review */
+            can_review: boolean;
             /** Days */
             days: components["schemas"]["CalendarDayResponse"][];
             /** Rows */
             rows: components["schemas"]["TimesheetRowResponse"][];
+        };
+        /**
+         * TimesheetWeekStatus
+         * @description A week's place in the submit/review workflow. ``DRAFT`` is never persisted — it is the
+         *     default for a (user, week_start) with no ``TimesheetWeek`` row.
+         * @enum {string}
+         */
+        TimesheetWeekStatus: "draft" | "submitted" | "approved" | "returned";
+        /**
+         * TimesheetWeekSummaryResponse
+         * @description One row of the manager's approvals list (``GET /timesheets/submissions``).
+         */
+        TimesheetWeekSummaryResponse: {
+            user: components["schemas"]["TimesheetUserResponse"];
+            /**
+             * Week Start
+             * Format: date
+             */
+            week_start: string;
+            status: components["schemas"]["TimesheetWeekStatus"];
+            /**
+             * Submitted At
+             * Format: date-time
+             */
+            submitted_at: string;
+            /** Total Hours */
+            total_hours: string;
         };
         /** TokenResponse */
         TokenResponse: {
@@ -2973,6 +3118,13 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description The week's status does not allow this action */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -2980,6 +3132,176 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_timesheet_week_api_v1_timesheets_weeks__week_start__submit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                week_start: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimesheetWeekResponse"];
+                };
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The week's status does not allow this action */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_timesheet_week_api_v1_timesheets_weeks__week_start__approve_post: {
+        parameters: {
+            query: {
+                user_id: string;
+            };
+            header?: never;
+            path: {
+                week_start: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimesheetWeekResponse"];
+                };
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The week's status does not allow this action */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    return_timesheet_week_api_v1_timesheets_weeks__week_start__return_post: {
+        parameters: {
+            query: {
+                user_id: string;
+            };
+            header?: never;
+            path: {
+                week_start: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReturnTimesheetWeekRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimesheetWeekResponse"];
+                };
+            };
+            /** @description The week/entries violate a timesheet rule */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The week's status does not allow this action */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_submitted_timesheet_weeks_api_v1_timesheets_submissions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimesheetWeekSummaryResponse"][];
                 };
             };
         };

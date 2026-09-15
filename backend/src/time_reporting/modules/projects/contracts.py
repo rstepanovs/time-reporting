@@ -102,6 +102,8 @@ class ProjectDTO:
     name: str
     description: str | None
     is_active: bool
+    # Hours booked per working day when a timesheet week is prefilled for this project.
+    normal_working_hours: Decimal
     created_at: datetime
     updated_at: datetime
 
@@ -226,6 +228,7 @@ class CreateProject(Command[ProjectDTO]):
     customer_id: UUID
     name: str
     description: str | None = None
+    normal_working_hours: Decimal = Decimal("8.00")
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -242,6 +245,7 @@ class UpdateProject(Command[ProjectDTO]):
     name: str | None = None
     description: str | None = None
     is_active: bool | None = None
+    normal_working_hours: Decimal | None = None
     clear_fields: frozenset[ClearableProjectField] = frozenset()
 
 

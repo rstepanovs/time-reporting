@@ -114,9 +114,15 @@ export async function createProject(body: {
   customerId: string;
   name: string;
   description?: string | null;
+  normalWorkingHours: number | string;
 }): Promise<Project> {
   const { data, response } = await api.POST("/api/v1/projects", {
-    body: { customer_id: body.customerId, name: body.name, description: body.description },
+    body: {
+      customer_id: body.customerId,
+      name: body.name,
+      description: body.description,
+      normal_working_hours: body.normalWorkingHours,
+    },
   });
   if (!data) throw await ruleAwareError(response);
   return data;
@@ -124,7 +130,12 @@ export async function createProject(body: {
 
 export async function updateProject(
   projectId: string,
-  body: { name?: string; description?: string | null; is_active?: boolean },
+  body: {
+    name?: string;
+    description?: string | null;
+    is_active?: boolean;
+    normal_working_hours?: number | string;
+  },
 ): Promise<Project> {
   const { data, response } = await api.PATCH("/api/v1/projects/{project_id}", {
     params: { path: { project_id: projectId } },

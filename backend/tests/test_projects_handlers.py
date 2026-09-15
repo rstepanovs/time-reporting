@@ -99,6 +99,42 @@ async def test_billing_item_pricing_must_match_its_unit_in_the_database(
         await db_session.flush()
 
 
+async def test_create_project_defaults_normal_working_hours_to_eight(
+    bus: Bus, make_customer: CustomerFactory
+) -> None:
+    customer = await make_customer()
+
+    project = await bus.execute(CreateProject(customer_id=customer.id, name="Default Hours"))
+
+    assert project.normal_working_hours == Decimal("8")
+
+
+async def test_create_project_accepts_custom_normal_working_hours(
+    bus: Bus, make_customer: CustomerFactory
+) -> None:
+    customer = await make_customer()
+
+    project = await bus.execute(
+        CreateProject(
+            customer_id=customer.id, name="Part Time", normal_working_hours=Decimal("4.5")
+        )
+    )
+
+    assert project.normal_working_hours == Decimal("4.50")
+
+
+async def test_update_project_changes_normal_working_hours(
+    bus: Bus, make_project: ProjectFactory
+) -> None:
+    project = await make_project()
+
+    updated = await bus.execute(
+        UpdateProject(project_id=project.id, normal_working_hours=Decimal("6"))
+    )
+
+    assert updated.normal_working_hours == Decimal("6.00")
+
+
 async def test_create_project_for_unknown_customer_raises(bus: Bus) -> None:
     with pytest.raises(ProjectCustomerNotFoundError):
         await bus.execute(CreateProject(customer_id=uuid4(), name="Orphan"))

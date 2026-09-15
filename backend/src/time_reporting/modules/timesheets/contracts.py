@@ -5,8 +5,9 @@ for these messages are registered in ``timesheets.module``; ORM entities never l
 """
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
+from enum import StrEnum
 from uuid import UUID
 
 from time_reporting.core.cqrs import Command, Query
@@ -28,6 +29,16 @@ MAX_DAILY_HOURS = Decimal("24")
 MAX_WEEKLY_HOURS_WEEKS = 26
 
 
+class TimesheetWeekStatus(StrEnum):
+    """A week's place in the submit/review workflow. ``DRAFT`` is never persisted — it is the
+    default for a (user, week_start) with no ``TimesheetWeek`` row."""
+
+    DRAFT = "draft"
+    SUBMITTED = "submitted"
+    APPROVED = "approved"
+    RETURNED = "returned"
+
+
 # --- DTOs ---
 
 
@@ -43,23 +54,34 @@ class TimesheetRowDTO:
     """One project/billing-item combination and the user's entries against it in the week.
 
     ``is_open`` says whether the user could still book new time here (still a member, project and
-    billing item both active); a row can be listed (it has entries) without being open, e.g. after
-    the project was archived or the user was removed from it.
+    billing item both active); a row can be listed (it has entries, or a comment) without being
+    open, e.g. after the project was archived or the user was removed from it. ``comment`` is a
+    per (user, week, billing item) note about the row, separate from each cell's own ``note``.
     """
 
     project: ProjectDTO
     billing_item: ProjectBillingItemDTO
     is_open: bool
     entries: tuple[TimeEntryDTO, ...]
+    comment: str | None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class TimesheetWeekDTO:
     user: UserDTO
     week_start: date
-    # Whether the caller may change this week (they are its owner); admins/managers viewing
-    # someone else's week get the same data with ``can_edit=False``.
+    status: TimesheetWeekStatus
+    submitted_at: datetime | None
+    reviewed_at: datetime | None
+    reviewed_by_name: str | None
+    return_comment: str | None
+    # Whether the caller may change this week: they are its owner and it is draft or returned.
     can_edit: bool
+    # Whether the caller may submit this week: same condition as ``can_edit``.
+    can_submit: bool
+    # Whether the caller may approve/return this week: an admin or project manager, not reviewing
+    # their own week, and the week is submitted or approved.
+    can_review: bool
     days: tuple[CalendarDayDTO, ...]
     rows: tuple[TimesheetRowDTO, ...]
 
@@ -211,6 +233,17 @@ class WeeklyHoursDTO:
     projects: tuple[ProjectHoursDTO, ...]
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class TimesheetWeekSummaryDTO:
+    """One submitted week, for a manager's approvals list."""
+
+    user: UserDTO
+    week_start: date
+    status: TimesheetWeekStatus
+    submitted_at: datetime
+    total_hours: Decimal
+
+
 # --- Queries ---
 
 
@@ -288,6 +321,11 @@ class GetWeeklyHours(Query[WeeklyHoursDTO]):
     today: date
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ListSubmittedTimesheetWeeks(Query[tuple[TimesheetWeekSummaryDTO, ...]]):
+    """Weeks awaiting review, oldest submission first, for a manager's approvals list."""
+
+
 # --- Commands ---
 
 
@@ -302,19 +340,62 @@ class TimeEntryChange:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class RowCommentChange:
+    """A row's new comment. ``comment=None`` (or blank) deletes it (a no-op if there wasn't one)."""
+
+    billing_item_id: UUID
+    comment: str | None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class SaveTimesheetWeek(Command[TimesheetWeekDTO]):
-    """Apply ``changes`` to ``user_id``'s week starting ``week_start`` and return the updated week.
+    """Apply ``changes``/``row_comments`` to ``user_id``'s week starting ``week_start`` and return
+    the updated week.
 
     All changes are validated before any is applied, so a rejected batch leaves the week
     unchanged (the bus also rolls back the whole command on any exception). Raises
     ``WeekStartNotMondayError``, ``EntryDateOutsideWeekError``, ``DuplicateChangeError``,
     ``TimesheetBillingItemNotFoundError``, ``TimesheetRowClosedError``,
-    ``QuantityOutOfRangeError`` or ``DailyHoursExceededError``.
+    ``QuantityOutOfRangeError``, ``DailyHoursExceededError`` or ``TimesheetWeekLockedError`` (the
+    week is submitted or approved).
     """
 
     user_id: UUID
     week_start: date
     changes: tuple[TimeEntryChange, ...]
+    row_comments: tuple[RowCommentChange, ...] = ()
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class SubmitTimesheetWeek(Command[TimesheetWeekDTO]):
+    """Move ``user_id``'s week from draft/returned to submitted. Raises
+    ``WeekStartNotMondayError``, ``UserNotFoundError`` or ``InvalidWeekStatusTransitionError``."""
+
+    user_id: UUID
+    week_start: date
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ApproveTimesheetWeek(Command[TimesheetWeekDTO]):
+    """Move ``user_id``'s week from submitted to approved. Raises ``WeekStartNotMondayError``,
+    ``UserNotFoundError``, ``InvalidWeekStatusTransitionError`` or ``SelfReviewError`` (a project
+    manager, not an admin, reviewing their own week)."""
+
+    user_id: UUID
+    week_start: date
+    reviewer_id: UUID
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ReturnTimesheetWeek(Command[TimesheetWeekDTO]):
+    """Move ``user_id``'s week from submitted/approved back to returned, with an explanatory
+    ``comment``. Raises ``WeekStartNotMondayError``, ``UserNotFoundError``,
+    ``InvalidWeekStatusTransitionError``, ``SelfReviewError`` or ``ReturnCommentRequiredError``."""
+
+    user_id: UUID
+    week_start: date
+    reviewer_id: UUID
+    comment: str
 
 
 # --- Exceptions ---
@@ -384,3 +465,30 @@ class WeekRangeOutOfBoundsError(TimesheetError):
     def __init__(self, weeks: int) -> None:
         super().__init__(f"weeks must be between 1 and {MAX_WEEKLY_HOURS_WEEKS}, got {weeks}")
         self.weeks = weeks
+
+
+class TimesheetWeekLockedError(TimesheetError):
+    """Raised by ``SaveTimesheetWeek`` when the week is submitted or approved."""
+
+    def __init__(self, week_start: date, status: TimesheetWeekStatus) -> None:
+        super().__init__(f"Week starting {week_start} is {status} and cannot be edited")
+        self.week_start = week_start
+        self.status = status
+
+
+class InvalidWeekStatusTransitionError(TimesheetError):
+    def __init__(self, week_start: date, status: TimesheetWeekStatus, action: str) -> None:
+        super().__init__(f"Cannot {action} week starting {week_start}: it is {status}")
+        self.week_start = week_start
+        self.status = status
+        self.action = action
+
+
+class SelfReviewError(TimesheetError):
+    def __init__(self) -> None:
+        super().__init__("A project manager cannot approve or return their own week")
+
+
+class ReturnCommentRequiredError(TimesheetError):
+    def __init__(self) -> None:
+        super().__init__("Returning a week requires a non-empty comment")

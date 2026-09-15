@@ -83,7 +83,12 @@ describe("ProjectsPage", () => {
 
     await waitFor(() => {
       expect(createProject).toHaveBeenCalledWith(
-        { customerId: testCustomer.id, name: "New Project", description: null },
+        {
+          customerId: testCustomer.id,
+          name: "New Project",
+          description: null,
+          normalWorkingHours: 8,
+        },
         expect.anything(),
       );
     });

@@ -136,6 +136,28 @@ describe("ProjectDetailsPage", () => {
     });
   });
 
+  it("lets a manager change normal working hours per day", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(updateProject).mockResolvedValue({
+      ...testProject,
+      normal_working_hours: "6.00",
+    });
+    renderApp(`/projects/${testProject.id}`);
+    await screen.findByRole("heading", { name: testProject.name });
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.change(
+      within(dialog).getByRole("textbox", { name: /^normal working hours per day/i }),
+      { target: { value: "6" } },
+    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => {
+      expect(updateProject).toHaveBeenCalledWith(testProject.id, { normal_working_hours: 6 });
+    });
+  });
+
   it("archives the project after confirming", async () => {
     vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
     vi.mocked(updateProject).mockResolvedValue({ ...testProject, is_active: false });

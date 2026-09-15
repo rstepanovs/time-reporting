@@ -50,11 +50,21 @@ class ProjectService:
         return project
 
     async def create_project(
-        self, *, customer_id: UUID, name: str, description: str | None
+        self,
+        *,
+        customer_id: UUID,
+        name: str,
+        description: str | None,
+        normal_working_hours: Decimal,
     ) -> Project:
         await self._ensure_customer_active(customer_id)
         await self._ensure_name_available(customer_id, name)
-        project = Project(customer_id=customer_id, name=name, description=description)
+        project = Project(
+            customer_id=customer_id,
+            name=name,
+            description=description,
+            normal_working_hours=normal_working_hours,
+        )
         await self._projects.save(project)
         await self._billing_items.add_all(
             ProjectBillingItem(
@@ -83,6 +93,8 @@ class ProjectService:
                 # Re-activating a project requires its customer to still be active.
                 await self._ensure_customer_active(project.customer_id)
             project.is_active = data.is_active
+        if data.normal_working_hours is not None:
+            project.normal_working_hours = data.normal_working_hours
         await self._projects.save(project)
         return project
 

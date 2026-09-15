@@ -35,9 +35,11 @@ from time_reporting.modules.projects.contracts import (
     UpdateProjectBillingItem,
 )
 from time_reporting.modules.timesheets.contracts import (
+    ApproveTimesheetWeek,
     CountTimeEntries,
     ListTimesheetOptions,
     SaveTimesheetWeek,
+    SubmitTimesheetWeek,
     TimeEntryChange,
 )
 from time_reporting.modules.users.contracts import (
@@ -234,6 +236,9 @@ class SeedReport:
     imported_holidays: int = 0
     created_bridge_day: bool = False
     seeded_time_entries_for: list[str] = field(default_factory=list)
+    # Demo workers (not project managers) whose seeded weeks were pushed through the submit/
+    # approve workflow, so a fresh checkout also has an example of that on the Timesheet page.
+    submitted_weeks_for: list[str] = field(default_factory=list)
 
 
 async def _find_customer_id_by_name(bus: Bus, name: str) -> UUID:
@@ -336,6 +341,41 @@ def _item_id_for_preset(option: ProjectOptionDTO, preset: BillingItemPreset) -> 
     return next((item.id for item in option.billing_items if item.preset is preset), None)
 
 
+def _reviewer_id(users: tuple[DemoUser, ...], user_ids_by_email: dict[str, UUID]) -> UUID | None:
+    """The demo user who reviews a worker's submitted weeks: a project manager, or an admin if
+    none of the given ``users`` has that role. ``None`` if neither role is present."""
+    managers = (UserRole.PROJECT_MANAGER, UserRole.ADMIN)
+    reviewer = min(
+        (user for user in users if user.role in managers),
+        key=lambda user: managers.index(user.role),
+        default=None,
+    )
+    return user_ids_by_email.get(reviewer.email) if reviewer is not None else None
+
+
+async def _submit_and_approve_demo_weeks(
+    bus: Bus,
+    report: SeedReport,
+    user: DemoUser,
+    user_id: UUID,
+    week_starts: list[date],
+    *,
+    reviewer_id: UUID,
+) -> None:
+    """Push a just-seeded demo worker's weeks through the submit/review workflow: every week but
+    the most recent is submitted and then approved, and the most recent is left submitted (so
+    the demo reviewer has something waiting on the approvals page). Only ever called for a
+    freshly seeded user (guarded by the ``CountTimeEntries`` check above), so this always starts
+    from an all-draft state and needs no idempotency check of its own."""
+    for week_start in week_starts[:-1]:
+        await bus.execute(SubmitTimesheetWeek(user_id=user_id, week_start=week_start))
+        await bus.execute(
+            ApproveTimesheetWeek(user_id=user_id, week_start=week_start, reviewer_id=reviewer_id)
+        )
+    await bus.execute(SubmitTimesheetWeek(user_id=user_id, week_start=week_starts[-1]))
+    report.submitted_weeks_for.append(user.email)
+
+
 async def _seed_time_entries(
     bus: Bus,
     report: SeedReport,
@@ -415,6 +455,18 @@ async def _seed_time_entries(
                 SaveTimesheetWeek(user_id=user_id, week_start=week_start, changes=tuple(changes))
             )
         report.seeded_time_entries_for.append(user.email)
+
+        if user.role is UserRole.WORKER:
+            reviewer_id = _reviewer_id(users, user_ids_by_email)
+            if reviewer_id is not None:
+                await _submit_and_approve_demo_weeks(
+                    bus,
+                    report,
+                    user,
+                    user_id,
+                    sorted(working_days_by_week),
+                    reviewer_id=reviewer_id,
+                )
 
 
 async def _project_exists(bus: Bus, customer_id: UUID, name: str) -> bool:

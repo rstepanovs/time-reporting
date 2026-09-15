@@ -6,7 +6,7 @@ only reach another module's ``contracts.py``, and the HTTP response shape is thi
 own regardless.
 """
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
@@ -14,12 +14,20 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from time_reporting.modules.projects.contracts import BillingItemPreset, BillingUnit
+from time_reporting.modules.timesheets.contracts import TimesheetWeekStatus
 from time_reporting.modules.work_calendar.contracts import NonWorkingDayKind
 
 Note = Annotated[str, StringConstraints(strip_whitespace=True, max_length=10_000)]
 # `gt=0`: clearing a cell is expressed by omitting it from ``changes``, not by a zero/negative
 # quantity; unit-specific ceilings (24h/day, 1 day/entry) are enforced by the service.
 Quantity = Annotated[Decimal, Field(gt=0, max_digits=12, decimal_places=2)]
+# A row's comment; clearing it (deleting the row) is expressed by omitting it from
+# ``row_comments`` or sending it as ``null``, like ``TimeEntryChangeRequest.quantity``.
+RowComment = Annotated[str, StringConstraints(strip_whitespace=True, max_length=10_000)]
+# A non-blank explanation, required when returning a week to its owner for corrections.
+ReturnComment = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=10_000)
+]
 
 
 class NonWorkingDayResponse(BaseModel):
@@ -55,6 +63,7 @@ class TimesheetProjectResponse(BaseModel):
     customer: TimesheetCustomerResponse
     name: str
     is_active: bool
+    normal_working_hours: Decimal
 
 
 class TimesheetBillingItemResponse(BaseModel):
@@ -93,6 +102,7 @@ class TimesheetRowResponse(BaseModel):
     billing_item: TimesheetBillingItemResponse
     is_open: bool
     entries: list[TimeEntryResponse]
+    comment: str | None
 
 
 class TimesheetUserResponse(BaseModel):
@@ -108,9 +118,28 @@ class TimesheetWeekResponse(BaseModel):
 
     user: TimesheetUserResponse
     week_start: date
+    status: TimesheetWeekStatus
+    submitted_at: datetime | None
+    reviewed_at: datetime | None
+    reviewed_by_name: str | None
+    return_comment: str | None
     can_edit: bool
+    can_submit: bool
+    can_review: bool
     days: list[CalendarDayResponse]
     rows: list[TimesheetRowResponse]
+
+
+class TimesheetWeekSummaryResponse(BaseModel):
+    """One row of the manager's approvals list (``GET /timesheets/submissions``)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    user: TimesheetUserResponse
+    week_start: date
+    status: TimesheetWeekStatus
+    submitted_at: datetime
+    total_hours: Decimal
 
 
 class TimeEntryChangeRequest(BaseModel):
@@ -124,10 +153,27 @@ class TimeEntryChangeRequest(BaseModel):
     note: Note | None = None
 
 
+class RowCommentChangeRequest(BaseModel):
+    """A row's new comment. Omit ``comment`` (or send it as ``null``) to delete it — the row's
+    other fields (deleting every cell) usually accompany this when deleting the whole row."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    billing_item_id: UUID
+    comment: RowComment | None = None
+
+
 class SaveTimesheetWeekRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     changes: list[TimeEntryChangeRequest]
+    row_comments: list[RowCommentChangeRequest] = []
+
+
+class ReturnTimesheetWeekRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    comment: ReturnComment
 
 
 class HoursTotalsResponse(BaseModel):

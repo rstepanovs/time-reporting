@@ -85,7 +85,11 @@ head`) → `backend` → `frontend` (nginx, proxies `/api/` to `backend`).
   current and next year's public holidays plus one demo bridge day, and books normal working hours
   for the demo worker and project manager on every working day of the last 3 months (plus a little
   overtime/travel time each month), so the worker dashboard's month calendar and year-hours table
-  both have data — each skipped once already present, so re-running stays idempotent too.
+  both have data — each skipped once already present, so re-running stays idempotent too. Once a
+  demo worker's (not the project manager's) weeks are freshly booked, every week but the most
+  recent is submitted then approved (reviewer: a project manager among the given users, an admin if
+  there's none) and the most recent is left submitted, so a fresh checkout's `/approvals` page has
+  something waiting; also guarded by the same "already has entries" idempotency check.
 
 ### Feature modules (`modules/`) and the CQRS bus
 
@@ -131,7 +135,9 @@ the customer still has any project.
 
 The **projects** module (`modules/projects/`) owns the `Project` entity (belongs to one `Customer`,
 `customer_id` immutable after creation) and `ProjectMember`, a plain user↔project link with no
-per-project role. Project names are unique per customer, not globally. Creating a project, or
+per-project role. `Project.normal_working_hours` (default 8, `0 < x ≤ 24`) is how many hours the
+timesheets module's weekly grid prefills per working day when it seeds a fresh draft week (see
+below). Project names are unique per customer, not globally. Creating a project, or
 reactivating one, requires its customer to currently be active, but archiving a customer does not
 cascade to its projects. Only active users can be added as members, and only to an active project; a
 member later deactivated stays listed (with `is_active=false`) rather than disappearing. Access
@@ -183,20 +189,38 @@ amount) and an optional note. `project_id` and `unit` are denormalized onto the 
 item at write time (never changed afterwards) so this module's own queries — summing a user's hours
 for a day, filtering by project — never join into the projects module's tables; both are guarded by
 `ON DELETE RESTRICT`, so a project, billing item or user with time entries can't be permanently
-deleted. `GetTimesheetWeek(user_id, week_start, viewer_id)` reads a Monday-to-Sunday week (raises
+deleted. Each row can also carry a `TimesheetRowComment` — a per (user, week, billing item) note,
+separate from each `TimeEntry.note` — so `GetTimesheetWeek`'s rows are keyed off the union of
+billing items with entries *or* a comment (a comment-only row is still listed).
+`GetTimesheetWeek(user_id, week_start, viewer_id)` reads a Monday-to-Sunday week (raises
 `WeekStartNotMondayError` otherwise): its rows carry `is_open` (from `projects.contracts`'
 `ListMemberProjectsWithBillingItems` — still a member, project and billing item both active) so a
-week keeps showing entries booked before a project was archived or the user removed, but read-only;
-`can_edit` is just `viewer_id == user_id`, since only the router enforces who may view someone else's
-week (admin or project manager) — the query itself doesn't authorize. `SaveTimesheetWeek` applies a batch
-of cell changes (`quantity=None` deletes a cell) as one command: validates the week/dates/no-
-duplicate-cells first, then that every targeted row is open (`TimesheetRowClosedError`, or
-`TimesheetBillingItemNotFoundError` if the item doesn't exist at all) and each quantity is in range
-for its unit, applies them, and only then re-checks that the user's total `hour`-unit quantity per
-day is still ≤ 24 (`DailyHoursExceededError`) — checked after applying the batch specifically so
-moving hours between two rows in one save works even though an intermediate per-change state would
-not. Any authenticated user reads and writes their own week; `CountTimeEntries` (filterable by user/
-project/billing item) backs the admin module's removal-impact reporting below. `GetMonthCalendar(user_id,
+week keeps showing entries booked before a project was archived or the user removed, but read-only.
+The week also has a `status` (`TimesheetWeekStatus`: `draft`/`submitted`/`approved`/`returned`,
+backed by a `TimesheetWeek` row keyed `(user_id, week_start)` — no row means `draft`, the status is
+never persisted as `draft`); `can_edit`/`can_submit` are `viewer_id == user_id` and the week is
+`draft`/`returned`, while `can_review` is the viewer being an admin or project manager, the week
+being `submitted`/`approved`, and not a project manager reviewing their own week (an admin can).
+None of these three are enforced here — only computed for the caller to render around — the router
+still owns authorization. `SaveTimesheetWeek` applies a batch of cell changes (`quantity=None`
+deletes a cell) and `row_comments` changes (`comment=None`/blank deletes one) as one command: raises
+`TimesheetWeekLockedError` if the week is `submitted`/`approved`, else validates the week/dates/no-
+duplicate-cells first, then that every targeted row (whether a cell or a comment) is open
+(`TimesheetRowClosedError`, or `TimesheetBillingItemNotFoundError` if the item doesn't exist at all)
+and each quantity is in range for its unit, applies them, and only then re-checks that the user's
+total `hour`-unit quantity per day is still ≤ 24 (`DailyHoursExceededError`) — checked after applying
+the batch specifically so moving hours between two rows in one save works even though an
+intermediate per-change state would not. Deleting a whole row from the UI is expressed as a save
+that nulls every one of its cells and its comment — there's no separate "delete row" message.
+`SubmitTimesheetWeek` (draft/returned → submitted, owner only) and `ApproveTimesheetWeek` /
+`ReturnTimesheetWeek` (submitted → approved, or submitted/approved → `returned` with a required
+`comment`, admin/project-manager only) drive the rest of the workflow, each raising
+`InvalidWeekStatusTransitionError` outside its allowed source statuses and `SelfReviewError` for a
+project manager reviewing their own week; `ListSubmittedTimesheetWeeks` (oldest submission first,
+with each week's total `hour`-unit quantity via `TimeEntryRepository.sum_hours_by_user_week`) backs
+the frontend's approvals page. Any authenticated user reads and writes their own week;
+`CountTimeEntries` (filterable by user/project/billing item) backs the admin module's
+removal-impact reporting below. `GetMonthCalendar(user_id,
 year, month, today)` and `GetYearHours(user_id, year, today)` back the worker dashboard: the former
 renders a month as full ISO weeks with expected-vs-booked `hour`-unit totals per day/week (expected
 hours = working days, from `GetCalendarDays`, times `Settings.daily_working_hours`); the latter sums
@@ -282,21 +306,37 @@ owned by a module.
   queries and add/update/delete/import mutations, all invalidating `calendarKeys.all`).
   `NonWorkingDayFormModal.tsx` (create/edit; `kind` is locked once editing, like a billing item's
   unit) backs `pages/admin/AdminCalendarPage.tsx`.
-- **`timesheets/`** — `api.ts` (read/save a week, the caller's project/billing-item picker, the
-  dashboard's `getMonthCalendar`/`getYearHours`/`getMonthTimeSummary`/`getWeeklyHours`, plus
-  `TimesheetRuleError` covering 400/403/404 with the backend's `detail` as the message) and
+- **`timesheets/`** — `api.ts` (read/save a week, `submitTimesheetWeek`/`approveTimesheetWeek`/
+  `returnTimesheetWeek`/`listSubmittedTimesheetWeeks`, the caller's project/billing-item picker,
+  the dashboard's `getMonthCalendar`/`getYearHours`/`getMonthTimeSummary`/`getWeeklyHours`, plus
+  `TimesheetRuleError` covering 400/403/404 and `TimesheetConflictError` for a 409 — the week's
+  status changed underneath the caller — both with the backend's `detail` as the message) and
   `hooks.ts` (`timesheetKeys` + `useTimesheetWeek`/`useTimesheetOptions`/`useMonthCalendar`/
-  `useYearHours`/`useMonthTimeSummary`/`useWeeklyHours` queries and `useSaveTimesheetWeek`, which
-  writes the mutation result straight into the week's query cache instead of invalidating, and also
-  invalidates `timesheetKeys.summaries()` so the dashboard and `/hours` pick up a save). `week.ts`
-  holds pure ISO-date helpers (`startOfIsoWeek`, `weekDays`, `addWeeks`, `addMonths`/`previousMonth`,
-  day/week/month/ISO-week label formatting, `formatHours`, `fillRatePercent`) with their own unit
-  tests. `dayKind.ts` (weekend/holiday/bridge background colors) and `dayStatus.ts` (a calendar
-  day's status — off/future/today/complete/partial/missing/extra — versus its expected hours) are
-  pure helpers shared by `TimesheetGrid.tsx` (the weekly grid: local draft state holds only actual
-  edits keyed by billing-item+date, so Save sends just the changed cells and a closed row renders
-  read-only), `AddRowModal.tsx` ("add a row" / "copy rows from previous week"), and the month
-  calendar below. `pages/TimesheetPage.tsx` uses the grid.
+  `useYearHours`/`useMonthTimeSummary`/`useWeeklyHours`/`useSubmittedTimesheetWeeks` queries and
+  `useSaveTimesheetWeek`/`useSubmitTimesheetWeek`/`useApproveTimesheetWeek`/
+  `useReturnTimesheetWeek` mutations, each writing its result straight into the week's query cache
+  instead of invalidating; saving also invalidates `timesheetKeys.summaries()` so the dashboard and
+  `/hours` pick up a save, and submit/approve/return also invalidate `timesheetKeys.submissions()`
+  for the approvals page). `week.ts` holds pure ISO-date helpers (`startOfIsoWeek`, `weekDays`,
+  `addWeeks`, `addMonths`/`previousMonth`, day/week/month/ISO-week label formatting, `formatHours`,
+  `fillRatePercent`) with their own unit tests. `dayKind.ts` (weekend/holiday/bridge background
+  colors) and `dayStatus.ts` (a calendar day's status — off/future/today/complete/partial/missing/
+  extra — versus its expected hours) are pure helpers shared by `TimesheetGrid.tsx` (the weekly
+  grid: local draft state holds only actual edits keyed by billing-item+date, plus a separate
+  billing-item-keyed map of pending row-comment edits and a set of billing items marked for
+  deletion, so Save sends just the changed cells/comments and the null-outs a deleted row needs; a
+  closed row, or the week once `submitted`/`approved`, renders read-only. An empty `draft` week with
+  exactly one open project is seeded once on load with that project's `normal_working_hours` on
+  every working day — kept in a draft-only prefill map so it renders and saves like a normal edit
+  but doesn't itself count as "dirty" (no unsaved-changes prompt on an untouched prefilled week). A
+  status header shows the week's `status` badge and, once reviewed, who reviewed it and when, plus
+  the return comment when `returned`; "Submit" (behind a confirming modal, auto-saving first if
+  there's anything pending) and, for a manager viewing the week, "Approve"/"Return…" (the latter's
+  modal requires a non-blank comment) appear per `can_submit`/`can_review`), `AddRowModal.tsx` ("add
+  a row" / "copy rows from previous week"), and the month calendar below. `pages/TimesheetPage.tsx`
+  uses the grid. `pages/ApprovalsPage.tsx` (`/approvals`, admin/project-manager only) lists weeks
+  awaiting review via `useSubmittedTimesheetWeeks`, each linking to
+  `/timesheet?week=&user=` for that user's week.
   `MonthCalendarTable.tsx`/`YearHoursTableView.tsx` are presentational (already-loaded data as
   props, an optional `title` override, `title=""` to hide it) — weeks as rows/Mon..Sun as columns
   with the week number linking to `/timesheet?week=`, and one row per month (newest first, columns
@@ -336,11 +376,14 @@ owned by a module.
   hours-per-week chart and per-project table, and the user's projects, all as widget cards.
   `/timesheet` (query params `week`/`user`) is where time is actually booked; `/hours` (query param
   `month`) is the fuller month-calendar-and-year-table view a "Details →" card links into.
+  `/approvals` (`ApprovalsPage`, the manager's queue of submitted weeks) sits under
+  `RequireRole roles={["admin","project_manager"]}`.
   `/admin/{users,customers,projects,calendar,status}` sit under `RequireRole roles={["admin"]}`,
   with `/admin` redirecting to `/admin/users`.
 - **`components/AppLayout.tsx`** — the signed-in shell: header with the account menu and an
   `AppShell.Navbar` (collapsible on mobile via a `Burger`) linking to the pages in `pages/`
-  (Dashboard, Timesheet, My hours, Projects, in that order), plus an "Administration" nav group
+  (Dashboard, Timesheet, My hours, Projects, in that order — plus Approvals, inserted right after
+  My hours, shown only when `canManage(user.role)`), plus an "Administration" nav group
   (Users/Customers/Projects/Calendar/System status) shown only when `isAdmin(user.role)`.
   `components/DashboardCard.tsx` is the shared frame the dashboard's widget cards render inside.
 - **`App.tsx`** — top-level provider composition: `MantineProvider` → `DatesProvider` →

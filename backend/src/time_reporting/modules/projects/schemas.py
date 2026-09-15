@@ -16,6 +16,8 @@ Description = Annotated[str, StringConstraints(strip_whitespace=True, max_length
 # the item's unit (a rate for an ``amount`` item, say), which is a business rule, not a shape one.
 Rate = Annotated[Decimal, Field(ge=0, max_digits=12, decimal_places=2)]
 Markup = Annotated[Decimal, Field(ge=0, le=1000, max_digits=6, decimal_places=2)]
+# Matches the ``projects`` check constraint (``0 < normal_working_hours <= 24``).
+NormalWorkingHours = Annotated[Decimal, Field(gt=0, le=24, max_digits=4, decimal_places=2)]
 
 
 class ProjectCreateRequest(BaseModel):
@@ -24,13 +26,14 @@ class ProjectCreateRequest(BaseModel):
     customer_id: UUID
     name: ShortText
     description: Description | None = None
+    normal_working_hours: NormalWorkingHours = Decimal("8.00")
 
 
 class ProjectUpdateRequest(BaseModel):
     """Partial update: omitted fields are left unchanged.
 
     ``customer_id`` is immutable and not part of this request. ``null`` clears ``description``; it
-    is rejected for ``name`` and ``is_active``.
+    is rejected for ``name``, ``is_active`` and ``normal_working_hours``.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -38,12 +41,13 @@ class ProjectUpdateRequest(BaseModel):
     name: ShortText | None = None
     description: Description | None = None
     is_active: bool | None = None
+    normal_working_hours: NormalWorkingHours | None = None
 
     @model_validator(mode="after")
     def _reject_null_for_required_fields(self) -> Self:
         nulls = [
             name
-            for name in ("name", "is_active")
+            for name in ("name", "is_active", "normal_working_hours")
             if name in self.model_fields_set and getattr(self, name) is None
         ]
         if nulls:
@@ -116,6 +120,7 @@ class ProjectResponse(BaseModel):
     name: str
     description: str | None
     is_active: bool
+    normal_working_hours: Decimal
     created_at: datetime
     updated_at: datetime
 

@@ -2,12 +2,13 @@
 ``timesheets.contracts``."""
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
     CheckConstraint,
     Date,
+    DateTime,
     Enum,
     ForeignKey,
     Index,
@@ -20,6 +21,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from time_reporting.db.base import Base
 from time_reporting.db.mixins import TimestampMixin
 from time_reporting.modules.projects.contracts import BillingUnit
+from time_reporting.modules.timesheets.contracts import TimesheetWeekStatus
 
 
 class TimeEntry(TimestampMixin, Base):
@@ -66,3 +68,51 @@ class TimeEntry(TimestampMixin, Base):
         )
     )
     note: Mapped[str | None] = mapped_column(Text)
+
+
+class TimesheetWeek(TimestampMixin, Base):
+    """A week's place in the submit/review workflow. A (user, week_start) with no row here is a
+    draft — this table only ever holds ``submitted``/``approved``/``returned`` rows, never
+    ``draft`` (that status exists only in ``TimesheetWeekStatus``/``TimesheetWeekDTO``)."""
+
+    __tablename__ = "timesheet_weeks"
+    __table_args__ = (
+        UniqueConstraint("user_id", "week_start", name="uq_timesheet_weeks_user_id_week_start"),
+        Index("ix_timesheet_weeks_status", "status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    week_start: Mapped[date] = mapped_column(Date)
+    # The Postgres enum type covers all four ``TimesheetWeekStatus`` members (simpler than a
+    # separate storage-only enum), but the service never persists ``DRAFT`` here — a missing row
+    # already means draft.
+    status: Mapped[TimesheetWeekStatus] = mapped_column(
+        Enum(
+            TimesheetWeekStatus,
+            name="timesheet_week_status",
+            values_callable=lambda statuses: [s.value for s in statuses],
+        )
+    )
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reviewed_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    return_comment: Mapped[str | None] = mapped_column(Text)
+
+
+class TimesheetRowComment(TimestampMixin, Base):
+    """A per (user, week, billing item) note about a timesheet row, separate from each cell's own
+    ``TimeEntry.note``."""
+
+    __tablename__ = "timesheet_row_comments"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    week_start: Mapped[date] = mapped_column(Date, primary_key=True)
+    billing_item_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("project_billing_items.id", ondelete="CASCADE"), primary_key=True
+    )
+    comment: Mapped[str] = mapped_column(Text)

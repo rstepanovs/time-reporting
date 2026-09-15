@@ -25,7 +25,13 @@ from time_reporting.modules.projects.contracts import BillingItemPreset, Billing
 
 class Project(TimestampMixin, Base):
     __tablename__ = "projects"
-    __table_args__ = (UniqueConstraint("customer_id", "name", name="uq_projects_customer_id_name"),)
+    __table_args__ = (
+        UniqueConstraint("customer_id", "name", name="uq_projects_customer_id_name"),
+        CheckConstraint(
+            "normal_working_hours > 0 AND normal_working_hours <= 24",
+            name="normal_working_hours_range",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     # Immutable after creation; referenced by table name, never by importing customers.models.
@@ -35,6 +41,10 @@ class Project(TimestampMixin, Base):
     # Archived by default (billing data will reference projects); the admin module can permanently
     # delete one that nothing references yet.
     is_active: Mapped[bool] = mapped_column(default=True, server_default=true())
+    # Hours booked per working day when a timesheet week is prefilled for this project.
+    normal_working_hours: Mapped[Decimal] = mapped_column(
+        Numeric(4, 2), default=Decimal("8.00"), server_default="8"
+    )
 
 
 class ProjectMember(Base):
