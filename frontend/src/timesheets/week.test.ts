@@ -4,8 +4,10 @@ import {
   addDays,
   addMonths,
   addWeeks,
+  fillRatePercent,
   formatDayLabel,
   formatHours,
+  formatIsoWeekLabel,
   formatMonthLabel,
   formatWeekLabel,
   isWeekend,
@@ -123,5 +125,28 @@ describe("previousMonth", () => {
   it("is addMonths(..., -1)", () => {
     expect(previousMonth(2026, 9)).toEqual({ year: 2026, month: 8 });
     expect(previousMonth(2026, 1)).toEqual({ year: 2025, month: 12 });
+  });
+});
+
+describe("formatIsoWeekLabel", () => {
+  it("formats as W<number>", () => {
+    expect(formatIsoWeekLabel(38)).toBe("W38");
+    expect(formatIsoWeekLabel(1)).toBe("W1");
+  });
+});
+
+describe("fillRatePercent", () => {
+  it("rounds to the nearest whole percent", () => {
+    expect(fillRatePercent("70.00", "80.00")).toBe(88);
+    expect(fillRatePercent("172.00", "168.00")).toBe(102);
+  });
+
+  it("returns null when nothing was expected", () => {
+    expect(fillRatePercent("0.00", "0.00")).toBeNull();
+    expect(fillRatePercent("4.00", "0.00")).toBeNull();
+  });
+
+  it("returns 0 for no hours against a positive expectation", () => {
+    expect(fillRatePercent("0.00", "40.00")).toBe(0);
   });
 });

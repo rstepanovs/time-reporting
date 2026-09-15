@@ -95,3 +95,17 @@ export function addMonths(
 export function previousMonth(year: number, month: number): { year: number; month: number } {
   return addMonths(year, month, -1);
 }
+
+/** "W38" (the ISO year isn't shown — it only ever differs from the calendar year for the one or
+ * two weeks spanning New Year's, where the surrounding chart labels make it unambiguous). */
+export function formatIsoWeekLabel(isoWeek: number): string {
+  return `W${isoWeek}`;
+}
+
+/** Reported hours as a percentage of expected hours, rounded to the nearest whole percent, or
+ * `null` when nothing was expected (so "percent full" is meaningless rather than 0 or Infinity). */
+export function fillRatePercent(hours: string, expectedHours: string): number | null {
+  const expected = Number(expectedHours);
+  if (expected <= 0) return null;
+  return Math.round((Number(hours) / expected) * 100);
+}

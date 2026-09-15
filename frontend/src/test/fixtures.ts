@@ -5,9 +5,11 @@ import type { BillingItem, Project, ProjectMember } from "@/projects/api";
 import type {
   MonthCalendar,
   MonthHours,
+  MonthTimeSummary,
   TimesheetOption,
   TimesheetRow,
   TimesheetWeek,
+  WeeklyHours,
   YearHours,
 } from "@/timesheets/api";
 
@@ -368,6 +370,156 @@ export const testYearHours: YearHours = {
     other_hours: "0.00",
     total_hours: "218.00",
   },
+};
+
+// Matches testMonthHoursCurrent's hours (46h booked of 88 expected, 56 to date) plus benefits.
+export const testMonthTimeSummary: MonthTimeSummary = {
+  user: { id: testWorker.id, name: testWorker.name, email: testWorker.email },
+  year: 2026,
+  month: 9,
+  is_current: true,
+  working_days: 11,
+  expected_hours: "88.00",
+  expected_hours_to_date: "56.00",
+  hours: {
+    normal_hours: "46.00",
+    overtime_hours: "0.00",
+    travel_hours: "0.00",
+    other_hours: "0.00",
+    total_hours: "46.00",
+  },
+  per_diem_days: "2.00",
+  expenses: [{ currency: "EUR", amount: "120.00" }],
+};
+
+// Matches testMonthHoursPast's hours (172h of 168 expected); no benefits this month.
+export const testMonthTimeSummaryPrevious: MonthTimeSummary = {
+  user: { id: testWorker.id, name: testWorker.name, email: testWorker.email },
+  year: 2026,
+  month: 8,
+  is_current: false,
+  working_days: 21,
+  expected_hours: "168.00",
+  expected_hours_to_date: "168.00",
+  hours: {
+    normal_hours: "160.00",
+    overtime_hours: "8.00",
+    travel_hours: "4.00",
+    other_hours: "0.00",
+    total_hours: "172.00",
+  },
+  per_diem_days: "0.00",
+  expenses: [],
+};
+
+// 6 ISO weeks ending with the current one (2026-09-14, matching TEST_WEEK_START and its 6h booked
+// in testMonthCalendar).
+export const testWeeklyHours: WeeklyHours = {
+  user: { id: testWorker.id, name: testWorker.name, email: testWorker.email },
+  weeks: [
+    {
+      week_start: "2026-08-10",
+      iso_year: 2026,
+      iso_week: 33,
+      is_current: false,
+      expected_hours: "40.00",
+      expected_hours_to_date: "40.00",
+      totals: {
+        normal_hours: "32.00",
+        overtime_hours: "0.00",
+        travel_hours: "0.00",
+        other_hours: "0.00",
+        total_hours: "32.00",
+      },
+    },
+    {
+      week_start: "2026-08-17",
+      iso_year: 2026,
+      iso_week: 34,
+      is_current: false,
+      expected_hours: "40.00",
+      expected_hours_to_date: "40.00",
+      totals: {
+        normal_hours: "36.00",
+        overtime_hours: "0.00",
+        travel_hours: "0.00",
+        other_hours: "0.00",
+        total_hours: "36.00",
+      },
+    },
+    {
+      week_start: "2026-08-24",
+      iso_year: 2026,
+      iso_week: 35,
+      is_current: false,
+      expected_hours: "40.00",
+      expected_hours_to_date: "40.00",
+      totals: {
+        normal_hours: "40.00",
+        overtime_hours: "0.00",
+        travel_hours: "0.00",
+        other_hours: "0.00",
+        total_hours: "40.00",
+      },
+    },
+    {
+      week_start: "2026-08-31",
+      iso_year: 2026,
+      iso_week: 36,
+      is_current: false,
+      expected_hours: "40.00",
+      expected_hours_to_date: "40.00",
+      totals: {
+        normal_hours: "16.00",
+        overtime_hours: "0.00",
+        travel_hours: "4.00",
+        other_hours: "0.00",
+        total_hours: "20.00",
+      },
+    },
+    {
+      week_start: "2026-09-07",
+      iso_year: 2026,
+      iso_week: 37,
+      is_current: false,
+      expected_hours: "40.00",
+      expected_hours_to_date: "40.00",
+      totals: {
+        normal_hours: "36.00",
+        overtime_hours: "2.00",
+        travel_hours: "0.00",
+        other_hours: "0.00",
+        total_hours: "38.00",
+      },
+    },
+    {
+      week_start: TEST_WEEK_START,
+      iso_year: 2026,
+      iso_week: 38,
+      is_current: true,
+      expected_hours: "32.00",
+      expected_hours_to_date: "16.00",
+      totals: {
+        normal_hours: "6.00",
+        overtime_hours: "0.00",
+        travel_hours: "0.00",
+        other_hours: "0.00",
+        total_hours: "6.00",
+      },
+    },
+  ],
+  projects: [
+    {
+      project: testTimesheetRow.project,
+      totals: {
+        normal_hours: "166.00",
+        overtime_hours: "2.00",
+        travel_hours: "4.00",
+        other_hours: "0.00",
+        total_hours: "172.00",
+      },
+    },
+  ],
 };
 
 export const testTimesheetOption: TimesheetOption = {

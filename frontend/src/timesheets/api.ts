@@ -16,6 +16,11 @@ export type MonthHours = components["schemas"]["MonthHoursResponse"];
 export type ProjectHours = components["schemas"]["ProjectHoursResponse"];
 export type HoursTotals = components["schemas"]["HoursTotalsResponse"];
 
+export type MonthTimeSummary = components["schemas"]["MonthTimeSummaryResponse"];
+export type CurrencyAmount = components["schemas"]["CurrencyAmountResponse"];
+export type WeeklyHours = components["schemas"]["WeeklyHoursResponse"];
+export type WeekHours = components["schemas"]["WeekHoursResponse"];
+
 /** A project/billing-item pair picked from the options list, before it has any entries — the
  * shape a draft row (added but not yet saved) takes in the grid. */
 export type PickedRow = {
@@ -90,6 +95,35 @@ export async function getMonthCalendar(params: {
 export async function getYearHours(params: { year: number; userId?: string }): Promise<YearHours> {
   const { data, response } = await api.GET("/api/v1/timesheets/years/{year}", {
     params: { path: { year: params.year }, query: { user_id: params.userId } },
+  });
+  if (!data) throw await timesheetAwareError(response);
+  return data;
+}
+
+/** One month's booked time (hours + benefits), for a dashboard "My time" card. */
+export async function getMonthTimeSummary(params: {
+  year: number;
+  month: number;
+  userId?: string;
+}): Promise<MonthTimeSummary> {
+  const { data, response } = await api.GET("/api/v1/timesheets/months/{year}/{month}/summary", {
+    params: {
+      path: { year: params.year, month: params.month },
+      query: { user_id: params.userId },
+    },
+  });
+  if (!data) throw await timesheetAwareError(response);
+  return data;
+}
+
+/** `weeks` ISO weeks ending with today's week, oldest first, for the dashboard's hours-per-week
+ * chart and per-project table. */
+export async function getWeeklyHours(params: {
+  weeks: number;
+  userId?: string;
+}): Promise<WeeklyHours> {
+  const { data, response } = await api.GET("/api/v1/timesheets/weekly-hours", {
+    params: { query: { weeks: params.weeks, user_id: params.userId } },
   });
   if (!data) throw await timesheetAwareError(response);
   return data;
