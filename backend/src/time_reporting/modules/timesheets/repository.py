@@ -1,16 +1,28 @@
 """Persistence of ``TimeEntry`` entities. Flushes but never commits — the bus owns transactions."""
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Date, Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from time_reporting.modules.projects.contracts import BillingUnit
 from time_reporting.modules.timesheets.models import TimeEntry
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class MonthlyHoursTotal:
+    """One (month, project, billing item)'s summed ``hour``-unit quantity, for the dashboard's
+    year-hours summary."""
+
+    month_start: date
+    project_id: UUID
+    billing_item_id: UUID
+    total: Decimal
 
 
 class TimeEntryRepository:
@@ -59,6 +71,37 @@ class TimeEntryRepository:
             .group_by(TimeEntry.entry_date)
         )
         return {entry_date: total for entry_date, total in result.all()}
+
+    async def sum_hours_by_month_and_billing_item(
+        self, user_id: UUID, date_from: date, date_to: date
+    ) -> Sequence[MonthlyHoursTotal]:
+        """The user's total ``hour``-unit quantity per (month, project, billing item) over the
+        range, for the dashboard's year-hours summary."""
+        month_start = func.date_trunc("month", TimeEntry.entry_date).cast(Date).label("month_start")
+        result = await self._session.execute(
+            select(
+                month_start,
+                TimeEntry.project_id,
+                TimeEntry.billing_item_id,
+                func.sum(TimeEntry.quantity).label("total"),
+            )
+            .where(
+                TimeEntry.user_id == user_id,
+                TimeEntry.entry_date >= date_from,
+                TimeEntry.entry_date <= date_to,
+                TimeEntry.unit == BillingUnit.HOUR,
+            )
+            .group_by(month_start, TimeEntry.project_id, TimeEntry.billing_item_id)
+        )
+        return [
+            MonthlyHoursTotal(
+                month_start=row.month_start,
+                project_id=row.project_id,
+                billing_item_id=row.billing_item_id,
+                total=row.total,
+            )
+            for row in result.all()
+        ]
 
     async def count(
         self,

@@ -62,6 +62,96 @@ class TimesheetWeekDTO:
     rows: tuple[TimesheetRowDTO, ...]
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class HoursTotalsDTO:
+    """Booked ``hour``-unit quantities for a period, split by the billing item's preset.
+
+    ``normal_hours``/``overtime_hours``/``travel_hours`` come from entries on the matching preset;
+    ``other_hours`` is every other ``hour``-unit entry (custom items). ``total_hours`` is the sum
+    of all four. ``day``- and ``amount``-unit entries (per diems, expenses) are not part of this —
+    the worker dashboard only shows hours.
+    """
+
+    normal_hours: Decimal
+    overtime_hours: Decimal
+    travel_hours: Decimal
+    other_hours: Decimal
+    total_hours: Decimal
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CalendarDayHoursDTO:
+    """One day of a month calendar: what it is (from ``work_calendar``) plus hours booked on it."""
+
+    calendar_day: CalendarDayDTO
+    in_month: bool
+    is_working_day: bool
+    expected_hours: Decimal
+    hours: Decimal
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CalendarWeekHoursDTO:
+    """One ISO week (Mon..Sun) of a month calendar; may include days outside the month."""
+
+    week_start: date
+    iso_week: int
+    days: tuple[CalendarDayHoursDTO, ...]
+    expected_hours: Decimal
+    hours: Decimal
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class MonthCalendarDTO:
+    """A month rendered as full ISO weeks (so the first/last week may spill into neighboring
+    months); totals count only days that fall inside ``month``."""
+
+    user: UserDTO
+    year: int
+    month: int
+    weeks: tuple[CalendarWeekHoursDTO, ...]
+    expected_hours: Decimal
+    # Expected hours of working days up to and including ``today`` (as passed to the query).
+    expected_hours_to_date: Decimal
+    hours: Decimal
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ProjectHoursDTO:
+    """One project's hours within a single month, for that month's breakdown. Only projects with
+    any hours that month are included."""
+
+    project: ProjectDTO
+    totals: HoursTotalsDTO
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class MonthHoursDTO:
+    year: int
+    month: int
+    # Whether ``today`` (as passed to the query) falls inside this month.
+    is_current: bool
+    working_days: int
+    expected_hours: Decimal
+    expected_hours_to_date: Decimal
+    totals: HoursTotalsDTO
+    # Sorted by customer name, then project name.
+    projects: tuple[ProjectHoursDTO, ...]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class YearHoursDTO:
+    """``year``'s hours by month, newest first: January .. ``today``'s month for the current year,
+    all 12 months for a past year, none for a future one."""
+
+    user: UserDTO
+    year: int
+    months: tuple[MonthHoursDTO, ...]
+    expected_hours: Decimal
+    expected_hours_to_date: Decimal
+    totals: HoursTotalsDTO
+
+
 # --- Queries ---
 
 
@@ -92,6 +182,28 @@ class CountTimeEntries(Query[int]):
     user_id: UUID | None = None
     project_id: UUID | None = None
     billing_item_id: UUID | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetMonthCalendar(Query[MonthCalendarDTO]):
+    """``month``'s calendar for the worker dashboard, spanning full ISO weeks. ``today`` drives
+    ``expected_hours_to_date`` and is supplied by the caller (the router fills in the real date) so
+    the result is deterministic. Raises ``UserNotFoundError`` if ``user_id`` doesn't exist."""
+
+    user_id: UUID
+    year: int
+    month: int
+    today: date
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetYearHours(Query[YearHoursDTO]):
+    """``year``'s hours by month for the worker dashboard. ``today`` is supplied by the caller,
+    like ``GetMonthCalendar``. Raises ``UserNotFoundError`` if ``user_id`` doesn't exist."""
+
+    user_id: UUID
+    year: int
+    today: date
 
 
 # --- Commands ---
