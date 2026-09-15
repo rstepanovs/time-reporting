@@ -60,6 +60,7 @@ function AccountMenu() {
 const NAV_ITEMS = [
   { to: "/", label: "Dashboard" },
   { to: "/timesheet", label: "Timesheet" },
+  { to: "/hours", label: "My hours" },
   { to: "/projects", label: "Projects" },
 ];
 

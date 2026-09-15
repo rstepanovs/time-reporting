@@ -10,6 +10,7 @@ import { AdminSystemStatusPage } from "@/pages/admin/AdminSystemStatusPage";
 import { AdminUsersPage } from "@/pages/admin/AdminUsersPage";
 import { ChangePasswordPage } from "@/pages/ChangePasswordPage";
 import { DashboardPage } from "@/pages/DashboardPage";
+import { HoursPage } from "@/pages/HoursPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { ProjectDetailsPage } from "@/pages/ProjectDetailsPage";
@@ -27,6 +28,7 @@ export const routes: RouteObject[] = [
         children: [
           { index: true, element: <DashboardPage /> },
           { path: "timesheet", element: <TimesheetPage /> },
+          { path: "hours", element: <HoursPage /> },
           { path: "projects", element: <ProjectsPage /> },
           { path: "projects/:projectId", element: <ProjectDetailsPage /> },
           { path: "account/password", element: <ChangePasswordPage /> },

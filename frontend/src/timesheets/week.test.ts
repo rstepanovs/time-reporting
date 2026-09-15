@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import {
   addDays,
+  addMonths,
   addWeeks,
   formatDayLabel,
   formatHours,
   formatMonthLabel,
   formatWeekLabel,
   isWeekend,
+  previousMonth,
   startOfIsoWeek,
   weekDays,
 } from "@/timesheets/week";
@@ -98,5 +100,28 @@ describe("formatHours", () => {
 
   it("keeps two decimal places when both are significant", () => {
     expect(formatHours("8.25")).toBe("8.25");
+  });
+});
+
+describe("addMonths", () => {
+  it("shifts within the same year", () => {
+    expect(addMonths(2026, 9, 1)).toEqual({ year: 2026, month: 10 });
+    expect(addMonths(2026, 9, -1)).toEqual({ year: 2026, month: 8 });
+  });
+
+  it("carries over into the next or previous year", () => {
+    expect(addMonths(2026, 12, 1)).toEqual({ year: 2027, month: 1 });
+    expect(addMonths(2026, 1, -1)).toEqual({ year: 2025, month: 12 });
+  });
+
+  it("handles a multi-year jump", () => {
+    expect(addMonths(2026, 1, -13)).toEqual({ year: 2024, month: 12 });
+  });
+});
+
+describe("previousMonth", () => {
+  it("is addMonths(..., -1)", () => {
+    expect(previousMonth(2026, 9)).toEqual({ year: 2026, month: 8 });
+    expect(previousMonth(2026, 1)).toEqual({ year: 2025, month: 12 });
   });
 });

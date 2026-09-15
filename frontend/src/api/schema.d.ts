@@ -496,6 +496,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/timesheets/months/{year}/{month}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Month Time Summary */
+        get: operations["get_month_time_summary_api_v1_timesheets_months__year___month__summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/timesheets/weekly-hours": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Weekly Hours */
+        get: operations["get_weekly_hours_api_v1_timesheets_weekly_hours_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/users/{user_id}/removal-impact": {
         parameters: {
             query?: never;
@@ -777,6 +811,13 @@ export interface components {
             /** Hours */
             hours: string;
         };
+        /** CurrencyAmountResponse */
+        CurrencyAmountResponse: {
+            /** Currency */
+            currency: string;
+            /** Amount */
+            amount: string;
+        };
         /** CustomerCreateRequest */
         CustomerCreateRequest: {
             /** Name */
@@ -946,6 +987,27 @@ export interface components {
             totals: components["schemas"]["HoursTotalsResponse"];
             /** Projects */
             projects: components["schemas"]["ProjectHoursResponse"][];
+        };
+        /** MonthTimeSummaryResponse */
+        MonthTimeSummaryResponse: {
+            user: components["schemas"]["TimesheetUserResponse"];
+            /** Year */
+            year: number;
+            /** Month */
+            month: number;
+            /** Is Current */
+            is_current: boolean;
+            /** Working Days */
+            working_days: number;
+            /** Expected Hours */
+            expected_hours: string;
+            /** Expected Hours To Date */
+            expected_hours_to_date: string;
+            hours: components["schemas"]["HoursTotalsResponse"];
+            /** Per Diem Days */
+            per_diem_days: string;
+            /** Expenses */
+            expenses: components["schemas"]["CurrencyAmountResponse"][];
         };
         /** NonWorkingDayCreateRequest */
         NonWorkingDayCreateRequest: {
@@ -1446,6 +1508,33 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** WeekHoursResponse */
+        WeekHoursResponse: {
+            /**
+             * Week Start
+             * Format: date
+             */
+            week_start: string;
+            /** Iso Year */
+            iso_year: number;
+            /** Iso Week */
+            iso_week: number;
+            /** Is Current */
+            is_current: boolean;
+            /** Expected Hours */
+            expected_hours: string;
+            /** Expected Hours To Date */
+            expected_hours_to_date: string;
+            totals: components["schemas"]["HoursTotalsResponse"];
+        };
+        /** WeeklyHoursResponse */
+        WeeklyHoursResponse: {
+            user: components["schemas"]["TimesheetUserResponse"];
+            /** Weeks */
+            weeks: components["schemas"]["WeekHoursResponse"][];
+            /** Projects */
+            projects: components["schemas"]["ProjectHoursResponse"][];
         };
         /** YearHoursResponse */
         YearHoursResponse: {
@@ -2976,6 +3065,93 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["YearHoursResponse"];
                 };
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_month_time_summary_api_v1_timesheets_months__year___month__summary_get: {
+        parameters: {
+            query?: {
+                user_id?: string | null;
+            };
+            header?: never;
+            path: {
+                year: number;
+                month: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonthTimeSummaryResponse"];
+                };
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_weekly_hours_api_v1_timesheets_weekly_hours_get: {
+        parameters: {
+            query?: {
+                weeks?: number;
+                user_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WeeklyHoursResponse"];
+                };
+            };
+            /** @description The week/entries violate a timesheet rule */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description User not found */
             404: {

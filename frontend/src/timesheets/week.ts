@@ -80,3 +80,18 @@ export function formatMonthLabel(year: number, month: number): string {
 export function formatHours(value: string): string {
   return Number(value).toFixed(2).replace(/\.?0+$/, "");
 }
+
+/** `year`/`month` shifted by `delta` whole months (`month` is 1-12), carrying over into the year. */
+export function addMonths(
+  year: number,
+  month: number,
+  delta: number,
+): { year: number; month: number } {
+  const index = year * 12 + (month - 1) + delta;
+  return { year: Math.floor(index / 12), month: (((index % 12) + 12) % 12) + 1 };
+}
+
+/** The year/month one month before `year`/`month`. */
+export function previousMonth(year: number, month: number): { year: number; month: number } {
+  return addMonths(year, month, -1);
+}
