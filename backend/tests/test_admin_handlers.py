@@ -97,6 +97,21 @@ async def test_user_removal_impact_lists_membership_effect(
     assert impact.effects[0].count == 1
 
 
+async def test_user_removal_impact_lists_managed_projects_effect(
+    bus: Bus, make_user: UserFactory, make_project: ProjectFactory
+) -> None:
+    admin = await make_user(role=UserRole.ADMIN)
+    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    await make_project(manager_id=manager.id)
+
+    impact = await bus.query(GetUserRemovalImpact(user_id=manager.id, acting_user_id=admin.id))
+
+    assert impact is not None
+    assert impact.can_delete_permanently is True
+    managed = next(e for e in impact.effects if e.kind == RemovalEffectKind.MANAGED_PROJECTS)
+    assert managed.count == 1
+
+
 async def test_user_removal_impact_blocked_by_time_entries(
     bus: Bus, make_user: UserFactory, make_project: ProjectFactory
 ) -> None:
@@ -280,6 +295,23 @@ async def test_remove_user_permanently_deletes_and_cascades_memberships(
     assert await bus.query(GetUserById(user_id=user.id)) is None
     assert await bus.query(ListProjectMembers(project_id=project_a.id)) == ()
     assert await bus.query(ListProjectMembers(project_id=project_b.id)) == ()
+
+
+async def test_remove_user_permanently_clears_manager_assignment(
+    bus: Bus, make_user: UserFactory, make_project: ProjectFactory
+) -> None:
+    admin = await make_user(role=UserRole.ADMIN)
+    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    project = await make_project(manager_id=manager.id)
+
+    outcome = await bus.execute(
+        RemoveUser(user_id=manager.id, acting_user_id=admin.id, permanent=True)
+    )
+
+    assert outcome is RemovalOutcome.DELETED
+    refreshed = await bus.query(GetProjectById(project_id=project.id))
+    assert refreshed is not None
+    assert refreshed.manager is None
 
 
 async def test_remove_user_permanently_rolls_back_membership_removal_on_failure(

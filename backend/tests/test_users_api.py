@@ -76,3 +76,25 @@ async def test_manager_can_search_the_user_directory(
 
 async def test_user_directory_requires_authentication(client: AsyncClient) -> None:
     assert (await client.get("/api/v1/users/directory")).status_code == 401
+
+
+async def test_user_directory_can_filter_by_role(
+    client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
+) -> None:
+    admin = await make_user(role=UserRole.ADMIN, name="Ada Admin", email="ada-admin@example.com")
+    manager = await make_user(
+        role=UserRole.PROJECT_MANAGER, name="Mark Manager", email="mark-manager@example.com"
+    )
+    worker = await make_user(role=UserRole.WORKER, name="Wendy Worker", email="wendy@example.com")
+    headers = auth_headers(admin)
+
+    response = await client.get(
+        "/api/v1/users/directory",
+        headers=headers,
+        params={"role": ["admin", "project_manager"]},
+    )
+
+    assert response.status_code == 200
+    ids = {item["id"] for item in response.json()}
+    assert ids == {str(admin.id), str(manager.id)}
+    assert str(worker.id) not in ids

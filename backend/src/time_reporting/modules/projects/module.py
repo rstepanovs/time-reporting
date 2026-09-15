@@ -10,6 +10,7 @@ from time_reporting.modules.projects.contracts import (
     GetProjectBillingItemsByIds,
     GetProjectById,
     GetProjectsByIds,
+    ListManagedProjectsWithMembers,
     ListMemberProjectsWithBillingItems,
     ListProjectBillingItems,
     ListProjectMembers,
@@ -28,6 +29,7 @@ from time_reporting.modules.projects.handlers import (
     GetProjectBillingItemsByIdsHandler,
     GetProjectByIdHandler,
     GetProjectsByIdsHandler,
+    ListManagedProjectsWithMembersHandler,
     ListMemberProjectsWithBillingItemsHandler,
     ListProjectBillingItemsHandler,
     ListProjectMembersHandler,
@@ -44,6 +46,7 @@ def register(registry: HandlerRegistry) -> None:
     registry.query(GetProjectsByIds, GetProjectsByIdsHandler)
     registry.query(GetProjectBillingItemsByIds, GetProjectBillingItemsByIdsHandler)
     registry.query(ListMemberProjectsWithBillingItems, ListMemberProjectsWithBillingItemsHandler)
+    registry.query(ListManagedProjectsWithMembers, ListManagedProjectsWithMembersHandler)
     registry.query(ListProjects, ListProjectsHandler)
     registry.query(ListProjectMembers, ListProjectMembersHandler)
     registry.query(ListProjectBillingItems, ListProjectBillingItemsHandler)

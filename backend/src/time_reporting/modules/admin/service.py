@@ -65,6 +65,9 @@ class AdminRemovalService:
         memberships = await self._bus.query(
             ListProjects(limit=1, offset=0, member_id=user_id, include_inactive=True)
         )
+        managed_projects = await self._bus.query(
+            ListProjects(limit=1, offset=0, manager_id=user_id, include_inactive=True)
+        )
         time_entry_count = await self._bus.query(CountTimeEntries(user_id=user_id))
         blockers = []
         if user_id == acting_user_id:
@@ -77,6 +80,12 @@ class AdminRemovalService:
         if memberships.total:
             effects.append(
                 RemovalCountDTO(kind=RemovalEffectKind.PROJECT_MEMBERSHIPS, count=memberships.total)
+            )
+        if managed_projects.total:
+            effects.append(
+                RemovalCountDTO(
+                    kind=RemovalEffectKind.MANAGED_PROJECTS, count=managed_projects.total
+                )
             )
         return RemovalImpactDTO(
             is_active=user.is_active,

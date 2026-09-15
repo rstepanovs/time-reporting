@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from time_reporting.db.queries import escape_like
-from time_reporting.modules.users.contracts import EmailAlreadyExistsError, UserInUseError
+from time_reporting.modules.users.contracts import EmailAlreadyExistsError, UserInUseError, UserRole
 from time_reporting.modules.users.models import User
 
 _EMAIL_UNIQUE_CONSTRAINT = "uq_users_email"
@@ -41,10 +41,18 @@ class UserRepository:
         return result.all()
 
     async def get_page(
-        self, *, limit: int, offset: int, search: str | None, include_inactive: bool
+        self,
+        *,
+        limit: int,
+        offset: int,
+        search: str | None,
+        include_inactive: bool,
+        roles: frozenset[UserRole] | None = None,
     ) -> Sequence[User]:
         statement = (
-            self._filtered(select(User), search=search, include_inactive=include_inactive)
+            self._filtered(
+                select(User), search=search, include_inactive=include_inactive, roles=roles
+            )
             .order_by(User.created_at, User.id)
             .limit(limit)
             .offset(offset)
@@ -52,18 +60,34 @@ class UserRepository:
         result = await self._session.scalars(statement)
         return result.all()
 
-    async def count(self, *, search: str | None, include_inactive: bool) -> int:
+    async def count(
+        self,
+        *,
+        search: str | None,
+        include_inactive: bool,
+        roles: frozenset[UserRole] | None = None,
+    ) -> int:
         statement = self._filtered(
-            select(func.count()).select_from(User), search=search, include_inactive=include_inactive
+            select(func.count()).select_from(User),
+            search=search,
+            include_inactive=include_inactive,
+            roles=roles,
         )
         result = await self._session.execute(statement)
         return result.scalar_one()
 
     def _filtered[T: tuple[Any, ...]](
-        self, statement: Select[T], *, search: str | None, include_inactive: bool
+        self,
+        statement: Select[T],
+        *,
+        search: str | None,
+        include_inactive: bool,
+        roles: frozenset[UserRole] | None,
     ) -> Select[T]:
         if not include_inactive:
             statement = statement.where(User.is_active.is_(True))
+        if roles:
+            statement = statement.where(User.role.in_(roles))
         if search:
             pattern = f"%{escape_like(search)}%"
             statement = statement.where(

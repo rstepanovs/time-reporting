@@ -21,6 +21,8 @@ from time_reporting.modules.projects.contracts import (
     ProjectArchivedError,
     ProjectCustomerArchivedError,
     ProjectCustomerNotFoundError,
+    ProjectManagerNotEligibleError,
+    ProjectManagerNotFoundError,
     ProjectMemberNotFoundError,
     ProjectNameAlreadyExistsError,
     ProjectNotFoundError,
@@ -33,7 +35,9 @@ from time_reporting.modules.projects.repository import (
     ProjectMemberRepository,
     ProjectRepository,
 )
-from time_reporting.modules.users.contracts import GetUserById
+from time_reporting.modules.users.contracts import GetUserById, UserRole
+
+_ELIGIBLE_MANAGER_ROLES = frozenset({UserRole.ADMIN, UserRole.PROJECT_MANAGER})
 
 
 class ProjectService:
@@ -56,14 +60,18 @@ class ProjectService:
         name: str,
         description: str | None,
         normal_working_hours: Decimal,
+        manager_id: UUID | None,
     ) -> Project:
         await self._ensure_customer_active(customer_id)
         await self._ensure_name_available(customer_id, name)
+        if manager_id is not None:
+            await self._ensure_manager_eligible(manager_id)
         project = Project(
             customer_id=customer_id,
             name=name,
             description=description,
             normal_working_hours=normal_working_hours,
+            manager_id=manager_id,
         )
         await self._projects.save(project)
         await self._billing_items.add_all(
@@ -95,6 +103,11 @@ class ProjectService:
             project.is_active = data.is_active
         if data.normal_working_hours is not None:
             project.normal_working_hours = data.normal_working_hours
+        if "manager_id" in data.clear_fields:
+            project.manager_id = None
+        elif data.manager_id is not None:
+            await self._ensure_manager_eligible(data.manager_id)
+            project.manager_id = data.manager_id
         await self._projects.save(project)
         return project
 
@@ -122,6 +135,7 @@ class ProjectService:
         await self._projects.delete(await self.get_project(project_id))
 
     async def remove_user_from_all_projects(self, user_id: UUID) -> int:
+        await self._projects.clear_manager_for_user(user_id)
         return await self._members.delete_all_for_user(user_id)
 
     async def add_billing_item(
@@ -198,6 +212,13 @@ class ProjectService:
         project = await self.get_project(project_id)
         if not project.is_active:
             raise ProjectArchivedError(project_id)
+
+    async def _ensure_manager_eligible(self, user_id: UUID) -> None:
+        user = await self._bus.query(GetUserById(user_id=user_id))
+        if user is None:
+            raise ProjectManagerNotFoundError(user_id)
+        if not user.is_active or user.role not in _ELIGIBLE_MANAGER_ROLES:
+            raise ProjectManagerNotEligibleError(user_id)
 
     async def _ensure_name_available(self, customer_id: UUID, name: str) -> None:
         if await self._projects.get_by_customer_and_name(customer_id, name) is not None:

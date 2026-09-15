@@ -265,6 +265,76 @@ async def test_member_id_filter_returns_only_that_members_projects(
     assert ids == {str(project_with_member.id)}
 
 
+# --- Project manager ---
+
+
+async def test_create_and_update_project_manager(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_customer: CustomerFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    customer = await make_customer()
+    manager = await make_user(role=UserRole.PROJECT_MANAGER, name="Mark Manager")
+
+    created = await client.post(
+        "/api/v1/projects",
+        headers=headers,
+        json={"customer_id": str(customer.id), "name": "Managed", "manager_id": str(manager.id)},
+    )
+    assert created.status_code == 201
+    body = created.json()
+    assert body["manager"]["id"] == str(manager.id)
+    assert body["manager"]["name"] == "Mark Manager"
+    project_id = body["id"]
+
+    cleared = await client.patch(
+        f"/api/v1/projects/{project_id}", headers=headers, json={"manager_id": None}
+    )
+    assert cleared.status_code == 200
+    assert cleared.json()["manager"] is None
+
+
+async def test_create_project_with_worker_as_manager_returns_400(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_customer: CustomerFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    customer = await make_customer()
+    worker = await make_user(role=UserRole.WORKER)
+
+    response = await client.post(
+        "/api/v1/projects",
+        headers=headers,
+        json={"customer_id": str(customer.id), "name": "X", "manager_id": str(worker.id)},
+    )
+
+    assert response.status_code == 400
+
+
+async def test_manager_id_filter_returns_only_that_managers_projects(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    managed = await make_project(manager_id=manager.id)
+    await make_project()
+
+    response = await client.get(
+        "/api/v1/projects", headers=headers, params={"manager_id": str(manager.id)}
+    )
+
+    assert response.status_code == 200
+    ids = {item["id"] for item in response.json()["items"]}
+    assert ids == {str(managed.id)}
+
+
 # --- Billing items ---
 
 

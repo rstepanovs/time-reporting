@@ -119,6 +119,7 @@ def make_project(bus: Bus, make_customer: CustomerFactory) -> ProjectFactory:
         customer_id: UUID | None = None,
         name: str | None = None,
         description: str | None = None,
+        manager_id: UUID | None = None,
     ) -> ProjectDTO:
         nonlocal created
         created += 1
@@ -129,6 +130,7 @@ def make_project(bus: Bus, make_customer: CustomerFactory) -> ProjectFactory:
                 customer_id=customer_id,
                 name=name or f"Project {created}",
                 description=description,
+                manager_id=manager_id,
             )
         )
 

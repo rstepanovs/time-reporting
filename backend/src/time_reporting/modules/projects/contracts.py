@@ -14,7 +14,7 @@ from uuid import UUID
 from time_reporting.core.cqrs import Command, Query
 from time_reporting.modules.users.contracts import UserRole
 
-type ClearableProjectField = Literal["description"]
+type ClearableProjectField = Literal["description", "manager_id"]
 
 # Optional text fields that ``UpdateProject.clear_fields`` can reset to ``None``.
 CLEARABLE_PROJECT_FIELDS: tuple[ClearableProjectField, ...] = get_args(
@@ -96,6 +96,16 @@ class ProjectCustomerDTO:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class ProjectManagerDTO:
+    """The subset of a project's manager needed to display it alongside the project."""
+
+    id: UUID
+    name: str
+    email: str
+    is_active: bool
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class ProjectDTO:
     id: UUID
     customer: ProjectCustomerDTO
@@ -104,6 +114,7 @@ class ProjectDTO:
     is_active: bool
     # Hours booked per working day when a timesheet week is prefilled for this project.
     normal_working_hours: Decimal
+    manager: ProjectManagerDTO | None
     created_at: datetime
     updated_at: datetime
 
@@ -154,6 +165,14 @@ class ProjectOptionDTO:
     billing_items: tuple[ProjectBillingItemDTO, ...]
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ManagedProjectDTO:
+    """A project with its members, for a manager's team overview."""
+
+    project: ProjectDTO
+    members: tuple[ProjectMemberDTO, ...]
+
+
 # --- Queries ---
 
 
@@ -187,6 +206,17 @@ class ListMemberProjectsWithBillingItems(Query[tuple[ProjectOptionDTO, ...]]):
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class ListManagedProjectsWithMembers(Query[tuple[ManagedProjectDTO, ...]]):
+    """Active projects with their members, ordered by customer name then project name.
+
+    ``manager_id=None`` returns every active project (an admin's "all" view); otherwise only
+    projects managed by that user. Used to build a manager's team overview.
+    """
+
+    manager_id: UUID | None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class ListProjects(Query[ProjectPageDTO]):
     """Projects ordered by name; archived (inactive) ones only if ``include_inactive``."""
 
@@ -195,6 +225,7 @@ class ListProjects(Query[ProjectPageDTO]):
     include_inactive: bool = False
     customer_id: UUID | None = None
     member_id: UUID | None = None
+    manager_id: UUID | None = None
     search: str | None = None
 
 
@@ -229,16 +260,17 @@ class CreateProject(Command[ProjectDTO]):
     name: str
     description: str | None = None
     normal_working_hours: Decimal = Decimal("8.00")
+    manager_id: UUID | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class UpdateProject(Command[ProjectDTO]):
     """Partial update: fields left as ``None`` are not changed.
 
-    ``customer_id`` is immutable and not part of this command. The optional ``description`` is
-    cleared by naming it in ``clear_fields``. Archive a project with ``is_active=False``;
-    permanently deleting an unreferenced one goes through the admin module's ``DeleteProject``.
-    Re-activating a project under an archived customer is rejected.
+    ``customer_id`` is immutable and not part of this command. The optional ``description`` and
+    ``manager_id`` are cleared by naming them in ``clear_fields``. Archive a project with
+    ``is_active=False``; permanently deleting an unreferenced one goes through the admin module's
+    ``DeleteProject``. Re-activating a project under an archived customer is rejected.
     """
 
     project_id: UUID
@@ -246,6 +278,7 @@ class UpdateProject(Command[ProjectDTO]):
     description: str | None = None
     is_active: bool | None = None
     normal_working_hours: Decimal | None = None
+    manager_id: UUID | None = None
     clear_fields: frozenset[ClearableProjectField] = frozenset()
 
 
@@ -271,10 +304,11 @@ class DeleteProject(Command[None]):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class RemoveUserFromAllProjects(Command[int]):
-    """Delete every membership of ``user_id``, returning how many were removed.
+    """Delete every membership of ``user_id`` and clear it as any project's ``manager_id``,
+    returning how many memberships were removed.
 
     Used before permanently deleting a user, whose id is referenced (``ON DELETE RESTRICT``) by
-    ``project_members``.
+    ``project_members`` and by ``projects.manager_id``.
     """
 
     user_id: UUID
@@ -373,6 +407,21 @@ class MemberUserNotFoundError(ProjectError):
 class MemberUserInactiveError(ProjectError):
     def __init__(self, user_id: UUID) -> None:
         super().__init__(f"User {user_id} is inactive")
+        self.user_id = user_id
+
+
+class ProjectManagerNotFoundError(ProjectError):
+    def __init__(self, user_id: UUID) -> None:
+        super().__init__(f"User {user_id} not found")
+        self.user_id = user_id
+
+
+class ProjectManagerNotEligibleError(ProjectError):
+    """Raised when the given user is inactive or has neither the ``admin`` nor the
+    ``project_manager`` role."""
+
+    def __init__(self, user_id: UUID) -> None:
+        super().__init__(f"User {user_id} cannot be assigned as a project manager")
         self.user_id = user_id
 
 

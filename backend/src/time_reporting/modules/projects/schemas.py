@@ -27,13 +27,14 @@ class ProjectCreateRequest(BaseModel):
     name: ShortText
     description: Description | None = None
     normal_working_hours: NormalWorkingHours = Decimal("8.00")
+    manager_id: UUID | None = None
 
 
 class ProjectUpdateRequest(BaseModel):
     """Partial update: omitted fields are left unchanged.
 
-    ``customer_id`` is immutable and not part of this request. ``null`` clears ``description``; it
-    is rejected for ``name``, ``is_active`` and ``normal_working_hours``.
+    ``customer_id`` is immutable and not part of this request. ``null`` clears ``description`` and
+    ``manager_id``; it is rejected for ``name``, ``is_active`` and ``normal_working_hours``.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -42,6 +43,7 @@ class ProjectUpdateRequest(BaseModel):
     description: Description | None = None
     is_active: bool | None = None
     normal_working_hours: NormalWorkingHours | None = None
+    manager_id: UUID | None = None
 
     @model_validator(mode="after")
     def _reject_null_for_required_fields(self) -> Self:
@@ -112,6 +114,15 @@ class ProjectCustomerResponse(BaseModel):
     currency: str
 
 
+class ProjectManagerResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+    email: str
+    is_active: bool
+
+
 class ProjectResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -121,6 +132,7 @@ class ProjectResponse(BaseModel):
     description: str | None
     is_active: bool
     normal_working_hours: Decimal
+    manager: ProjectManagerResponse | None
     created_at: datetime
     updated_at: datetime
 

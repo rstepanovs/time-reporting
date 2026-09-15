@@ -7,7 +7,7 @@ from collections.abc import Iterable, Sequence
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import CursorResult, Select, delete, func, select
+from sqlalchemy import CursorResult, Select, delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -51,6 +51,14 @@ class ProjectRepository:
         )
         return result.all()
 
+    async def list_active(self, *, manager_id: UUID | None) -> Sequence[Project]:
+        """Active projects, ordered by name; ``manager_id`` restricts to that manager's."""
+        statement = select(Project).where(Project.is_active.is_(True))
+        if manager_id is not None:
+            statement = statement.where(Project.manager_id == manager_id)
+        result = await self._session.scalars(statement.order_by(Project.name, Project.id))
+        return result.all()
+
     async def get_by_customer_and_name(self, customer_id: UUID, name: str) -> Project | None:
         result = await self._session.scalars(
             select(Project).where(Project.customer_id == customer_id, Project.name == name)
@@ -65,6 +73,7 @@ class ProjectRepository:
         include_inactive: bool,
         customer_id: UUID | None,
         member_id: UUID | None,
+        manager_id: UUID | None,
         search: str | None,
     ) -> Sequence[Project]:
         statement = (
@@ -73,6 +82,7 @@ class ProjectRepository:
                 include_inactive=include_inactive,
                 customer_id=customer_id,
                 member_id=member_id,
+                manager_id=manager_id,
                 search=search,
             )
             .order_by(Project.name, Project.id)
@@ -88,6 +98,7 @@ class ProjectRepository:
         include_inactive: bool,
         customer_id: UUID | None,
         member_id: UUID | None,
+        manager_id: UUID | None,
         search: str | None,
     ) -> int:
         statement = self._filtered(
@@ -95,6 +106,7 @@ class ProjectRepository:
             include_inactive=include_inactive,
             customer_id=customer_id,
             member_id=member_id,
+            manager_id=manager_id,
             search=search,
         )
         result = await self._session.execute(statement)
@@ -107,6 +119,7 @@ class ProjectRepository:
         include_inactive: bool,
         customer_id: UUID | None,
         member_id: UUID | None,
+        manager_id: UUID | None,
         search: str | None,
     ) -> Select[T]:
         if not include_inactive:
@@ -119,6 +132,8 @@ class ProjectRepository:
                     select(ProjectMember.project_id).where(ProjectMember.user_id == member_id)
                 )
             )
+        if manager_id is not None:
+            statement = statement.where(Project.manager_id == manager_id)
         if search:
             pattern = f"%{escape_like(search)}%"
             statement = statement.where(Project.name.ilike(pattern, escape="\\"))
@@ -147,6 +162,18 @@ class ProjectRepository:
                 raise ProjectInUseError(project_id) from exc
             raise
 
+    async def clear_manager_for_user(self, user_id: UUID) -> int:
+        """Clear ``manager_id`` on every project managed by ``user_id`` and return how many rows
+        were affected. Used before permanently deleting a user."""
+        result = cast(
+            CursorResult[Any],
+            await self._session.execute(
+                update(Project).where(Project.manager_id == user_id).values(manager_id=None)
+            ),
+        )
+        await self._session.flush()
+        return result.rowcount
+
 
 class ProjectMemberRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -158,6 +185,15 @@ class ProjectMemberRepository:
     async def list_for_project(self, project_id: UUID) -> Sequence[ProjectMember]:
         result = await self._session.scalars(
             select(ProjectMember).where(ProjectMember.project_id == project_id)
+        )
+        return result.all()
+
+    async def list_for_projects(self, project_ids: frozenset[UUID]) -> Sequence[ProjectMember]:
+        """Members of several projects in one query."""
+        if not project_ids:
+            return ()
+        result = await self._session.scalars(
+            select(ProjectMember).where(ProjectMember.project_id.in_(project_ids))
         )
         return result.all()
 

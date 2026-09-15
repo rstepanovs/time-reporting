@@ -23,6 +23,7 @@ from time_reporting.modules.projects.contracts import (
     GetProjectBillingItemsByIds,
     GetProjectById,
     GetProjectsByIds,
+    ListManagedProjectsWithMembers,
     ListMemberProjectsWithBillingItems,
     ListProjectBillingItems,
     ListProjectMembers,
@@ -33,6 +34,8 @@ from time_reporting.modules.projects.contracts import (
     ProjectBillingItemDTO,
     ProjectCustomerArchivedError,
     ProjectCustomerNotFoundError,
+    ProjectManagerNotEligibleError,
+    ProjectManagerNotFoundError,
     ProjectMemberAlreadyExistsError,
     ProjectMemberNotFoundError,
     ProjectNameAlreadyExistsError,
@@ -260,6 +263,158 @@ async def test_list_projects_filters_by_customer_member_search_and_active_status
 
     assert by_customer.limit == 100
     assert by_customer.offset == 0
+
+
+# --- Project manager ---
+
+
+async def test_create_project_with_manager_embeds_manager(
+    bus: Bus, make_customer: CustomerFactory, make_user: UserFactory
+) -> None:
+    manager = await make_user(role=UserRole.PROJECT_MANAGER, name="Mark Manager")
+    customer = await make_customer()
+
+    project = await bus.execute(
+        CreateProject(customer_id=customer.id, name="Managed", manager_id=manager.id)
+    )
+
+    assert project.manager is not None
+    assert project.manager.id == manager.id
+    assert project.manager.name == "Mark Manager"
+
+
+async def test_create_project_manager_must_exist(bus: Bus, make_customer: CustomerFactory) -> None:
+    customer = await make_customer()
+
+    with pytest.raises(ProjectManagerNotFoundError):
+        await bus.execute(CreateProject(customer_id=customer.id, name="X", manager_id=uuid4()))
+
+
+async def test_create_project_rejects_worker_as_manager(
+    bus: Bus, make_customer: CustomerFactory, make_user: UserFactory
+) -> None:
+    worker = await make_user(role=UserRole.WORKER)
+    customer = await make_customer()
+
+    with pytest.raises(ProjectManagerNotEligibleError):
+        await bus.execute(CreateProject(customer_id=customer.id, name="X", manager_id=worker.id))
+
+
+async def test_create_project_rejects_inactive_manager(
+    bus: Bus, make_customer: CustomerFactory, make_user: UserFactory
+) -> None:
+    admin = await make_user(role=UserRole.ADMIN)
+    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    await bus.execute(UpdateUser(user_id=manager.id, acting_user_id=admin.id, is_active=False))
+    customer = await make_customer()
+
+    with pytest.raises(ProjectManagerNotEligibleError):
+        await bus.execute(CreateProject(customer_id=customer.id, name="X", manager_id=manager.id))
+
+
+async def test_update_project_assigns_and_clears_manager(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    project = await make_project()
+    manager = await make_user(role=UserRole.ADMIN)
+
+    assigned = await bus.execute(UpdateProject(project_id=project.id, manager_id=manager.id))
+    assert assigned.manager is not None
+    assert assigned.manager.id == manager.id
+
+    cleared = await bus.execute(
+        UpdateProject(project_id=project.id, clear_fields=frozenset({"manager_id"}))
+    )
+    assert cleared.manager is None
+
+
+async def test_update_project_rejects_ineligible_manager(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    project = await make_project()
+    worker = await make_user(role=UserRole.WORKER)
+
+    with pytest.raises(ProjectManagerNotEligibleError):
+        await bus.execute(UpdateProject(project_id=project.id, manager_id=worker.id))
+
+
+async def test_list_projects_filters_by_manager(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    managed = await make_project(manager_id=manager.id)
+    await make_project()
+
+    page = await bus.query(ListProjects(limit=100, offset=0, manager_id=manager.id))
+
+    assert {p.id for p in page.items} == {managed.id}
+
+
+async def test_remove_user_from_all_projects_clears_manager_assignment(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    project = await make_project(manager_id=manager.id)
+
+    await bus.execute(RemoveUserFromAllProjects(user_id=manager.id))
+
+    refreshed = await bus.query(GetProjectById(project_id=project.id))
+    assert refreshed is not None
+    assert refreshed.manager is None
+
+
+# --- Managed projects with members ---
+
+
+async def test_list_managed_projects_with_members_filters_by_manager(
+    bus: Bus,
+    make_customer: CustomerFactory,
+    make_project: ProjectFactory,
+    make_user: UserFactory,
+) -> None:
+    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    other_manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    customer_b = await make_customer(name="Beta")
+    customer_a = await make_customer(name="Alpha")
+    managed_a = await make_project(customer_id=customer_a.id, name="A", manager_id=manager.id)
+    managed_b = await make_project(customer_id=customer_b.id, name="B", manager_id=manager.id)
+    await make_project(manager_id=other_manager.id)
+    member = await make_user()
+    await bus.execute(AddProjectMember(project_id=managed_a.id, user_id=member.id))
+
+    entries = await bus.query(ListManagedProjectsWithMembers(manager_id=manager.id))
+
+    assert [entry.project.id for entry in entries] == [managed_a.id, managed_b.id]
+    assert {m.user_id for m in entries[0].members} == {member.id}
+    assert entries[1].members == ()
+
+
+async def test_list_managed_projects_with_members_none_means_all_active(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    managed = await make_project(manager_id=manager.id)
+    unmanaged = await make_project()
+    archived = await make_project()
+    await bus.execute(UpdateProject(project_id=archived.id, is_active=False))
+
+    entries = await bus.query(ListManagedProjectsWithMembers(manager_id=None))
+
+    ids = {entry.project.id for entry in entries}
+    assert {managed.id, unmanaged.id} <= ids
+    assert archived.id not in ids
+
+
+async def test_list_managed_projects_with_members_excludes_archived_projects(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    archived = await make_project(manager_id=manager.id)
+    await bus.execute(UpdateProject(project_id=archived.id, is_active=False))
+
+    entries = await bus.query(ListManagedProjectsWithMembers(manager_id=manager.id))
+
+    assert entries == ()
 
 
 async def test_add_member_rejects_unknown_or_inactive_user_or_archived_project(
