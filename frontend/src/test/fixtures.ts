@@ -2,7 +2,14 @@ import type { CurrentUser } from "@/auth/api";
 import type { CalendarDay, NonWorkingDay } from "@/calendar/api";
 import type { Customer } from "@/customers/api";
 import type { BillingItem, Project, ProjectMember } from "@/projects/api";
-import type { TimesheetOption, TimesheetRow, TimesheetWeek } from "@/timesheets/api";
+import type {
+  MonthCalendar,
+  MonthHours,
+  TimesheetOption,
+  TimesheetRow,
+  TimesheetWeek,
+  YearHours,
+} from "@/timesheets/api";
 
 export const testUser: CurrentUser = {
   id: "3f0c8a52-6a55-4f5e-9d0e-6a1c1f1f2b10",
@@ -161,6 +168,206 @@ export const testTimesheetWeek: TimesheetWeek = {
   can_edit: true,
   days: testCalendarDays,
   rows: [testTimesheetRow],
+};
+
+// A two-week slice of September 2026 (real months span up to 6 weeks; the dashboard doesn't
+// assume any particular length). Week of Sep 7 is fully booked; week of Sep 14 is the "current"
+// week (today is 2026-09-15): Sep 14 is fully booked, Sep 15 (today) and Sep 17-18 aren't yet,
+// and Sep 16 is the custom non-working day already used by testCalendarDays.
+export const testMonthCalendar: MonthCalendar = {
+  user: { id: testWorker.id, name: testWorker.name, email: testWorker.email },
+  year: 2026,
+  month: 9,
+  weeks: [
+    {
+      week_start: "2026-09-07",
+      iso_week: 37,
+      expected_hours: "40.00",
+      hours: "40.00",
+      days: [
+        {
+          calendar_day: { day: "2026-09-07", is_weekend: false, non_working_day: null },
+          in_month: true,
+          is_working_day: true,
+          expected_hours: "8.00",
+          hours: "8.00",
+        },
+        {
+          calendar_day: { day: "2026-09-08", is_weekend: false, non_working_day: null },
+          in_month: true,
+          is_working_day: true,
+          expected_hours: "8.00",
+          hours: "8.00",
+        },
+        {
+          calendar_day: { day: "2026-09-09", is_weekend: false, non_working_day: null },
+          in_month: true,
+          is_working_day: true,
+          expected_hours: "8.00",
+          hours: "8.00",
+        },
+        {
+          calendar_day: { day: "2026-09-10", is_weekend: false, non_working_day: null },
+          in_month: true,
+          is_working_day: true,
+          expected_hours: "8.00",
+          hours: "8.00",
+        },
+        {
+          calendar_day: { day: "2026-09-11", is_weekend: false, non_working_day: null },
+          in_month: true,
+          is_working_day: true,
+          expected_hours: "8.00",
+          hours: "8.00",
+        },
+        {
+          calendar_day: { day: "2026-09-12", is_weekend: true, non_working_day: null },
+          in_month: true,
+          is_working_day: false,
+          expected_hours: "0.00",
+          hours: "0.00",
+        },
+        {
+          calendar_day: { day: "2026-09-13", is_weekend: true, non_working_day: null },
+          in_month: true,
+          is_working_day: false,
+          expected_hours: "0.00",
+          hours: "0.00",
+        },
+      ],
+    },
+    {
+      week_start: TEST_WEEK_START,
+      iso_week: 38,
+      expected_hours: "32.00",
+      hours: "6.00",
+      days: [
+        {
+          calendar_day: { day: "2026-09-14", is_weekend: false, non_working_day: null },
+          in_month: true,
+          is_working_day: true,
+          expected_hours: "8.00",
+          hours: "6.00",
+        },
+        {
+          calendar_day: { day: "2026-09-15", is_weekend: false, non_working_day: null },
+          in_month: true,
+          is_working_day: true,
+          expected_hours: "8.00",
+          hours: "0.00",
+        },
+        {
+          calendar_day: { day: "2026-09-16", is_weekend: false, non_working_day: testNonWorkingDay },
+          in_month: true,
+          is_working_day: false,
+          expected_hours: "0.00",
+          hours: "0.00",
+        },
+        {
+          calendar_day: { day: "2026-09-17", is_weekend: false, non_working_day: null },
+          in_month: true,
+          is_working_day: true,
+          expected_hours: "8.00",
+          hours: "0.00",
+        },
+        {
+          calendar_day: { day: "2026-09-18", is_weekend: false, non_working_day: null },
+          in_month: true,
+          is_working_day: true,
+          expected_hours: "8.00",
+          hours: "0.00",
+        },
+        {
+          calendar_day: { day: "2026-09-19", is_weekend: true, non_working_day: null },
+          in_month: true,
+          is_working_day: false,
+          expected_hours: "0.00",
+          hours: "0.00",
+        },
+        {
+          calendar_day: { day: "2026-09-20", is_weekend: true, non_working_day: null },
+          in_month: true,
+          is_working_day: false,
+          expected_hours: "0.00",
+          hours: "0.00",
+        },
+      ],
+    },
+  ],
+  expected_hours: "72.00",
+  expected_hours_to_date: "56.00",
+  hours: "46.00",
+};
+
+export const testMonthHoursCurrent: MonthHours = {
+  year: 2026,
+  month: 9,
+  is_current: true,
+  working_days: 11,
+  expected_hours: "88.00",
+  expected_hours_to_date: "56.00",
+  totals: {
+    normal_hours: "46.00",
+    overtime_hours: "0.00",
+    travel_hours: "0.00",
+    other_hours: "0.00",
+    total_hours: "46.00",
+  },
+  projects: [
+    {
+      project: testTimesheetRow.project,
+      totals: {
+        normal_hours: "46.00",
+        overtime_hours: "0.00",
+        travel_hours: "0.00",
+        other_hours: "0.00",
+        total_hours: "46.00",
+      },
+    },
+  ],
+};
+
+export const testMonthHoursPast: MonthHours = {
+  year: 2026,
+  month: 8,
+  is_current: false,
+  working_days: 21,
+  expected_hours: "168.00",
+  expected_hours_to_date: "168.00",
+  totals: {
+    normal_hours: "160.00",
+    overtime_hours: "8.00",
+    travel_hours: "4.00",
+    other_hours: "0.00",
+    total_hours: "172.00",
+  },
+  projects: [
+    {
+      project: testTimesheetRow.project,
+      totals: {
+        normal_hours: "160.00",
+        overtime_hours: "8.00",
+        travel_hours: "4.00",
+        other_hours: "0.00",
+        total_hours: "172.00",
+      },
+    },
+  ],
+};
+
+export const testYearHours: YearHours = {
+  user: { id: testWorker.id, name: testWorker.name, email: testWorker.email },
+  year: 2026,
+  months: [testMonthHoursCurrent, testMonthHoursPast],
+  expected_hours: "256.00",
+  expected_hours_to_date: "224.00",
+  totals: {
+    normal_hours: "206.00",
+    overtime_hours: "8.00",
+    travel_hours: "4.00",
+    other_hours: "0.00",
+    total_hours: "218.00",
+  },
 };
 
 export const testTimesheetOption: TimesheetOption = {

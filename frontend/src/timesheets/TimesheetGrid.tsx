@@ -24,6 +24,7 @@ import {
   type TimeEntryChange,
   type TimesheetRow,
 } from "@/timesheets/api";
+import { dayKind, dayKindBackground } from "@/timesheets/dayKind";
 import { useSaveTimesheetWeek, useTimesheetWeek } from "@/timesheets/hooks";
 import { addWeeks, formatDayLabel } from "@/timesheets/week";
 
@@ -275,15 +276,8 @@ export function TimesheetGrid({ userId, weekStart, onDirtyChange }: Props) {
 }
 
 function DayHeader({ day }: { day: CalendarDay }) {
-  const kind = day.non_working_day?.kind ?? (day.is_weekend ? "weekend" : "workday");
-  const background =
-    kind === "weekend"
-      ? "var(--mantine-color-gray-light)"
-      : kind === "public_holiday"
-        ? "var(--mantine-color-orange-light)"
-        : kind === "bridge_day" || kind === "company_day_off"
-          ? "var(--mantine-color-yellow-light)"
-          : undefined;
+  const kind = dayKind(day);
+  const background = dayKindBackground(kind);
   const label = formatDayLabel(day.day);
   const th = (
     <Table.Th data-kind={kind} style={{ backgroundColor: background }}>
@@ -343,7 +337,7 @@ function RowView({
         </Group>
       </Table.Td>
       {days.map((day) => (
-        <Table.Td key={day.day} data-kind={day.non_working_day?.kind ?? (day.is_weekend ? "weekend" : "workday")}>
+        <Table.Td key={day.day} data-kind={dayKind(day)}>
           <Cell row={row} date={day.day} canEdit={canEdit} value={cellValue(row, day.day)} onChange={(patch) => setCell(row, day.day, patch)} />
         </Table.Td>
       ))}

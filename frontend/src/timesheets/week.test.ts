@@ -4,6 +4,8 @@ import {
   addDays,
   addWeeks,
   formatDayLabel,
+  formatHours,
+  formatMonthLabel,
   formatWeekLabel,
   isWeekend,
   startOfIsoWeek,
@@ -74,5 +76,27 @@ describe("formatWeekLabel", () => {
 
   it("shows both months when the week spans a month boundary", () => {
     expect(formatWeekLabel("2026-09-28")).toBe("28 Sep – 4 Oct 2026");
+  });
+});
+
+describe("formatMonthLabel", () => {
+  it("formats as full month name + year", () => {
+    expect(formatMonthLabel(2026, 9)).toBe("September 2026");
+    expect(formatMonthLabel(2026, 1)).toBe("January 2026");
+  });
+});
+
+describe("formatHours", () => {
+  it("drops a trailing .00", () => {
+    expect(formatHours("8.00")).toBe("8");
+    expect(formatHours("0.00")).toBe("0");
+  });
+
+  it("drops only a trailing zero, keeping the rest", () => {
+    expect(formatHours("8.50")).toBe("8.5");
+  });
+
+  it("keeps two decimal places when both are significant", () => {
+    expect(formatHours("8.25")).toBe("8.25");
   });
 });

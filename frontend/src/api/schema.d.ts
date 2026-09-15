@@ -462,6 +462,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/timesheets/calendar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Month Calendar */
+        get: operations["get_month_calendar_api_v1_timesheets_calendar_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/timesheets/years/{year}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Year Hours */
+        get: operations["get_year_hours_api_v1_timesheets_years__year__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/users/{user_id}/removal-impact": {
         parameters: {
             query?: never;
@@ -704,6 +738,18 @@ export interface components {
              */
             client_secret?: string | null;
         };
+        /** CalendarDayHoursResponse */
+        CalendarDayHoursResponse: {
+            calendar_day: components["schemas"]["CalendarDayResponse"];
+            /** In Month */
+            in_month: boolean;
+            /** Is Working Day */
+            is_working_day: boolean;
+            /** Expected Hours */
+            expected_hours: string;
+            /** Hours */
+            hours: string;
+        };
         /** CalendarDayResponse */
         CalendarDayResponse: {
             /**
@@ -714,6 +760,22 @@ export interface components {
             /** Is Weekend */
             is_weekend: boolean;
             non_working_day: components["schemas"]["NonWorkingDayResponse"] | null;
+        };
+        /** CalendarWeekHoursResponse */
+        CalendarWeekHoursResponse: {
+            /**
+             * Week Start
+             * Format: date
+             */
+            week_start: string;
+            /** Iso Week */
+            iso_week: number;
+            /** Days */
+            days: components["schemas"]["CalendarDayHoursResponse"][];
+            /** Expected Hours */
+            expected_hours: string;
+            /** Hours */
+            hours: string;
         };
         /** CustomerCreateRequest */
         CustomerCreateRequest: {
@@ -828,6 +890,19 @@ export interface components {
              */
             status: "ok";
         };
+        /** HoursTotalsResponse */
+        HoursTotalsResponse: {
+            /** Normal Hours */
+            normal_hours: string;
+            /** Overtime Hours */
+            overtime_hours: string;
+            /** Travel Hours */
+            travel_hours: string;
+            /** Other Hours */
+            other_hours: string;
+            /** Total Hours */
+            total_hours: string;
+        };
         /** ImportHolidaysRequest */
         ImportHolidaysRequest: {
             /** Year */
@@ -837,6 +912,40 @@ export interface components {
         ImportHolidaysResponse: {
             /** Added */
             added: number;
+        };
+        /** MonthCalendarResponse */
+        MonthCalendarResponse: {
+            user: components["schemas"]["TimesheetUserResponse"];
+            /** Year */
+            year: number;
+            /** Month */
+            month: number;
+            /** Weeks */
+            weeks: components["schemas"]["CalendarWeekHoursResponse"][];
+            /** Expected Hours */
+            expected_hours: string;
+            /** Expected Hours To Date */
+            expected_hours_to_date: string;
+            /** Hours */
+            hours: string;
+        };
+        /** MonthHoursResponse */
+        MonthHoursResponse: {
+            /** Year */
+            year: number;
+            /** Month */
+            month: number;
+            /** Is Current */
+            is_current: boolean;
+            /** Working Days */
+            working_days: number;
+            /** Expected Hours */
+            expected_hours: string;
+            /** Expected Hours To Date */
+            expected_hours_to_date: string;
+            totals: components["schemas"]["HoursTotalsResponse"];
+            /** Projects */
+            projects: components["schemas"]["ProjectHoursResponse"][];
         };
         /** NonWorkingDayCreateRequest */
         NonWorkingDayCreateRequest: {
@@ -954,6 +1063,11 @@ export interface components {
             is_active: boolean;
             /** Currency */
             currency: string;
+        };
+        /** ProjectHoursResponse */
+        ProjectHoursResponse: {
+            project: components["schemas"]["TimesheetProjectResponse"];
+            totals: components["schemas"]["HoursTotalsResponse"];
         };
         /** ProjectMemberAddRequest */
         ProjectMemberAddRequest: {
@@ -1332,6 +1446,19 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** YearHoursResponse */
+        YearHoursResponse: {
+            user: components["schemas"]["TimesheetUserResponse"];
+            /** Year */
+            year: number;
+            /** Months */
+            months: components["schemas"]["MonthHoursResponse"][];
+            /** Expected Hours */
+            expected_hours: string;
+            /** Expected Hours To Date */
+            expected_hours_to_date: string;
+            totals: components["schemas"]["HoursTotalsResponse"];
         };
     };
     responses: never;
@@ -2784,6 +2911,86 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TimesheetOptionResponse"][];
+                };
+            };
+        };
+    };
+    get_month_calendar_api_v1_timesheets_calendar_get: {
+        parameters: {
+            query?: {
+                year?: number | null;
+                month?: number | null;
+                user_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonthCalendarResponse"];
+                };
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_year_hours_api_v1_timesheets_years__year__get: {
+        parameters: {
+            query?: {
+                user_id?: string | null;
+            };
+            header?: never;
+            path: {
+                year: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["YearHoursResponse"];
+                };
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

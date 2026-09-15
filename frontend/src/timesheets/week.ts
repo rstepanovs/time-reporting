@@ -66,3 +66,17 @@ export function formatWeekLabel(weekStart: string): string {
   const startLabel = startMonth === endMonth ? `${start.getDate()}` : `${start.getDate()} ${startMonth}`;
   return `${startLabel} – ${end.getDate()} ${endMonth} ${year}`;
 }
+
+/** "September 2026". */
+export function formatMonthLabel(year: number, month: number): string {
+  return new Date(year, month - 1, 1).toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+/** A decimal-string quantity from the API, formatted to 2 places, e.g. "8.00" -> "8". Trailing
+ * zeros (and a trailing decimal point) are dropped so whole hours don't carry ".00" everywhere. */
+export function formatHours(value: string): string {
+  return Number(value).toFixed(2).replace(/\.?0+$/, "");
+}
