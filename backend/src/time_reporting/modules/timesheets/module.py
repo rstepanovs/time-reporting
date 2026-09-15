@@ -6,6 +6,7 @@ from time_reporting.modules.timesheets.contracts import (
     CountTimeEntries,
     GetMonthCalendar,
     GetMonthTimeSummary,
+    GetTeamMonthOverview,
     GetTimesheetWeek,
     GetWeeklyHours,
     GetYearHours,
@@ -20,6 +21,7 @@ from time_reporting.modules.timesheets.handlers import (
     CountTimeEntriesHandler,
     GetMonthCalendarHandler,
     GetMonthTimeSummaryHandler,
+    GetTeamMonthOverviewHandler,
     GetTimesheetWeekHandler,
     GetWeeklyHoursHandler,
     GetYearHoursHandler,
@@ -39,6 +41,7 @@ def register(registry: HandlerRegistry) -> None:
     registry.query(GetYearHours, GetYearHoursHandler)
     registry.query(GetMonthTimeSummary, GetMonthTimeSummaryHandler)
     registry.query(GetWeeklyHours, GetWeeklyHoursHandler)
+    registry.query(GetTeamMonthOverview, GetTeamMonthOverviewHandler)
     registry.query(ListSubmittedTimesheetWeeks, ListSubmittedTimesheetWeeksHandler)
 
     registry.command(SaveTimesheetWeek, SaveTimesheetWeekHandler)

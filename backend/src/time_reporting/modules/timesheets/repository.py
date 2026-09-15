@@ -56,6 +56,43 @@ class TimeEntryRepository:
         )
         return result.all()
 
+    async def list_for_projects_in_range(
+        self, project_ids: frozenset[UUID], date_from: date, date_to: date
+    ) -> Sequence[TimeEntry]:
+        """Every entry (any user, any unit) on any of ``project_ids`` in the date range, for the
+        manager team overview and billing-period readiness."""
+        if not project_ids:
+            return ()
+        result = await self._session.scalars(
+            select(TimeEntry)
+            .where(
+                TimeEntry.project_id.in_(project_ids),
+                TimeEntry.entry_date >= date_from,
+                TimeEntry.entry_date <= date_to,
+            )
+            .order_by(TimeEntry.entry_date)
+        )
+        return result.all()
+
+    async def sum_hours_by_user_in_range(
+        self, user_ids: frozenset[UUID], date_from: date, date_to: date
+    ) -> dict[UUID, Decimal]:
+        """Each user's total ``hour``-unit quantity (any project) in the date range, for the team
+        overview's per-member month total."""
+        if not user_ids:
+            return {}
+        result = await self._session.execute(
+            select(TimeEntry.user_id, func.sum(TimeEntry.quantity))
+            .where(
+                TimeEntry.user_id.in_(user_ids),
+                TimeEntry.entry_date >= date_from,
+                TimeEntry.entry_date <= date_to,
+                TimeEntry.unit == BillingUnit.HOUR,
+            )
+            .group_by(TimeEntry.user_id)
+        )
+        return {user_id: total for user_id, total in result.all()}
+
     async def sum_quantity_by_date(
         self, user_id: UUID, dates: frozenset[date], unit: BillingUnit
     ) -> dict[date, Decimal]:
@@ -180,6 +217,22 @@ class TimesheetWeekRepository:
             select(TimesheetWeek)
             .where(TimesheetWeek.status == status)
             .order_by(TimesheetWeek.submitted_at)
+        )
+        return result.all()
+
+    async def list_for_users_in_range(
+        self, user_ids: frozenset[UUID], date_from: date, date_to: date
+    ) -> Sequence[TimesheetWeek]:
+        """Every ``TimesheetWeek`` row for ``user_ids`` whose ``week_start`` falls in the range,
+        for the manager team overview's status grid. A (user, week) with no row is ``draft``."""
+        if not user_ids:
+            return ()
+        result = await self._session.scalars(
+            select(TimesheetWeek).where(
+                TimesheetWeek.user_id.in_(user_ids),
+                TimesheetWeek.week_start >= date_from,
+                TimesheetWeek.week_start <= date_to,
+            )
         )
         return result.all()
 

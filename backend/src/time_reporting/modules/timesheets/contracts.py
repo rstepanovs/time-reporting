@@ -244,6 +244,119 @@ class TimesheetWeekSummaryDTO:
     total_hours: Decimal
 
 
+class BillingPeriodStatus(StrEnum):
+    """A project's month, for the manager's billing handoff. No ``ProjectBillingPeriod`` row yet
+    (added alongside ``SendProjectMonthToBilling``) means ``NOT_READY``/``READY``; ``SENT`` is set
+    once one exists."""
+
+    NOT_READY = "not_ready"
+    READY = "ready"
+    SENT = "sent"
+
+
+class TeamMemberWarning(StrEnum):
+    """A non-blocking flag on a team member's month, for the manager to look into — not
+    necessarily a problem (could be vacation)."""
+
+    NO_ENTRIES = "no_entries"
+    UNDER_EXPECTED_HOURS = "under_expected_hours"
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class TeamMemberWeekDTO:
+    """One ISO week of one team member's month, for the team overview's week-by-week grid.
+
+    ``project_hours`` is this project's ``hour``-unit total for the week, clipped to the days that
+    fall inside the overview's month (so a week straddling two months only counts one month's
+    days); ``total_hours`` is the member's ``hour``-unit total across *all* projects for the whole
+    week (not clipped), matching what the timesheet week page itself would show.
+    """
+
+    week_start: date
+    iso_year: int
+    iso_week: int
+    status: TimesheetWeekStatus
+    project_hours: Decimal
+    total_hours: Decimal
+    expected_hours: Decimal
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class TeamMemberDTO:
+    """One project's member, for the team overview. ``is_member`` is ``False`` for someone who
+    booked time on the project this month but was since removed from it — still shown (read-only
+    history), just not counted as current staff."""
+
+    user: UserDTO
+    is_member: bool
+    # This project's hour total for the month (sum of ``weeks[*].project_hours``).
+    project_hours: Decimal
+    # This member's hour total across all projects for the calendar month (not clipped to weeks).
+    total_hours_in_month: Decimal
+    expected_hours_to_date: Decimal
+    weeks: tuple[TeamMemberWeekDTO, ...]
+    warning: TeamMemberWarning | None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ProjectBillingPeriodDTO:
+    """One project's calendar month, and whether it is ready to be sent to billing.
+
+    ``weeks_in_scope`` is the number of distinct (user, ISO week) pairs with at least one entry on
+    this project dated inside the month; ``blocking_weeks`` is how many of those aren't
+    ``approved`` yet. ``READY`` requires at least one week in scope and none blocking.
+    """
+
+    project_id: UUID
+    period_start: date
+    period_end: date
+    status: BillingPeriodStatus
+    sent_at: datetime | None
+    sent_by: UserDTO | None
+    blocking_weeks: int
+    weeks_in_scope: int
+    hours: HoursTotalsDTO
+    per_diem_days: Decimal
+    expenses: tuple[CurrencyAmountDTO, ...]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class TeamProjectDTO:
+    """One managed project's month, for the team overview: its members and billing readiness."""
+
+    project: ProjectDTO
+    members: tuple[TeamMemberDTO, ...]
+    billing: ProjectBillingPeriodDTO
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class TeamStatusCountsDTO:
+    """How many distinct (member, ISO week) pairs across every managed project's current members
+    are in each status, for the dashboard's "Timesheets" card. A pair with no ``TimesheetWeek`` row
+    counts as ``not_submitted``, matching ``draft``."""
+
+    awaiting_approval: int
+    returned: int
+    not_submitted: int
+    approved: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class TeamMonthOverviewDTO:
+    """A manager's team for one calendar month: every project they manage (or, for
+    ``manager_id=None``, every active project), each with its members and billing status.
+
+    ``weeks`` are the ISO week start dates spanning the month (its first/last week may spill into
+    neighboring months), shared as the grid's columns across all projects.
+    """
+
+    year: int
+    month: int
+    weeks: tuple[date, ...]
+    projects: tuple[TeamProjectDTO, ...]
+    counts: TeamStatusCountsDTO
+
+
 # --- Queries ---
 
 
@@ -324,6 +437,18 @@ class GetWeeklyHours(Query[WeeklyHoursDTO]):
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ListSubmittedTimesheetWeeks(Query[tuple[TimesheetWeekSummaryDTO, ...]]):
     """Weeks awaiting review, oldest submission first, for a manager's approvals list."""
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetTeamMonthOverview(Query[TeamMonthOverviewDTO]):
+    """A manager's team overview for ``year``/``month``. ``manager_id=None`` covers every active
+    project (an admin's "all" view) rather than one manager's; ``today`` is supplied by the caller
+    (the router fills in the real date), like the worker dashboard's queries."""
+
+    manager_id: UUID | None
+    year: int
+    month: int
+    today: date
 
 
 # --- Commands ---

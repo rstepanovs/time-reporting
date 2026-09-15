@@ -15,6 +15,7 @@ from time_reporting.modules.timesheets.contracts import (
     CountTimeEntries,
     GetMonthCalendar,
     GetMonthTimeSummary,
+    GetTeamMonthOverview,
     GetTimesheetWeek,
     GetWeeklyHours,
     GetYearHours,
@@ -25,6 +26,7 @@ from time_reporting.modules.timesheets.contracts import (
     ReturnTimesheetWeek,
     SaveTimesheetWeek,
     SubmitTimesheetWeek,
+    TeamMonthOverviewDTO,
     TimesheetWeekDTO,
     TimesheetWeekStatus,
     TimesheetWeekSummaryDTO,
@@ -37,6 +39,7 @@ from time_reporting.modules.timesheets.repository import (
 )
 from time_reporting.modules.timesheets.service import TimesheetService
 from time_reporting.modules.timesheets.summary import TimesheetSummaryService
+from time_reporting.modules.timesheets.team import TeamOverviewService
 from time_reporting.modules.users.contracts import GetUsersByIds
 
 
@@ -140,6 +143,14 @@ class ReturnTimesheetWeekHandler:
 
     async def handle(self, command: ReturnTimesheetWeek) -> TimesheetWeekDTO:
         return await self._service.return_week(command)
+
+
+class GetTeamMonthOverviewHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._service = TeamOverviewService(bus)
+
+    async def handle(self, query: GetTeamMonthOverview) -> TeamMonthOverviewDTO:
+        return await self._service.month_overview(query)
 
 
 class ListSubmittedTimesheetWeeksHandler:
