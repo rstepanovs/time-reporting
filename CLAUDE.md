@@ -9,6 +9,12 @@ client (`frontend/`). Infrastructure, a health-check endpoint, user accounts wit
 customers and their projects, a shared non-working-day calendar, and weekly timesheets all exist;
 the remaining domain model (invoices) does not yet.
 
+Detailed notes live next to the code and load only when files in that directory are read:
+`backend/src/time_reporting/modules/<module>/CLAUDE.md` for each backend module and
+`frontend/src/<area>/CLAUDE.md` for each frontend area (`pages/CLAUDE.md` maps each page to the area
+that documents it). Repeatable procedures are project skills in `.claude/skills/` (committing,
+opening a PR, seeding demo data).
+
 ## Commands
 
 Dependencies are not installed yet in a fresh checkout — run `uv sync` and (in `frontend/`) `npm install`
@@ -27,10 +33,9 @@ uv run ruff format .                                             # format
 uv run mypy                                                      # type check (strict)
 uv run alembic -c backend/alembic.ini upgrade head               # apply migrations
 uv run alembic -c backend/alembic.ini revision --autogenerate -m "describe change"
-uv run time-reporting create-admin --email you@example.com --name "You"   # first admin account
-uv run time-reporting seed-demo                                  # demo users (password demo-password) + customers
-uv run time-reporting import-holidays --year 2026                # add a year's public holidays to the calendar
 ```
+
+Seeding (`create-admin`, `seed-demo`, `import-holidays`) is covered by the `seed-test-data` skill.
 
 ### Frontend (run from `frontend/`)
 
@@ -76,24 +81,13 @@ head`) → `backend` → `frontend` (nginx, proxies `/api/` to `backend`).
 - **`migrations/env.py`** — async Alembic environment; reads the DB URL from `Settings`, not from
   `alembic.ini`, so it always agrees with the running app.
 - **`cli.py`** — the `time-reporting` console script (`[project.scripts]` in `backend/pyproject.toml`);
-  `create-admin` and `seed-demo`, each run through a `Bus` built the same way as in a request.
-- **`seed.py`** — demo data for local development (one user per role, sharing the password
-  `demo-password`, active and archived customers, and a few projects with members per customer, the
-  demo project manager set as `manager_id` on every active one). Idempotent: existing emails/
-  customer or project names are skipped. Projects are created for each customer before it is
-  archived (creating a project requires an active customer); tests seed uniquely renamed copies,
-  because the test database doubles as the dev database. Also imports the current and next year's
-  public holidays plus one demo bridge day, and books normal working hours for the demo worker and
-  project manager on every working day of the last 3 months (plus a little overtime/travel time
-  each month), so the worker dashboard's month calendar and year-hours table both have data — each
-  skipped once already present, so re-running stays idempotent too. Once a demo worker's (not the
-  project manager's) weeks are freshly booked, every week but the most recent is submitted then
-  approved (reviewer: a project manager among the given users, an admin if there's none) and the
-  most recent is left submitted, so a fresh checkout's `/approvals` page has something waiting —
-  and, since that leaves the current month's last week unapproved while earlier months are fully
-  approved, the manager dashboard's billing card naturally shows both a not-ready (current month)
-  and a ready (an earlier month) project without any extra seeding; also guarded by the same
-  "already has entries" idempotency check.
+  `create-admin`, `seed-demo` and `import-holidays`, each run through a `Bus` built the same way as in
+  a request.
+- **`seed.py`** — idempotent demo data for local development; tests seed uniquely renamed copies,
+  because the test database doubles as the dev database. Details: the `seed-test-data` skill.
+- **Shared kernel** (not owned by a module): `core/passwords.py` (Argon2id via `pwdlib`, hashing off
+  the event loop in a thread), `db/queries.py` (`escape_like` — a literal, non-wildcard `ILIKE`
+  pattern from user input) and `db/mixins.py:TimestampMixin` (`created_at`/`updated_at`).
 
 ### Feature modules (`modules/`) and the CQRS bus
 
@@ -102,7 +96,9 @@ Domain functionality lives in self-contained modules under `modules/<name>/`, ea
 and `router.py`. **A module may import from another module only its `contracts.py`** (plus
 `auth.dependencies` for the HTTP route guards every router needs) — never another module's `models`,
 `repository` or `service` directly. `tests/test_module_boundaries.py` enforces this with an AST check
-over every file in `modules/`.
+over every file in `modules/`. Cross-module display data is fetched via batch queries
+(`GetCustomersByIds`, `GetUsersByIds`, ...) rather than joining across modules; a model references
+another module's table by table name only.
 
 Modules talk to each other exclusively through the in-process CQRS bus in `core/cqrs.py`:
 - `Command[R]` / `Query[R]` are typed messages; concrete ones live in each module's `contracts.py`
@@ -116,207 +112,18 @@ Modules talk to each other exclusively through the in-process CQRS bus in `core/
   repositories only `flush()`. Query handlers must not call `execute()`.
 - `api/deps.py:BusDep` builds a request-scoped `Bus`; `cli.py` builds one per invocation the same way.
 
-The **users** module (`modules/users/`) owns the `User` entity, roles (`UserRole`: `admin`,
-`project_manager`, `worker`) and account management (admin CRUD, `/users/me`, password change/reset).
-The **auth** module (`modules/auth/`) owns JWT issuing/validation and login, and reaches user data only
-through `users.contracts` messages (`GetUserCredentialsByEmail`, `RecordSuccessfulLogin`, ...) — it never
-imports `users.models` or `users.repository`. `auth/dependencies.py` (`CurrentUserDep`, `require_roles`,
-`AdminDep`, `ManagerDep`) is the one exception to the "only `contracts.py`" rule: every protected
-router depends on it directly. Role and `is_active` are re-read from the database on every request (via
-the token's `sub`), not trusted from the token, so deactivation/role/password changes take effect
-immediately — enforced by comparing the token's `ver` claim against the user's current
-`token_version`, which password changes/resets increment.
+Modules (each documented in its own `CLAUDE.md`):
+- **`users`** — `User`, roles (`admin`/`project_manager`/`worker`), account management, user directory.
+- **`auth`** — JWT issuing/validation, login/session cookie, route guards (`auth/dependencies.py`).
+- **`customers`** — `Customer`: legal details, billing address/period, currency, payment terms.
+- **`projects`** — `Project`, `ProjectMember`, `ProjectBillingItem`, a project's `manager_id`.
+- **`work_calendar`** — `NonWorkingDay`: the company-wide holiday calendar.
+- **`timesheets`** — `TimeEntry`, the weekly submit/approve workflow, dashboards, team overview,
+  billing handoff and locking.
+- **`admin`** — no tables; orchestrates archiving/permanent deletion of users, customers, projects.
 
-The **customers** module (`modules/customers/`) owns the `Customer` entity: name, legal details, a
-structured billing address (ISO 3166-1 alpha-2 country), a billing period (`interval_count` ×
-`BillingIntervalUnit`, counted from `anchor_date`), currency (ISO 4217) and payment terms. Any
-authenticated user can read them; writes require `ManagerDep` (`admin` or `project_manager`).
-`UpdateCustomer` treats `None` as "unchanged"; optional text fields are cleared by naming them in
-`clear_fields`, which the router fills from fields sent as JSON `null`. `ListCustomers` filters by a
-`search` substring against name or legal name. Deleting is archive-by-default, permanent-on-request
-— see the **admin** module below; `DeleteCustomer` (permanent) fails with `CustomerInUseError` while
-the customer still has any project.
-
-The **projects** module (`modules/projects/`) owns the `Project` entity (belongs to one `Customer`,
-`customer_id` immutable after creation) and `ProjectMember`, a plain user↔project link with no
-per-project role. `Project.normal_working_hours` (default 8, `0 < x ≤ 24`) is how many hours the
-timesheets module's weekly grid prefills per working day when it seeds a fresh draft week (see
-below). `Project.manager_id` is the one responsible manager (nullable; an active `admin` or
-`project_manager`, checked on set — `ProjectManagerNotFoundError` / `ProjectManagerNotEligibleError`
-otherwise), settable on `CreateProject`/`UpdateProject` (`null`/naming it in `clear_fields` clears
-it) and responsible for that project's timesheets team overview and billing handoff (see the
-**timesheets** module below); `RemoveUserFromAllProjects` also clears it wherever the removed user
-was the manager. Project names are unique per customer, not globally. Creating a project, or
-reactivating one, requires its customer to currently be active, but archiving a customer does not
-cascade to its projects. Only active users can be added as members, and only to an active project; a
-member later deactivated stays listed (with `is_active=false`) rather than disappearing. Access
-follows customers: any authenticated user can read projects and members, `ManagerDep` is required to
-create/update projects and to add/remove members. `ListProjects` filters by `customer_id`,
-`member_id`, `manager_id` and a `search` substring against the name. Cross-module display data (a
-project's customer name, a member's name and email) is fetched via batch queries —
-`GetCustomersByIds` / `GetUsersByIds` in the respective modules' `contracts.py` — rather than joining
-across modules; `Project`/`ProjectMember` reference `customers.id` / `users.id` by table name only,
-never by importing those modules' `models`. `DeleteProject` (permanent) cascades to its members (FK
-`ON DELETE CASCADE`). `GetProjectsByIds` / `GetProjectBillingItemsByIds` (batch, like the customer/user
-ones above), `ListMemberProjectsWithBillingItems` (a user's active projects with their active
-billing items, one round trip) and `ListManagedProjectsWithMembers` (active projects — one manager's,
-or every one when `manager_id=None` — each with its members, one round trip) exist for the
-**timesheets** module below to consume without joining into these tables directly.
-
-The projects module also owns `ProjectBillingItem`: the positions a project's invoices will be made
-of (normal/overtime/travel hours, per diems, purchasing/other expenses), each with an immutable
-`unit` (`hour`, `day` or `amount`) and, depending on that unit, a `unit_rate` or a `markup_percent`
-in the customer's currency. Creating a project creates its six defaults (`DEFAULT_BILLING_ITEMS`,
-unpriced); further items are added directly to one project (there is no catalog shared across
-projects). Access mirrors projects: any authenticated user reads them, `ManagerDep` adds/edits/
-archives/restores, and permanently deleting one — blocked by a foreign key once time entries
-reference it, reported as `BillingItemInUseError` — is admin only, like every other permanent
-delete. `DeleteProject` cascades to its billing items as well as its members.
-
-The **users** module also exposes `GET /users/directory` (`ManagerDep`): a minimal, active-only,
-search-filtered user list for pickers (e.g. adding a project member or, via a repeated `role` query
-param backed by `ListUsers.roles`, a project's manager — only admins/project managers), since
-`GET /users` itself is admin-only. Both `users.ListUsers` and `customers.ListCustomers`-style listing
-now support this through repository-level search helpers; `db/queries.py:escape_like` is the shared
-kernel helper for building a literal (non-wildcard) `ILIKE` pattern from user input, reused by both
-modules.
-`DeleteUser` (permanent) rejects deleting yourself and fails with `UserInUseError` while the user is
-still a project member; `RemoveUserFromAllProjects` clears its memberships first (see below).
-
-The **work_calendar** module (`modules/work_calendar/`) owns `NonWorkingDay`: one company-wide
-calendar of public holidays, bridge days and company days off (`NonWorkingDayKind`), each on a unique
-date. Weekends are computed, not stored. `GetCalendarDays(date_from, date_to)` (capped at 366 days)
-returns every day in the range flagged with `is_weekend` and its `NonWorkingDayDTO` if any — the one
-query the timesheets module and its UI need to render a week. `ImportPublicHolidays(year)` adds a
-year's holidays from the `holidays` PyPI library for the country (and optional subdivision) in
-`Settings.holiday_country`/`holiday_subdivision`, skipping dates already present (manually added or
-previously imported) so it's safe to re-run; an unsupported country/subdivision raises
-`HolidayCountryNotSupportedError`. Any authenticated user reads the calendar; only admins add, edit
-(`day`/`name`; `kind` is immutable), delete or import. Also reachable via the
-`time-reporting import-holidays --year` CLI command.
-
-The **timesheets** module (`modules/timesheets/`) owns `TimeEntry`: at most one row per (user,
-billing item, date), holding a `quantity` in the billing item's `unit` (hours, days or a money
-amount) and an optional note. `project_id` and `unit` are denormalized onto the row from the billing
-item at write time (never changed afterwards) so this module's own queries — summing a user's hours
-for a day, filtering by project — never join into the projects module's tables; both are guarded by
-`ON DELETE RESTRICT`, so a project, billing item or user with time entries can't be permanently
-deleted. Each row can also carry a `TimesheetRowComment` — a per (user, week, billing item) note,
-separate from each `TimeEntry.note` — so `GetTimesheetWeek`'s rows are keyed off the union of
-billing items with entries *or* a comment (a comment-only row is still listed).
-`GetTimesheetWeek(user_id, week_start, viewer_id)` reads a Monday-to-Sunday week (raises
-`WeekStartNotMondayError` otherwise): its rows carry `is_open` (from `projects.contracts`'
-`ListMemberProjectsWithBillingItems` — still a member, project and billing item both active) so a
-week keeps showing entries booked before a project was archived or the user removed, but read-only.
-The week also has a `status` (`TimesheetWeekStatus`: `draft`/`submitted`/`approved`/`returned`,
-backed by a `TimesheetWeek` row keyed `(user_id, week_start)` — no row means `draft`, the status is
-never persisted as `draft`); `can_edit`/`can_submit` are `viewer_id == user_id` and the week is
-`draft`/`returned`, while `can_review` is the viewer being an admin or project manager, the week
-being `submitted`/`approved`, and not a project manager reviewing their own week (an admin can).
-None of these three are enforced here — only computed for the caller to render around — the router
-still owns authorization. `SaveTimesheetWeek` applies a batch of cell changes (`quantity=None`
-deletes a cell) and `row_comments` changes (`comment=None`/blank deletes one) as one command: raises
-`TimesheetWeekLockedError` if the week is `submitted`/`approved`, else validates the week/dates/no-
-duplicate-cells first, then that every targeted row (whether a cell or a comment) is open
-(`TimesheetRowClosedError`, or `TimesheetBillingItemNotFoundError` if the item doesn't exist at all)
-and each quantity is in range for its unit, applies them, and only then re-checks that the user's
-total `hour`-unit quantity per day is still ≤ 24 (`DailyHoursExceededError`) — checked after applying
-the batch specifically so moving hours between two rows in one save works even though an
-intermediate per-change state would not. Deleting a whole row from the UI is expressed as a save
-that nulls every one of its cells and its comment — there's no separate "delete row" message.
-`SubmitTimesheetWeek` (draft/returned → submitted, owner only) and `ApproveTimesheetWeek` /
-`ReturnTimesheetWeek` (submitted → approved, or submitted/approved → `returned` with a required
-`comment`, admin/project-manager only) drive the rest of the workflow, each raising
-`InvalidWeekStatusTransitionError` outside its allowed source statuses and `SelfReviewError` for a
-project manager reviewing their own week; `ListSubmittedTimesheetWeeks` (oldest submission first,
-with each week's total `hour`-unit quantity via `TimeEntryRepository.sum_hours_by_user_week`) backs
-the frontend's approvals page. Any authenticated user reads and writes their own week;
-`CountTimeEntries` (filterable by user/project/billing item) backs the admin module's
-removal-impact reporting below. `GetMonthCalendar(user_id,
-year, month, today)` and `GetYearHours(user_id, year, today)` back the worker dashboard: the former
-renders a month as full ISO weeks with expected-vs-booked `hour`-unit totals per day/week (expected
-hours = working days, from `GetCalendarDays`, times `Settings.daily_working_hours`); the latter sums
-a year's `hour`-unit entries by month, split by billing item preset (`normal_hours`/`overtime_hours`/
-`travel_hours`, any other preset or a custom item as `other_hours`) with a per-project breakdown —
-`day`/`amount`-unit entries (per diems, expenses) aren't part of either, the dashboard is hours-only.
-`today` is a field of both queries (the router fills in the real date) so "expected to date" and
-"which month is current" stay deterministic in tests. `GetMonthTimeSummary(user_id, year, month,
-today)` and `GetWeeklyHours(user_id, weeks, today)` back the dashboard's widget cards: the former is
-one month's hours (as `HoursTotalsDTO`) plus the benefits `HoursTotalsDTO` leaves out —
-`day`-unit entries as `per_diem_days`, `amount`-unit entries summed per customer currency (never
-combined across currencies) as `expenses`; the latter is `weeks` ISO weeks ending with `today`'s
-week (oldest first, capped at `MAX_WEEKLY_HOURS_WEEKS` = 26, `WeekRangeOutOfBoundsError` outside
-that) with a per-project hour breakdown over the whole range for the accompanying table. All four
-queries follow the week endpoint's view rule (own data, or another user's for admin/project
-manager) via the HTTP layer's `_resolve_target_user`.
-
-`GetTeamMonthOverview(manager_id, year, month, today)` (`team.py`, a separate
-`TeamOverviewService` reusing `summary.py`'s pure helpers) backs a manager's team dashboard cards
-and the `/team` page: for every project `manager_id` manages (`manager_id=None` covers every
-active project, an admin's "all" view, via `projects.ListManagedProjectsWithMembers`), its current
-members plus anyone else who booked time on it this month but was since removed
-(`TeamMemberDTO.is_member=False`, still shown, read-only history); each member's per-ISO-week
-status/hours (`TeamMemberWeekDTO` — a straddling week's `project_hours` are clipped to the query
-month's days, `total_hours` are not, matching what that week's own page would show) plus a
-non-blocking `warning` (`no_entries` / `under_expected_hours`, only for current members); a
-dashboard-card status tally (`TeamStatusCountsDTO`: awaiting_approval/returned/not_submitted/
-approved, one count per distinct current-member × in-scope-week pair); and each project's billing
-readiness (`ProjectBillingPeriodDTO`). `ListSubmittedTimesheetWeeks` also takes an optional
-`manager_id` (resolved the same way) for the approvals list's "my projects" scope.
-
-A project's billing readiness for a calendar month is computed by `billing_readiness()` (`team.py`,
-a pure function shared with the send command below so the rule lives once): its **scope** is every
-(user, ISO week) with at least one entry on the project dated inside the month; it is **ready**
-when that scope is non-empty and every week in it is `approved` — **not ready** otherwise (no
-entries yet, or some week still needs approval/re-approval). Sending is a stub — invoicing doesn't
-exist yet — `SendProjectMonthToBilling(project_id, year, month, sent_by_id)` just inserts a
-`ProjectBillingPeriod` row (`project_id`, `period_start`/`period_end` = the calendar month,
-`sent_at`, `sent_by_id`; unique per `(project_id, period_start)`) once ready, raising
-`BillingPeriodNotReadyError` (carries `blocking_weeks`) or `BillingPeriodAlreadySentError`
-otherwise; allowed on any day, not only after the month ends, since a project's work can finish
-early. The sender must be the project's `manager_id` or an admin (`NotProjectManagerError`
-otherwise); `ReopenProjectBillingPeriod(project_id, period_start)` (admin only) deletes the row,
-unlocking it. Once sent, a period **locks** its dates against further change: `SaveTimesheetWeek`
-rejects a cell change dated inside a sent period, or any row-comment change on a billing item whose
-project has any sent period overlapping the week (`BillingPeriodLockedError`), and
-`ReturnTimesheetWeek` rejects returning a week that has entries on a project with a sent period
-overlapping it (a return would re-open already-billed hours). Because a week must already be fully
-`approved` for its billing period to become ready, and an approved week is *itself* locked for
-editing regardless of billing (`TimesheetWeekLockedError`), the billing lock in practice only bites
-a still-`draft`/`returned` week whose dates fall in an already-sent month, or a `return` attempt on
-an approved one — a week straddling two months has its non-sent days end up locked too, until an
-admin reopens the sent month, an accepted trade-off of week-level (not per-date) approval.
-`GetTimesheetWeek`'s `TimesheetRowDTO.locked_dates` reports which of a row's days fall in a sent
-period (regardless of `is_open`), and folds into `can_review` (false once any row is locked, so a
-blocked `return` isn't offered) so the HTTP layer needs no separate lock query.
-
-The **admin** module (`modules/admin/`) owns no tables — it orchestrates archiving or permanently
-deleting a user, customer or project by calling the owning module's commands, reached only through
-`users.contracts` / `customers.contracts` / `projects.contracts`. `RemoveUser` / `RemoveCustomer` /
-`RemoveProject` (`AdminDep` only, under `/admin`) default to archiving (the same
-`UpdateUser`/`UpdateCustomer`/`UpdateProject` a manager already uses) and, with `permanent=True`,
-permanently delete once nothing blocks it: a customer with any project, or a user deleting
-themselves, raise `RemovalBlockedError` / `SelfRemovalError` (409 / 400) without changing anything;
-deleting a user first removes its project memberships (`RemoveUserFromAllProjects`) so the
-`ON DELETE RESTRICT` foreign key doesn't get in the way, and deleting a project cascades to its
-members. `GetUserRemovalImpact` / `GetCustomerRemovalImpact` / `GetProjectRemovalImpact` report what
-a permanent delete would affect (`blockers`, `effects`) before the user confirms; they're built only
-from each module's own contract queries (`ListProjects`, `ListProjectMembers`,
-`ListProjectBillingItems`, `timesheets.contracts.CountTimeEntries`), never new cross-module queries.
-A project's impact always lists a `project_billing_items` effect, since every project has at least
-its six defaults. A user or project with any time entries gets a `time_entries` blocker
-(`RemovalBlockerKind`); deleting either maps the resulting FK violation to `UserInUseError` /
-`ProjectInUseError` the same way an existing membership or project already did. A user managing any
-projects gets a `managed_projects` effect (`RemovalEffectKind`); deleting them clears those
-projects' `manager_id` the same way `RemoveUserFromAllProjects` clears memberships. A
-same-outer-command failure (e.g. the delete itself fails after memberships were already removed)
-rolls back the whole `RemoveUser` command, per the bus's transaction rule.
-Archiving stays reachable directly through the owning module's existing `PATCH` endpoint too
-(`ManagerDep`); only the permanent-delete path is admin-only.
-
-`core/passwords.py` (Argon2id via `pwdlib`, hashing off the event loop in a thread), `db/queries.py`
-(`escape_like`) and `db/mixins.py:TimestampMixin` (`created_at`/`updated_at`) are shared kernel, not
-owned by a module.
+Permanently deleting any entity is admin-only and goes through the `admin` module; archiving uses the
+owning module's `PATCH` endpoint (`ManagerDep`).
 
 ### Frontend (`frontend/src/`)
 
@@ -326,175 +133,32 @@ owned by a module.
   `/api/v1` prefix. A middleware sends the `X-Requested-With` CSRF header on every request and, on any
   401, marks the app signed out (sets the `currentUserQueryKey` query data to `null`).
 - **`api/queryClient.ts`** — shared TanStack Query `QueryClient`.
-- **`auth/`** — the web session: `api.ts` (current user, sign in/out, password change, typed errors),
-  `hooks.ts` (`useCurrentUser`, `useAuthenticatedUser`, `useSignIn`, `useSignOut`, `useChangePassword`)
-  and `RequireAuth.tsx` (route guard redirecting to `/login` with the page to return to). Signing in or
-  out drops every cached query, so no data leaks between users; explicit sign-out and password change
-  navigate to `/login` with `flushSync`, so the next sign-in does not return to the page left behind.
-- **`customers/`** / **`users/`** — `api.ts` (typed calls for the endpoints each module needs, plus
-  their own conflict/rule/not-found error classes — `CustomerConflictError`/`UserEmailConflictError`
-  (409), `UserRuleError` (400), `CustomerNotFoundError`/`UserNotFoundError` (404)) and `hooks.ts`
-  (`customerKeys`/`userKeys` + list/detail queries and create/update mutations, e.g. `useCustomers`,
-  `useCreateCustomer`, `useUpdateCustomer`, `useUsers`, `useCreateUser`, `useUpdateUser`,
-  `useResetUserPassword`, `useUserDirectory` — takes an optional `roles` array to narrow the
-  picker, e.g. to admins/project managers for a project's manager field). `CustomerFormModal.tsx`
-  (customers/) and
-  `UserFormModal.tsx` + `ResetPasswordModal.tsx` (users/) are the create/edit forms the `/admin`
-  pages use; elsewhere (e.g. the projects customer picker) only the read-only `useCustomers` is
-  needed.
-- **`projects/`** — `api.ts` (typed calls for all `/projects` endpoints plus `ProjectConflictError`
-  (409) / `ProjectRuleError` (400, backend `detail` as the message) / `ProjectNotFoundError` (404),
-  and for billing items `BillingItemConflictError` (409 name) / `BillingItemInUseError` (409 on
-  delete, a different meaning than a project's own 409, mapped separately)),
-  `hooks.ts` (`projectKeys` + `useProjects`/`useProject`/`useProjectMembers`/`useProjectBillingItems`
-  queries and `useCreateProject`/`useUpdateProject`/`useAddProjectMember`/`useRemoveProjectMember`/
-  `useAddProjectBillingItem`/`useUpdateProjectBillingItem`/`useDeleteProjectBillingItem` mutations,
-  all invalidating `projectKeys.all` on success), `ProjectFormModal.tsx` (shared create/edit form used
-  by `pages/ProjectsPage.tsx`, `pages/ProjectDetailsPage.tsx` and `pages/admin/AdminProjectsPage.tsx`;
-  an optional `onCreated` callback lets the admin page stay put instead of navigating to the new
-  project; a searchable, clearable "Manager" picker (`useUserDirectory` with
-  `roles: ["admin","project_manager"]`) sets/clears `manager_id`, keeping the current manager
-  selectable even when a search narrows the directory past them), and `BillingItemFormModal.tsx`
-  (create/edit a billing item; the unit is locked once editing, and its rate/markup field swaps by
-  unit). `pages/ProjectDetailsPage.tsx`'s "Billing items" section is readable by anyone, editable
-  by managers, and offers "Delete permanently" to admins only — the one write in this router that
-  isn't `ManagerDep`; it also shows the project's manager. `pages/ProjectsPage.tsx` has a Manager
-  column and, for admins/project managers, a "Managed by me" filter (`manager_id` = the signed-in
-  user).
-- **`calendar/`** — `api.ts` (calendar days, non-working-day CRUD, public-holiday import, plus
-  `NonWorkingDayConflictError` (409 date taken) / `NonWorkingDayNotFoundError` (404) /
-  `CalendarRuleError` (400)) and `hooks.ts` (`calendarKeys` + `useCalendarDays`/`useNonWorkingDays`
-  queries and add/update/delete/import mutations, all invalidating `calendarKeys.all`).
-  `NonWorkingDayFormModal.tsx` (create/edit; `kind` is locked once editing, like a billing item's
-  unit) backs `pages/admin/AdminCalendarPage.tsx`.
-- **`timesheets/`** — `api.ts` (read/save a week, `submitTimesheetWeek`/`approveTimesheetWeek`/
-  `returnTimesheetWeek`/`listSubmittedTimesheetWeeks` (an optional `{ scope: "mine" | "all" }`),
-  the caller's project/billing-item picker, the dashboard's
-  `getMonthCalendar`/`getYearHours`/`getMonthTimeSummary`/`getWeeklyHours`, the manager team
-  dashboard's `getTeamMonthOverview` (also `scope`-aware) and `sendProjectMonthToBilling`/
-  `reopenProjectBillingPeriod`, plus `TimesheetRuleError` covering 400/403/404 and
-  `TimesheetConflictError` for a 409 — the week's status changed underneath the caller, or a
-  billing period isn't ready yet / was already sent — both with the backend's `detail` as the
-  message) and `hooks.ts` (`timesheetKeys` + `useTimesheetWeek`/`useTimesheetOptions`/
-  `useMonthCalendar`/`useYearHours`/`useMonthTimeSummary`/`useWeeklyHours`/
-  `useSubmittedTimesheetWeeks`/`useTeamMonthOverview` queries and
-  `useSaveTimesheetWeek`/`useSubmitTimesheetWeek`/`useApproveTimesheetWeek`/
-  `useReturnTimesheetWeek`/`useSendProjectMonthToBilling`/`useReopenProjectBillingPeriod`
-  mutations, each of the first four writing its result straight into the week's query cache instead
-  of invalidating; saving also invalidates `timesheetKeys.summaries()` so the dashboard and
-  `/hours` pick up a save, and, along with submit/approve/return, `timesheetKeys.team()`;
-  submit/approve/return also invalidate `timesheetKeys.allSubmissions()` (every cached
-  `submissions(scope)`); sending/reopening a billing period invalidate `team()`,
-  `allSubmissions()` and every cached week (`timesheetKeys.weeks()`, since locks may have changed
-  what they allow)). `week.ts` holds pure ISO-date helpers (`startOfIsoWeek`, `weekDays`,
-  `addWeeks`, `addMonths`/`previousMonth`, day/week/month/ISO-week label formatting, `formatHours`,
-  `fillRatePercent`) with their own unit tests. `dayKind.ts` (weekend/holiday/bridge background
-  colors) and `dayStatus.ts` (a calendar day's status — off/future/today/complete/partial/missing/
-  extra — versus its expected hours) are pure helpers shared by `TimesheetGrid.tsx` (the weekly
-  grid: local draft state holds only actual edits keyed by billing-item+date, plus a separate
-  billing-item-keyed map of pending row-comment edits and a set of billing items marked for
-  deletion, so Save sends just the changed cells/comments and the null-outs a deleted row needs; a
-  closed row, or the week once `submitted`/`approved`, renders read-only. An empty `draft` week with
-  exactly one open project is seeded once on load with that project's `normal_working_hours` on
-  every working day — kept in a draft-only prefill map so it renders and saves like a normal edit
-  but doesn't itself count as "dirty" (no unsaved-changes prompt on an untouched prefilled week). A
-  row's `locked_dates` (dates already sent to billing) render read-only regardless of `is_open`,
-  with a lock icon/tooltip per cell and a "Sent to billing" badge on the row; such a row can't have
-  its comment edited or be deleted, and the week shows a "Sent to billing" alert whenever any row
-  is locked. A status header shows the week's `status` badge and, once reviewed, who reviewed it
-  and when, plus the return comment when `returned`; "Submit" (behind a confirming modal,
-  auto-saving first if there's anything pending) and, for a manager viewing the week,
-  "Approve"/"Return…" (the latter's modal requires a non-blank comment; both hidden once
-  `can_review` is false, including when a locked row would make a return fail) appear per
-  `can_submit`/`can_review`), `AddRowModal.tsx` ("add a row" / "copy rows from previous week"), and
-  the month calendar below. `pages/TimesheetPage.tsx` uses the grid. `pages/ApprovalsPage.tsx`
-  (`/approvals`, admin/project-manager only) lists weeks awaiting review via
-  `useSubmittedTimesheetWeeks`, a `TeamScopeToggle` ("My projects"/"All", admin only — a project
-  manager is always scoped to their own) narrowing it via the `scope` param, each row linking to
-  `/timesheet?week=&user=` for that user's week.
-  `MonthCalendarTable.tsx`/`YearHoursTableView.tsx` are presentational (already-loaded data as
-  props, an optional `title` override, `title=""` to hide it) — weeks as rows/Mon..Sun as columns
-  with the week number linking to `/timesheet?week=`, and one row per month (newest first, columns
-  per hours category plus Δ against hours expected to date, expanding into a per-project
-  breakdown) respectively; `MonthCalendar.tsx`/`YearHoursTable.tsx` are thin data-loading wrappers
-  around them, reused by `pages/HoursPage.tsx` (`/hours`, month navigation via a `?month=YYYY-MM`
-  param) and, for the current/previous month, by the dashboard's `MonthTimeCard.tsx`. The
-  dashboard's other widgets: `QuickActionsCard.tsx` ("Report time" / "Previous week" shortcuts to
-  `/timesheet`), `MonthTimeCard.tsx` (one month's hours by preset, a reported/expected-to-date
-  total with fill rate %, and per-diem/expense benefits, linking to `/hours?month=`),
-  `WeeklyHoursChart.tsx` (`@mantine/charts` `CompositeChart`: hours booked per week as bars against
-  expected hours as a dashed reference line on the *same* hours axis — never a fill-rate-% line on
-  a second axis — over the last 6 ISO weeks), `WeeklyProjectHoursCard.tsx` (each project's
-  total/overtime hours over that same 6-week window, sharing `WeeklyHoursChart`'s query/cache) and
-  `MyProjectsCard.tsx` (the user's projects, linking to each). All five widgets render inside
-  `components/DashboardCard.tsx`, the shared card frame (title, content, an optional "Details →"
-  style footer link, a highlight tint via `data-highlighted`). `pages/DashboardPage.tsx` composes
-  them in a responsive `SimpleGrid`, followed by a "My team" section (admin/project manager only)
-  with its own `TeamScopeToggle` (local state, unlike `/approvals`'/`/team`'s URL-backed one) above
-  three more widget cards driven by `useTeamMonthOverview` for the current month:
-  `TeamTimesheetsCard.tsx` (awaiting-approval/returned/not-submitted counts, linking to
-  `/approvals?scope=`), `ProjectBillingCard.tsx` (each managed project's hours, weeks-approved
-  x/y and billing status for a ‹›-navigable month — previous month during a month's first 10 days,
-  current month after — with a "Send to billing" button behind a confirming modal for a `ready`
-  project) and `TeamStaffCard.tsx` (everyone on the manager's projects, deduplicated across
-  projects, hours reported this month vs. expected with a warning icon/tooltip, linking to
-  `/timesheet?week=&user=` for the current week; footer "Team overview →" to `/team`).
-  `pages/TeamPage.tsx` (`/team`, admin/project-manager only, nav item right after Approvals) is the
-  fuller view: the same `TeamScopeToggle` (this time backed by `?scope=`) and a `?month=YYYY-MM`
-  navigator like `/hours`, then per managed project a header (customer/name, hours, weeks
-  approved x/y, a billing status badge, the same "Send to billing" modal when `ready` or, once
-  `sent`, an admin-only "Reopen" behind its own confirming modal) and `TeamWeekMatrix.tsx`
-  (presentational: members × the month's ISO weeks, each cell a status badge plus that member's
-  hours on the project that week linking to `/timesheet?week=&user=`, a week outside the queried
-  month marked with `*`, a warning icon/tooltip per member).
-- **`admin/`** — the shared archive-or-delete UI for all three entities: `api.ts`
-  (`getRemovalImpact`/`removeEntity` against `/api/v1/admin/...`, plus `RemovalBlockedError` (409,
-  carries `blockers`), `RemovalRuleError` (400) and `RemovalNotFoundError` (404)), `hooks.ts`
-  (`useRemovalImpact` — fetched only while a dialog is open — and `useRemoveEntity`, which also
-  invalidates the projects lists for users/customers), and `RemoveEntityModal.tsx`: archives by
-  default, offers a "Delete permanently" checkbox disabled with the blocking reason when other data
-  references the record, and shows what else a permanent delete would remove once checked.
-- **`auth/roles.ts`** — `canManage` (admin or project manager) and `isAdmin`; `auth/RequireRole.tsx`
-  renders its children only for a signed-in user with one of the given roles, the plain not-found
-  page otherwise (so a non-admin can't tell `/admin` exists), and must be nested inside `RequireAuth`.
-- **`pages/admin/`** — `AdminUsersPage`/`AdminCustomersPage`/`AdminProjectsPage`: each lists its
-  entity with a debounced search and an archived/inactive toggle, and a per-row menu (Edit,
-  role/entity-specific actions like Reset password or Restore, Remove… via `RemoveEntityModal`). An
-  admin cannot edit their own role/active status or remove themselves from `AdminUsersPage`.
-  `AdminSystemStatusPage` (`/admin/status`) just polls the health endpoints for an API/database badge.
+- **Feature areas** — `auth/`, `customers/`, `users/`, `projects/`, `calendar/`, `timesheets/`,
+  `admin/`: each typically has `api.ts` (typed calls plus the area's own error classes mapped from
+  HTTP status codes, with the backend's `detail` as the message where it's user-facing), `hooks.ts`
+  (a `<area>Keys` query-key factory plus TanStack Query queries/mutations) and its modals/components.
+  Each area's `CLAUDE.md` has the details.
 - **`router.tsx`** — route tree (`routes`, also used by tests): `/login` is public, everything else sits
-  under `RequireAuth` → `AppLayout`. Page components live in `pages/`, shared chrome in `components/`.
-  `/` (`DashboardPage`) is the default landing page: quick actions, this/last month's time,
-  hours-per-week chart and per-project table, and the user's projects, all as widget cards, plus
-  (admin/project manager only) a "My team" section of its own.
-  `/timesheet` (query params `week`/`user`) is where time is actually booked; `/hours` (query param
-  `month`) is the fuller month-calendar-and-year-table view a "Details →" card links into.
-  `/approvals` (`ApprovalsPage`, the manager's queue of submitted weeks) and `/team`
-  (`TeamPage`, a manager's projects/staff/billing for a month) both sit under
-  `RequireRole roles={["admin","project_manager"]}`.
-  `/admin/{users,customers,projects,calendar,status}` sit under `RequireRole roles={["admin"]}`,
-  with `/admin` redirecting to `/admin/users`.
+  under `RequireAuth` → `AppLayout`. Page components live in `pages/` (see `pages/CLAUDE.md`), shared
+  chrome in `components/`. `/` (`DashboardPage`) is the default landing page; `/timesheet` (query
+  params `week`/`user`), `/hours` (`month`), `/projects`, `/projects/:projectId`,
+  `/account/password`; `/approvals` and `/team`
+  sit under `RequireRole roles={["admin","project_manager"]}`;
+  `/admin/{users,customers,projects,calendar,status}` sit under `RequireRole roles={["admin"]}`, with
+  `/admin` redirecting to `/admin/users`.
 - **`components/AppLayout.tsx`** — the signed-in shell: header with the account menu and an
   `AppShell.Navbar` (collapsible on mobile via a `Burger`) linking to the pages in `pages/`
   (Dashboard, Timesheet, My hours, Projects, in that order — plus Approvals then Team, inserted
   right after My hours, shown only when `canManage(user.role)`), plus an "Administration" nav group
   (Users/Customers/Projects/Calendar/System status) shown only when `isAdmin(user.role)`.
-  `components/DashboardCard.tsx` is the shared frame the dashboard's widget cards render inside.
+  `components/DashboardCard.tsx` is the shared frame the dashboard's widget cards render inside
+  (title, content, an optional "Details →" style footer link, a highlight tint via
+  `data-highlighted`).
 - **`App.tsx`** — top-level provider composition: `MantineProvider` → `DatesProvider` →
   `QueryClientProvider` → `RouterProvider` (imported from `react-router/dom`, which `flushSync`
   navigation requires).
-- **`test/setup.ts`** — Vitest setup (jsdom polyfills for `matchMedia`/`ResizeObserver`/`document.fonts`
-  that Mantine needs, RTL cleanup, and cleaning `@mantine/notifications`'s module-level queue — it
-  outlives the React tree, so a toast shown in one test would otherwise still be queued when the next
-  test's `<Notifications />` mounts). Wired in via `vite.config.ts`'s `test.setupFiles`.
-  `test/renderApp.tsx` renders the full route tree in a memory router with a fresh `QueryClient`;
-  tests mock `@/auth/api` and whichever of `@/projects/api` / `@/customers/api` / `@/users/api` /
-  `@/admin/api` / `@/calendar/api` / `@/timesheets/api` the page under test calls. Mantine's
-  `DatePickerInput` renders its trigger as a button, not a text input — editing its pre-filled value
-  in a test is awkward, so prefer a flow (e.g. edit rather than create) that doesn't need to change
-  it. Mantine's `Select` renders an input with
-  `role="combobox"`, not `"textbox"`; a required field's `<label>` includes a trailing `*`, so match
-  it with a prefix regex (e.g. `getByLabelText(/^name/i)`) rather than the exact label text.
+- **`test/`** — Vitest setup and the `renderApp` helper; see `test/CLAUDE.md` before writing a
+  frontend test.
 
 ### API convention
 
@@ -517,6 +181,9 @@ URL is hardcoded in the frontend.
   `DELETE /auth/session` clears it. `get_current_user` accepts a bearer header (which wins) or that
   cookie; cookie-authenticated unsafe requests (not GET/HEAD/OPTIONS) must also carry `X-Requested-With`
   or get 403 (CSRF defense). Signing out only clears the cookie — the JWT stays valid until it expires.
+- Route guards every router uses: `auth/dependencies.py` — `CurrentUserDep`, `require_roles`,
+  `AdminDep`, `ManagerDep` (`admin` or `project_manager`). Role and `is_active` are re-read from the
+  database on every request, so deactivation/role/password changes take effect immediately.
 - Tests need a running, migrated Postgres (`docker compose up -d db`, then `alembic upgrade head`):
   `tests/conftest.py`'s `db_session` fixture runs each test in a rolled-back transaction on a real
   connection, so there is no SQLite/mock fallback.
