@@ -82,9 +82,10 @@ head`) → `backend` → `frontend` (nginx, proxies `/api/` to `backend`).
   Idempotent: existing emails/customer or project names are skipped. Projects are created for each
   customer before it is archived (creating a project requires an active customer); tests seed
   uniquely renamed copies, because the test database doubles as the dev database. Also imports the
-  current and next year's public holidays plus one demo bridge day, and books two weeks of normal
-  working hours for the demo worker and project manager — each skipped once already present, so
-  re-running stays idempotent too.
+  current and next year's public holidays plus one demo bridge day, and books normal working hours
+  for the demo worker and project manager on every working day of the last 3 months (plus a little
+  overtime/travel time each month), so the worker dashboard's month calendar and year-hours table
+  both have data — each skipped once already present, so re-running stays idempotent too.
 
 ### Feature modules (`modules/`) and the CQRS bus
 
@@ -195,7 +196,16 @@ for its unit, applies them, and only then re-checks that the user's total `hour`
 day is still ≤ 24 (`DailyHoursExceededError`) — checked after applying the batch specifically so
 moving hours between two rows in one save works even though an intermediate per-change state would
 not. Any authenticated user reads and writes their own week; `CountTimeEntries` (filterable by user/
-project/billing item) backs the admin module's removal-impact reporting below.
+project/billing item) backs the admin module's removal-impact reporting below. `GetMonthCalendar(user_id,
+year, month, today)` and `GetYearHours(user_id, year, today)` back the worker dashboard: the former
+renders a month as full ISO weeks with expected-vs-booked `hour`-unit totals per day/week (expected
+hours = working days, from `GetCalendarDays`, times `Settings.daily_working_hours`); the latter sums
+a year's `hour`-unit entries by month, split by billing item preset (`normal_hours`/`overtime_hours`/
+`travel_hours`, any other preset or a custom item as `other_hours`) with a per-project breakdown —
+`day`/`amount`-unit entries (per diems, expenses) aren't part of either, the dashboard is hours-only.
+`today` is a field of both queries (the router fills in the real date) so "expected to date" and
+"which month is current" stay deterministic in tests. Both follow the week endpoint's view rule (own
+data, or another user's for admin/project manager) via the HTTP layer's `_resolve_target_user`.
 
 The **admin** module (`modules/admin/`) owns no tables — it orchestrates archiving or permanently
 deleting a user, customer or project by calling the owning module's commands, reached only through
@@ -265,15 +275,22 @@ owned by a module.
   queries and add/update/delete/import mutations, all invalidating `calendarKeys.all`).
   `NonWorkingDayFormModal.tsx` (create/edit; `kind` is locked once editing, like a billing item's
   unit) backs `pages/admin/AdminCalendarPage.tsx`.
-- **`timesheets/`** — `api.ts` (read/save a week, the caller's project/billing-item picker, plus
-  `TimesheetRuleError` covering 400/403/404 with the backend's `detail` as the message) and
-  `hooks.ts` (`timesheetKeys` + `useTimesheetWeek`/`useTimesheetOptions` queries and
-  `useSaveTimesheetWeek`, which writes the mutation result straight into the week's query cache
-  instead of invalidating). `week.ts` holds pure ISO-date helpers (`startOfIsoWeek`, `weekDays`,
-  `addWeeks`, day/week label formatting) with their own unit tests, used by
-  `pages/TimesheetPage.tsx`, `TimesheetGrid.tsx` (the weekly grid: local draft state holds only
-  actual edits keyed by billing-item+date, so Save sends just the changed cells and a closed row
-  renders read-only) and `AddRowModal.tsx` ("add a row" / "copy rows from previous week").
+- **`timesheets/`** — `api.ts` (read/save a week, the caller's project/billing-item picker, the
+  dashboard's `getMonthCalendar`/`getYearHours`, plus `TimesheetRuleError` covering 400/403/404 with
+  the backend's `detail` as the message) and `hooks.ts` (`timesheetKeys` + `useTimesheetWeek`/
+  `useTimesheetOptions`/`useMonthCalendar`/`useYearHours` queries and `useSaveTimesheetWeek`, which
+  writes the mutation result straight into the week's query cache instead of invalidating, and also
+  invalidates `timesheetKeys.summaries()` so the dashboard picks up a save). `week.ts` holds pure
+  ISO-date helpers (`startOfIsoWeek`, `weekDays`, `addWeeks`, day/week/month label and hours
+  formatting) with their own unit tests. `dayKind.ts` (weekend/holiday/bridge background colors) and
+  `dayStatus.ts` (a calendar day's status — off/future/today/complete/partial/missing/extra — versus
+  its expected hours) are pure helpers shared by `TimesheetGrid.tsx` (the weekly grid: local draft
+  state holds only actual edits keyed by billing-item+date, so Save sends just the changed cells and
+  a closed row renders read-only), `AddRowModal.tsx` ("add a row" / "copy rows from previous week"),
+  and the dashboard's `MonthCalendar.tsx` (weeks as rows, Mon..Sun as columns, the week number
+  linking to `/timesheet?week=`) and `YearHoursTable.tsx` (one row per month, newest first, columns
+  per hours category plus Δ against hours expected to date, expanding into a per-project breakdown).
+  `pages/TimesheetPage.tsx` uses the grid; `pages/DashboardPage.tsx` uses the other two.
 - **`admin/`** — the shared archive-or-delete UI for all three entities: `api.ts`
   (`getRemovalImpact`/`removeEntity` against `/api/v1/admin/...`, plus `RemovalBlockedError` (409,
   carries `blockers`), `RemovalRuleError` (400) and `RemovalNotFoundError` (404)), `hooks.ts`
@@ -288,15 +305,17 @@ owned by a module.
   entity with a debounced search and an archived/inactive toggle, and a per-row menu (Edit,
   role/entity-specific actions like Reset password or Restore, Remove… via `RemoveEntityModal`). An
   admin cannot edit their own role/active status or remove themselves from `AdminUsersPage`.
+  `AdminSystemStatusPage` (`/admin/status`) just polls the health endpoints for an API/database badge.
 - **`router.tsx`** — route tree (`routes`, also used by tests): `/login` is public, everything else sits
   under `RequireAuth` → `AppLayout`. Page components live in `pages/`, shared chrome in `components/`.
-  `/timesheet` (query params `week`/`user`) is the default landing page for daily use.
-  `/admin/{users,customers,projects,calendar}` sit under `RequireRole roles={["admin"]}`, with
-  `/admin` redirecting to `/admin/users`.
+  `/` (`DashboardPage`) is the default landing page: this month's calendar, this year's hours by
+  month, and a link to the current week's timesheet; `/timesheet` (query params `week`/`user`) is
+  where time is actually booked. `/admin/{users,customers,projects,calendar,status}` sit under
+  `RequireRole roles={["admin"]}`, with `/admin` redirecting to `/admin/users`.
 - **`components/AppLayout.tsx`** — the signed-in shell: header with the account menu and an
-  `AppShell.Navbar` (collapsible on mobile via a `Burger`) linking to the pages in `pages/` (Timesheet
-  first), plus an "Administration" nav group (Users/Customers/Projects/Calendar) shown only when
-  `isAdmin(user.role)`.
+  `AppShell.Navbar` (collapsible on mobile via a `Burger`) linking to the pages in `pages/`
+  (Dashboard first, then Timesheet, then Projects), plus an "Administration" nav group
+  (Users/Customers/Projects/Calendar/System status) shown only when `isAdmin(user.role)`.
 - **`App.tsx`** — top-level provider composition: `MantineProvider` → `DatesProvider` →
   `QueryClientProvider` → `RouterProvider` (imported from `react-router/dom`, which `flushSync`
   navigation requires).
