@@ -28,6 +28,7 @@ from time_reporting.modules.timesheets.contracts import (
     GetWeeklyHours,
     GetYearHours,
     InvalidWeekStatusTransitionError,
+    ListBillingPeriods,
     ListSubmittedTimesheetWeeks,
     ListTimesheetOptions,
     QuantityOutOfRangeError,
@@ -48,6 +49,7 @@ from time_reporting.modules.timesheets.contracts import (
     WeekStartNotMondayError,
 )
 from time_reporting.modules.timesheets.schemas import (
+    BillingPeriodPageResponse,
     MonthCalendarResponse,
     MonthTimeSummaryResponse,
     ProjectBillingPeriodResponse,
@@ -277,6 +279,30 @@ async def get_team_month_overview(
         GetTeamMonthOverview(manager_id=manager_id, year=year, month=month, today=date.today())
     )
     return TeamMonthOverviewResponse.model_validate(overview)
+
+
+@router.get("/billing-periods")
+async def list_billing_periods(
+    _admin: AdminDep,
+    bus: BusDep,
+    project_id: Annotated[UUID | None, Query()] = None,
+    customer_id: Annotated[UUID | None, Query()] = None,
+    month_from: Annotated[date | None, Query()] = None,
+    month_to: Annotated[date | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> BillingPeriodPageResponse:
+    page = await bus.query(
+        ListBillingPeriods(
+            project_id=project_id,
+            customer_id=customer_id,
+            month_from=month_from,
+            month_to=month_to,
+            limit=limit,
+            offset=offset,
+        )
+    )
+    return BillingPeriodPageResponse.model_validate(page)
 
 
 @router.post(

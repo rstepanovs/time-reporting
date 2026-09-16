@@ -324,6 +324,30 @@ class ProjectBillingPeriodDTO:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class BillingPeriodListItemDTO:
+    """One sent billing period, flattened for the admin billing list — project/customer/sender
+    names inline rather than the full ``ProjectBillingPeriodDTO`` (status/hours/expenses), which
+    the list doesn't need."""
+
+    project_id: UUID
+    project_name: str
+    customer_name: str
+    period_start: date
+    period_end: date
+    sent_at: datetime
+    sent_by_id: UUID
+    sent_by_name: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class BillingPeriodPageDTO:
+    items: tuple[BillingPeriodListItemDTO, ...]
+    total: int
+    limit: int
+    offset: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class TeamProjectDTO:
     """One managed project's month, for the team overview: its members and billing readiness."""
 
@@ -456,6 +480,24 @@ class GetTeamMonthOverview(Query[TeamMonthOverviewDTO]):
     year: int
     month: int
     today: date
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ListBillingPeriods(Query[BillingPeriodPageDTO]):
+    """Sent billing periods for the admin billing list, newest ``sent_at`` first.
+
+    ``month_from``/``month_to`` filter on ``period_start`` (always the first of a calendar month),
+    inclusive on both ends. ``customer_id`` matches periods whose project belongs to that customer
+    — resolved via ``projects.ListProjects``, since ``ProjectBillingPeriod`` has no customer id of
+    its own — combined with ``project_id`` if both are given.
+    """
+
+    project_id: UUID | None = None
+    customer_id: UUID | None = None
+    month_from: date | None = None
+    month_to: date | None = None
+    limit: int
+    offset: int
 
 
 # --- Commands ---

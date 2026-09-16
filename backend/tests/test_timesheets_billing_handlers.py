@@ -4,7 +4,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from support import ADMIN, MANAGER, ProjectFactory, UserFactory
+from support import ADMIN, MANAGER, CustomerFactory, ProjectFactory, UserFactory
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.projects.contracts import (
     AddProjectMember,
@@ -19,6 +19,7 @@ from time_reporting.modules.timesheets.contracts import (
     BillingPeriodNotReadyError,
     BillingPeriodStatus,
     GetTimesheetWeek,
+    ListBillingPeriods,
     ReopenProjectBillingPeriod,
     ReturnTimesheetWeek,
     RowCommentChange,
@@ -414,3 +415,271 @@ async def test_reopen_unknown_period_raises(bus: Bus, make_project: ProjectFacto
         await bus.execute(
             ReopenProjectBillingPeriod(project_id=project.id, period_start=date(2026, 9, 1))
         )
+
+
+# --- ListBillingPeriods ---
+
+# Full ISO weeks (Monday..Sunday) that sit entirely inside their calendar month.
+JULY_WEEK = date(2026, 7, 6)
+SEPTEMBER_WEEK = date(2026, 9, 7)
+
+
+async def _send_month(
+    bus: Bus,
+    *,
+    project_id: UUID,
+    year: int,
+    month: int,
+    week_start: date,
+    worker_id: UUID,
+    admin_id: UUID,
+    sent_by_id: UUID,
+) -> None:
+    item_id = await _normal_hours_item_id(bus, project_id)
+    await _book_and_approve(
+        bus,
+        worker_id=worker_id,
+        admin_id=admin_id,
+        item_id=item_id,
+        entry_date=week_start,
+        week_start=week_start,
+    )
+    await bus.execute(
+        SendProjectMonthToBilling(
+            project_id=project_id, year=year, month=month, sent_by_id=sent_by_id
+        )
+    )
+
+
+async def test_list_billing_periods_orders_newest_sent_first(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    manager = await make_user(roles=MANAGER)
+    admin = await make_user(roles=ADMIN)
+    worker = await make_user()
+    project = await make_project(manager_id=manager.id)
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
+    await _send_month(
+        bus,
+        project_id=project.id,
+        year=2026,
+        month=7,
+        week_start=JULY_WEEK,
+        worker_id=worker.id,
+        admin_id=admin.id,
+        sent_by_id=manager.id,
+    )
+    await _send_month(
+        bus,
+        project_id=project.id,
+        year=2026,
+        month=9,
+        week_start=SEPTEMBER_WEEK,
+        worker_id=worker.id,
+        admin_id=admin.id,
+        sent_by_id=manager.id,
+    )
+
+    page = await bus.query(ListBillingPeriods(limit=50, offset=0))
+
+    assert [item.period_start for item in page.items] == [date(2026, 9, 1), date(2026, 7, 1)]
+    assert page.total == 2
+
+
+async def test_list_billing_periods_paginates(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    manager = await make_user(roles=MANAGER)
+    admin = await make_user(roles=ADMIN)
+    worker = await make_user()
+    project = await make_project(manager_id=manager.id)
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
+    await _send_month(
+        bus,
+        project_id=project.id,
+        year=2026,
+        month=7,
+        week_start=JULY_WEEK,
+        worker_id=worker.id,
+        admin_id=admin.id,
+        sent_by_id=manager.id,
+    )
+    await _send_month(
+        bus,
+        project_id=project.id,
+        year=2026,
+        month=9,
+        week_start=SEPTEMBER_WEEK,
+        worker_id=worker.id,
+        admin_id=admin.id,
+        sent_by_id=manager.id,
+    )
+
+    page = await bus.query(ListBillingPeriods(limit=1, offset=1))
+
+    assert [item.period_start for item in page.items] == [date(2026, 7, 1)]
+    assert page.total == 2
+    assert page.limit == 1
+    assert page.offset == 1
+
+
+async def test_list_billing_periods_filters_by_project(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    manager = await make_user(roles=MANAGER)
+    admin = await make_user(roles=ADMIN)
+    worker = await make_user()
+    other_worker = await make_user()
+    project = await make_project(manager_id=manager.id)
+    other_project = await make_project(manager_id=manager.id)
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
+    await bus.execute(AddProjectMember(project_id=other_project.id, user_id=other_worker.id))
+    await _send_month(
+        bus,
+        project_id=project.id,
+        year=2026,
+        month=9,
+        week_start=SEPTEMBER_WEEK,
+        worker_id=worker.id,
+        admin_id=admin.id,
+        sent_by_id=manager.id,
+    )
+    await _send_month(
+        bus,
+        project_id=other_project.id,
+        year=2026,
+        month=9,
+        week_start=SEPTEMBER_WEEK,
+        worker_id=other_worker.id,
+        admin_id=admin.id,
+        sent_by_id=manager.id,
+    )
+
+    page = await bus.query(ListBillingPeriods(project_id=project.id, limit=50, offset=0))
+
+    assert [item.project_id for item in page.items] == [project.id]
+    assert page.total == 1
+
+
+async def test_list_billing_periods_filters_by_customer(
+    bus: Bus,
+    make_project: ProjectFactory,
+    make_user: UserFactory,
+    make_customer: CustomerFactory,
+) -> None:
+    manager = await make_user(roles=MANAGER)
+    admin = await make_user(roles=ADMIN)
+    worker = await make_user()
+    other_worker = await make_user()
+    customer = await make_customer(name="Acme")
+    other_customer = await make_customer(name="Globex")
+    project = await make_project(customer_id=customer.id, manager_id=manager.id)
+    other_project = await make_project(customer_id=other_customer.id, manager_id=manager.id)
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
+    await bus.execute(AddProjectMember(project_id=other_project.id, user_id=other_worker.id))
+    await _send_month(
+        bus,
+        project_id=project.id,
+        year=2026,
+        month=9,
+        week_start=SEPTEMBER_WEEK,
+        worker_id=worker.id,
+        admin_id=admin.id,
+        sent_by_id=manager.id,
+    )
+    await _send_month(
+        bus,
+        project_id=other_project.id,
+        year=2026,
+        month=9,
+        week_start=SEPTEMBER_WEEK,
+        worker_id=other_worker.id,
+        admin_id=admin.id,
+        sent_by_id=manager.id,
+    )
+
+    page = await bus.query(ListBillingPeriods(customer_id=customer.id, limit=50, offset=0))
+
+    assert [item.project_id for item in page.items] == [project.id]
+    assert page.items[0].customer_name == "Acme"
+
+
+async def test_list_billing_periods_by_customer_with_no_projects_is_empty(
+    bus: Bus, make_customer: CustomerFactory
+) -> None:
+    customer = await make_customer()
+
+    page = await bus.query(ListBillingPeriods(customer_id=customer.id, limit=50, offset=0))
+
+    assert page.items == ()
+    assert page.total == 0
+
+
+async def test_list_billing_periods_filters_by_month_range(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    manager = await make_user(roles=MANAGER)
+    admin = await make_user(roles=ADMIN)
+    worker = await make_user()
+    project = await make_project(manager_id=manager.id)
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
+    await _send_month(
+        bus,
+        project_id=project.id,
+        year=2026,
+        month=7,
+        week_start=JULY_WEEK,
+        worker_id=worker.id,
+        admin_id=admin.id,
+        sent_by_id=manager.id,
+    )
+    await _send_month(
+        bus,
+        project_id=project.id,
+        year=2026,
+        month=9,
+        week_start=SEPTEMBER_WEEK,
+        worker_id=worker.id,
+        admin_id=admin.id,
+        sent_by_id=manager.id,
+    )
+
+    page = await bus.query(
+        ListBillingPeriods(
+            month_from=date(2026, 8, 1), month_to=date(2026, 9, 30), limit=50, offset=0
+        )
+    )
+
+    assert [item.period_start for item in page.items] == [date(2026, 9, 1)]
+
+
+async def test_list_billing_periods_includes_project_and_sender_names(
+    bus: Bus,
+    make_project: ProjectFactory,
+    make_user: UserFactory,
+    make_customer: CustomerFactory,
+) -> None:
+    manager = await make_user(roles=MANAGER, name="Manager One")
+    admin = await make_user(roles=ADMIN)
+    worker = await make_user()
+    customer = await make_customer(name="Acme")
+    project = await make_project(customer_id=customer.id, name="Website", manager_id=manager.id)
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
+    await _send_month(
+        bus,
+        project_id=project.id,
+        year=2026,
+        month=9,
+        week_start=SEPTEMBER_WEEK,
+        worker_id=worker.id,
+        admin_id=admin.id,
+        sent_by_id=manager.id,
+    )
+
+    page = await bus.query(ListBillingPeriods(limit=50, offset=0))
+
+    item = page.items[0]
+    assert item.project_name == "Website"
+    assert item.customer_name == "Acme"
+    assert item.sent_by_id == manager.id
+    assert item.sent_by_name == "Manager One"

@@ -10,13 +10,17 @@ from uuid import UUID
 
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.projects.contracts import (
+    GetProjectsByIds,
     ListManagedProjectsWithMembers,
     ListMemberProjectsWithBillingItems,
+    ListProjects,
     ProjectOptionDTO,
 )
 from time_reporting.modules.timesheets.billing import BillingService
 from time_reporting.modules.timesheets.contracts import (
     ApproveTimesheetWeek,
+    BillingPeriodListItemDTO,
+    BillingPeriodPageDTO,
     CountTimeEntries,
     GetMonthCalendar,
     GetMonthTimeSummary,
@@ -24,6 +28,7 @@ from time_reporting.modules.timesheets.contracts import (
     GetTimesheetWeek,
     GetWeeklyHours,
     GetYearHours,
+    ListBillingPeriods,
     ListSubmittedTimesheetWeeks,
     ListTimesheetOptions,
     MonthCalendarDTO,
@@ -43,6 +48,7 @@ from time_reporting.modules.timesheets.contracts import (
 )
 from time_reporting.modules.timesheets.models import TimesheetWeek
 from time_reporting.modules.timesheets.repository import (
+    ProjectBillingPeriodRepository,
     TimeEntryRepository,
     TimesheetWeekRepository,
 )
@@ -50,6 +56,10 @@ from time_reporting.modules.timesheets.service import TimesheetService
 from time_reporting.modules.timesheets.summary import TimesheetSummaryService, _start_of_iso_week
 from time_reporting.modules.timesheets.team import TeamOverviewService
 from time_reporting.modules.users.contracts import GetUsersByIds
+
+# Large enough that no customer plausibly has more active+archived projects than this; resolving
+# `ListBillingPeriods.customer_id` only needs every matching project's id, not a further page.
+_CUSTOMER_PROJECTS_LIMIT = 10_000
 
 
 class GetTimesheetWeekHandler:
@@ -176,6 +186,72 @@ class ReopenProjectBillingPeriodHandler:
 
     async def handle(self, command: ReopenProjectBillingPeriod) -> None:
         await self._service.reopen_period(command)
+
+
+class ListBillingPeriodsHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._bus = bus
+        self._periods = ProjectBillingPeriodRepository(bus.session)
+
+    async def handle(self, query: ListBillingPeriods) -> BillingPeriodPageDTO:
+        project_ids = await self._resolve_project_ids(query)
+        periods = await self._periods.get_page(
+            project_ids=project_ids,
+            month_from=query.month_from,
+            month_to=query.month_to,
+            limit=query.limit,
+            offset=query.offset,
+        )
+        total = await self._periods.count(
+            project_ids=project_ids, month_from=query.month_from, month_to=query.month_to
+        )
+
+        projects_by_id = {
+            project.id: project
+            for project in await self._bus.query(
+                GetProjectsByIds(project_ids=frozenset(period.project_id for period in periods))
+            )
+        }
+        users_by_id = {
+            user.id: user
+            for user in await self._bus.query(
+                GetUsersByIds(user_ids=frozenset(period.sent_by_id for period in periods))
+            )
+        }
+        items = tuple(
+            BillingPeriodListItemDTO(
+                project_id=period.project_id,
+                project_name=projects_by_id[period.project_id].name,
+                customer_name=projects_by_id[period.project_id].customer.name,
+                period_start=period.period_start,
+                period_end=period.period_end,
+                sent_at=period.sent_at,
+                sent_by_id=period.sent_by_id,
+                sent_by_name=users_by_id[period.sent_by_id].name,
+            )
+            for period in periods
+        )
+        return BillingPeriodPageDTO(
+            items=items, total=total, limit=query.limit, offset=query.offset
+        )
+
+    async def _resolve_project_ids(self, query: ListBillingPeriods) -> frozenset[UUID] | None:
+        """``None`` means no project filter at all; an empty (but not ``None``) result means
+        ``customer_id`` matched no projects, so the list is empty."""
+        if query.customer_id is None:
+            return frozenset({query.project_id}) if query.project_id is not None else None
+        customer_projects = await self._bus.query(
+            ListProjects(
+                customer_id=query.customer_id,
+                include_inactive=True,
+                limit=_CUSTOMER_PROJECTS_LIMIT,
+                offset=0,
+            )
+        )
+        project_ids = frozenset(project.id for project in customer_projects.items)
+        if query.project_id is not None:
+            project_ids &= {query.project_id}
+        return project_ids
 
 
 class ListSubmittedTimesheetWeeksHandler:

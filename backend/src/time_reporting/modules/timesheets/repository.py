@@ -334,6 +334,67 @@ class ProjectBillingPeriodRepository:
         )
         return result.all()
 
+    async def get_page(
+        self,
+        *,
+        project_ids: frozenset[UUID] | None,
+        month_from: date | None,
+        month_to: date | None,
+        limit: int,
+        offset: int,
+    ) -> Sequence[ProjectBillingPeriod]:
+        """Newest ``sent_at`` first. ``project_ids=None`` means no project filter; an empty (but
+        not ``None``) set short-circuits to no rows, without hitting the database."""
+        if project_ids is not None and not project_ids:
+            return ()
+        statement = (
+            self._filtered(
+                select(ProjectBillingPeriod),
+                project_ids=project_ids,
+                month_from=month_from,
+                month_to=month_to,
+            )
+            .order_by(ProjectBillingPeriod.sent_at.desc(), ProjectBillingPeriod.id)
+            .limit(limit)
+            .offset(offset)
+        )
+        result = await self._session.scalars(statement)
+        return result.all()
+
+    async def count(
+        self,
+        *,
+        project_ids: frozenset[UUID] | None,
+        month_from: date | None,
+        month_to: date | None,
+    ) -> int:
+        if project_ids is not None and not project_ids:
+            return 0
+        statement = self._filtered(
+            select(func.count()).select_from(ProjectBillingPeriod),
+            project_ids=project_ids,
+            month_from=month_from,
+            month_to=month_to,
+        )
+        result = await self._session.execute(statement)
+        return result.scalar_one()
+
+    def _filtered[T: tuple[Any, ...]](
+        self,
+        statement: Select[T],
+        *,
+        project_ids: frozenset[UUID] | None,
+        month_from: date | None,
+        month_to: date | None,
+    ) -> Select[T]:
+        if project_ids is not None:
+            statement = statement.where(ProjectBillingPeriod.project_id.in_(project_ids))
+        if month_from is not None:
+            statement = statement.where(ProjectBillingPeriod.period_start >= month_from)
+        if month_to is not None:
+            statement = statement.where(ProjectBillingPeriod.period_start <= month_to)
+        return statement
+
     async def save(self, period: ProjectBillingPeriod) -> None:
         """Add ``period`` to the session and flush."""
         self._session.add(period)

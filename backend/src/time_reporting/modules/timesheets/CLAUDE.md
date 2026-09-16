@@ -3,9 +3,9 @@
 Owns `TimeEntry`, `TimesheetRowComment`, `TimesheetWeek` (status) and `ProjectBillingPeriod`.
 
 Depends on: `projects.contracts` (`ListMemberProjectsWithBillingItems`,
-`ListManagedProjectsWithMembers`, `GetProjectsByIds`, `GetProjectBillingItemsByIds`),
-`work_calendar.contracts` (`GetCalendarDays`), `users.contracts` (`GetUserById`, `GetUsersByIds`,
-`UserRole`). Consumed by `admin` via `CountTimeEntries`.
+`ListManagedProjectsWithMembers`, `ListProjects`, `GetProjectsByIds`,
+`GetProjectBillingItemsByIds`), `work_calendar.contracts` (`GetCalendarDays`), `users.contracts`
+(`GetUserById`, `GetUsersByIds`, `UserRole`). Consumed by `admin` via `CountTimeEntries`.
 
 ## Entries and the weekly grid
 
@@ -120,3 +120,11 @@ project `manager_id` manages (`manager_id=None` covers every active project — 
 - `GetTimesheetWeek`'s `TimesheetRowDTO.locked_dates` reports which of a row's days fall in a sent
   period (regardless of `is_open`), and folds into `can_review` (false once any row is locked, so a
   blocked `return` isn't offered) so the HTTP layer needs no separate lock query.
+- `ListBillingPeriods(project_id, customer_id, month_from, month_to, limit, offset)` (`GET
+  /timesheets/billing-periods`, `AdminDep`) pages every sent period, newest `sent_at` first, for the
+  admin billing list; `BillingPeriodListItemDTO` flattens in the project/customer/sender names
+  (via `GetProjectsByIds`/`GetUsersByIds`) rather than the full `ProjectBillingPeriodDTO`, which
+  this list doesn't need. `month_from`/`month_to` filter `period_start` inclusively (always the
+  first of a month). `customer_id` has no column of its own on `ProjectBillingPeriod`, so it's
+  resolved to that customer's project ids via `projects.ListProjects` first (capped at 10,000
+  projects — plenty for any real customer), intersected with `project_id` if both are given.

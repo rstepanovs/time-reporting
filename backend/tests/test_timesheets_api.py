@@ -887,3 +887,71 @@ async def test_billing_periods_require_manager_access(
         json={"project_id": str(project.id), "year": 2026, "month": 9},
     )
     assert response.status_code == 401
+
+
+async def test_anonymous_cannot_list_billing_periods(client: AsyncClient) -> None:
+    response = await client.get("/api/v1/timesheets/billing-periods")
+    assert response.status_code == 401
+
+
+@pytest.mark.parametrize("roles", [MANAGER, EMPLOYEE])
+async def test_non_admin_cannot_list_billing_periods(
+    client: AsyncClient,
+    make_user: UserFactory,
+    auth_headers: AuthHeaders,
+    roles: frozenset[UserRole],
+) -> None:
+    headers = auth_headers(await make_user(roles=roles))
+    response = await client.get("/api/v1/timesheets/billing-periods", headers=headers)
+    assert response.status_code == 403
+
+
+async def test_admin_can_list_and_filter_billing_periods(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    admin = await make_user(roles=ADMIN)
+    admin_headers = auth_headers(admin)
+    manager = await make_user(roles=MANAGER)
+    manager_headers = auth_headers(manager)
+    worker = await make_user(roles=EMPLOYEE)
+    worker_headers = auth_headers(worker)
+    project = await make_project(manager_id=manager.id)
+    await _add_member(client, manager_headers, str(project.id), str(worker.id))
+    item_id = await _normal_hours_item_id(client, manager_headers, str(project.id))
+    await client.put(
+        f"/api/v1/timesheets/weeks/{A_MONDAY}/entries",
+        headers=worker_headers,
+        json={"changes": [{"billing_item_id": item_id, "date": A_MONDAY, "quantity": "8.00"}]},
+    )
+    await client.post(f"/api/v1/timesheets/weeks/{A_MONDAY}/submit", headers=worker_headers)
+    worker_id = (await client.get("/api/v1/users/me", headers=worker_headers)).json()["id"]
+    await client.post(
+        f"/api/v1/timesheets/weeks/{A_MONDAY}/approve",
+        headers=manager_headers,
+        params={"user_id": worker_id},
+    )
+    await client.post(
+        "/api/v1/timesheets/billing-periods",
+        headers=manager_headers,
+        json={"project_id": str(project.id), "year": 2026, "month": 9},
+    )
+
+    response = await client.get(
+        "/api/v1/timesheets/billing-periods",
+        headers=admin_headers,
+        params={"project_id": str(project.id), "limit": 10, "offset": 0},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["limit"] == 10
+    assert body["offset"] == 0
+    item = body["items"][0]
+    assert item["project_id"] == str(project.id)
+    assert item["period_start"] == "2026-09-01"
+    assert item["sent_by_id"] == str(manager.id)
+    assert item["sent_by_name"] == manager.name
