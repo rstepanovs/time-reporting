@@ -9,9 +9,10 @@
   `@/admin/api` / `@/calendar/api` / `@/timesheets/api` the page under test calls.
 - `fixtures.ts` — one `CurrentUser` per access-level persona used across tests: `testManager`
   (`["manager"]`), `testEmployee` (`[]`, the implicit baseline — no levels), `testAdmin`
-  (`["admin","manager"]`, so it passes both `AdminDep`- and `ManagerDep`-gated views at once) and
+  (`["admin","manager"]`, so it passes both `AdminDep`- and `ManagerDep`-gated views at once),
   `testAdminOnly` (`["admin"]`, for asserting the admin-without-manager case, e.g. Administration
-  visible but Approvals/Team hidden).
+  visible but Approvals/Team hidden) and `testAccountant` (`["accountant"]`, for the dashboard's
+  Billing section).
 
 ## Mantine gotchas
 

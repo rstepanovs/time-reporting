@@ -1,6 +1,11 @@
 # frontend admin/
 
-The shared archive-or-delete UI for users, customers and projects. Backend: `modules/admin`.
+The shared archive-or-delete UI for users, customers and projects, plus the dashboard's
+Administration section. Backend: `modules/admin`.
+
+- `AdminShortcutsCard.tsx` — the dashboard's Administration section for `admin` users: a single
+  `DashboardCard` with link-only shortcuts to Users/Customers/Projects/Calendar/System status, no
+  data calls.
 
 - `api.ts` — `getRemovalImpact`/`removeEntity` against `/api/v1/admin/...`, plus
   `RemovalBlockedError` (409, carries `blockers`), `RemovalRuleError` (400) and

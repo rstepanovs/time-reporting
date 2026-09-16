@@ -141,7 +141,9 @@ owning module's `PATCH` endpoint (`ManagerDep`).
   Each area's `CLAUDE.md` has the details.
 - **`router.tsx`** — route tree (`routes`, also used by tests): `/login` is public, everything else sits
   under `RequireAuth` → `AppLayout`. Page components live in `pages/` (see `pages/CLAUDE.md`), shared
-  chrome in `components/`. `/` (`DashboardPage`) is the default landing page; `/timesheet` (query
+  chrome in `components/`. `/` (`DashboardPage`) is the default landing page, a list of sections
+  assembled from the viewer's access levels (My time for everyone, then My team/Billing/
+  Administration per level — see `pages/CLAUDE.md`); `/timesheet` (query
   params `week`/`user`), `/hours` (`month`), `/projects`, `/projects/:projectId`,
   `/account/password`; `/approvals` and `/team`
   sit under `RequireRole roles={["manager"]}` (any-of, so an admin who is also a manager passes too);

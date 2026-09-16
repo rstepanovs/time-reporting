@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fetchCurrentUser } from "@/auth/api";
@@ -31,19 +31,19 @@ describe("navigation", () => {
 
     await screen.findByRole("heading", { name: "Time Reporting" });
 
-    expect(screen.getByText("Administration")).toBeTruthy();
+    expect(within(screen.getByRole("navigation")).getByText("Administration")).toBeTruthy();
   });
 
   it("hides the Administration menu for a project manager and a plain employee", async () => {
     vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     renderApp("/");
     await screen.findByRole("heading", { name: "Time Reporting" });
-    expect(screen.queryByText("Administration")).toBeNull();
+    expect(within(screen.getByRole("navigation")).queryByText("Administration")).toBeNull();
 
     vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
     renderApp("/");
     await screen.findByRole("heading", { name: "Time Reporting" });
-    expect(screen.queryByText("Administration")).toBeNull();
+    expect(within(screen.getByRole("navigation")).queryByText("Administration")).toBeNull();
   });
 
   it("shows Approvals to a project manager and an admin", async () => {
@@ -80,7 +80,7 @@ describe("navigation", () => {
     renderApp("/");
     await screen.findByRole("heading", { name: "Time Reporting" });
 
-    expect(screen.getByText("Administration")).toBeTruthy();
+    expect(within(screen.getByRole("navigation")).getByText("Administration")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Approvals" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Team" })).toBeNull();
   });

@@ -1,8 +1,10 @@
 import { Group, SimpleGrid, Stack, Title } from "@mantine/core";
 import { useState } from "react";
 
+import { AdminShortcutsCard } from "@/admin/AdminShortcutsCard";
 import { useAuthenticatedUser } from "@/auth/hooks";
-import { canManage } from "@/auth/roles";
+import { canManage, isAccountant, isAdmin } from "@/auth/roles";
+import { AccountantPlaceholderCard } from "@/timesheets/AccountantPlaceholderCard";
 import type { TeamScope } from "@/timesheets/api";
 import { MonthTimeCard } from "@/timesheets/MonthTimeCard";
 import { MyProjectsCard } from "@/timesheets/MyProjectsCard";
@@ -27,6 +29,7 @@ export function DashboardPage() {
     <Stack>
       <Title order={2}>Dashboard</Title>
 
+      <Title order={3}>My time</Title>
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 3, xl: 5 }}>
         <QuickActionsCard />
         <MonthTimeCard userId={user.id} year={year} month={month} highlighted />
@@ -49,6 +52,24 @@ export function DashboardPage() {
             <TeamTimesheetsCard scope={teamScope} />
             <ProjectBillingCard scope={teamScope} />
             <TeamStaffCard scope={teamScope} />
+          </SimpleGrid>
+        </>
+      )}
+
+      {isAccountant(user) && (
+        <>
+          <Title order={3}>Billing</Title>
+          <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
+            <AccountantPlaceholderCard />
+          </SimpleGrid>
+        </>
+      )}
+
+      {isAdmin(user) && (
+        <>
+          <Title order={3}>Administration</Title>
+          <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
+            <AdminShortcutsCard />
           </SimpleGrid>
         </>
       )}

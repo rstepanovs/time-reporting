@@ -51,6 +51,14 @@ export const testAdminOnly: CurrentUser = {
   roles: ["admin"],
 };
 
+export const testAccountant: CurrentUser = {
+  ...testManager,
+  id: "a1d2e3f4-5678-4abc-9def-0123456789ad",
+  name: "Andy Accountant",
+  email: "andy@example.com",
+  roles: ["accountant"],
+};
+
 export const testCustomer: Customer = {
   id: "c1a1a1a1-1111-1111-1111-111111111111",
   name: "Acme Corporation",
