@@ -50,6 +50,26 @@ async def test_admin_list_users_can_exclude_inactive(
     assert response.json()["items"] == []
 
 
+async def test_admin_list_users_can_filter_by_role(
+    client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
+) -> None:
+    admin = await make_user(roles=ADMIN, name="Ada Admin", email="ada-list-role@example.com")
+    manager = await make_user(
+        roles=MANAGER, name="Mark Manager", email="mark-list-role@example.com"
+    )
+    employee = await make_user(
+        roles=EMPLOYEE, name="Emma Employee", email="emma-list-role@example.com"
+    )
+    headers = auth_headers(admin)
+
+    response = await client.get("/api/v1/users", headers=headers, params={"role": ["manager"]})
+
+    assert response.status_code == 200
+    ids = {item["id"] for item in response.json()["items"]}
+    assert ids == {str(admin.id), str(manager.id)}
+    assert str(employee.id) not in ids
+
+
 @pytest.mark.parametrize("roles", [ADMIN, MANAGER])
 async def test_manager_can_search_the_user_directory(
     client: AsyncClient,

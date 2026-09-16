@@ -5,6 +5,7 @@ import {
   Group,
   Loader,
   Menu,
+  MultiSelect,
   Pagination,
   Stack,
   Switch,
@@ -21,11 +22,31 @@ import { RemoveEntityModal } from "@/admin/RemoveEntityModal";
 import { useAuthenticatedUser } from "@/auth/hooks";
 import { EMPLOYEE_LABEL, roleLabels } from "@/auth/roles";
 import { ResetPasswordModal } from "@/users/ResetPasswordModal";
-import { type User, UserRuleError } from "@/users/api";
+import { type User, type UserRole, UserRuleError } from "@/users/api";
 import { useUpdateUser, useUsers } from "@/users/hooks";
 import { UserFormModal } from "@/users/UserFormModal";
 
 const PAGE_SIZE = 20;
+const ROLE_FILTER_OPTIONS = Object.entries(roleLabels).map(([value, label]) => ({ value, label }));
+
+function AccessLevelBadges({ roles }: { roles: UserRole[] }) {
+  if (roles.length === 0) {
+    return (
+      <Badge color="gray" variant="light">
+        {EMPLOYEE_LABEL}
+      </Badge>
+    );
+  }
+  return (
+    <Group gap={4}>
+      {roles.map((role) => (
+        <Badge key={role} variant="light">
+          {roleLabels[role]}
+        </Badge>
+      ))}
+    </Group>
+  );
+}
 
 function RestoreAction({ user }: { user: User }) {
   const updateUser = useUpdateUser(user.id);
@@ -60,9 +81,7 @@ function UserRowActions({ user, isSelf }: { user: User; isSelf: boolean }) {
           </Button>
         </Menu.Target>
         <Menu.Dropdown>
-          <Menu.Item disabled={isSelf} onClick={openEdit}>
-            Edit
-          </Menu.Item>
+          <Menu.Item onClick={openEdit}>Edit</Menu.Item>
           <Menu.Item onClick={openReset}>Reset password</Menu.Item>
           {!user.is_active && <RestoreAction user={user} />}
           <Menu.Divider />
@@ -95,6 +114,7 @@ export function AdminUsersPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch] = useDebouncedValue(search, 300);
   const [includeInactive, setIncludeInactive] = useState(true);
+  const [roleFilter, setRoleFilter] = useState<UserRole[]>([]);
   const [page, setPage] = useState(1);
   const [createOpened, { open: openCreate, close: closeCreate }] = useDisclosure(false);
 
@@ -103,6 +123,7 @@ export function AdminUsersPage() {
     offset: (page - 1) * PAGE_SIZE,
     includeInactive,
     search: debouncedSearch || undefined,
+    roles: roleFilter.length > 0 ? roleFilter : undefined,
   });
 
   function resetToFirstPage() {
@@ -125,6 +146,18 @@ export function AdminUsersPage() {
           value={search}
           onChange={(event) => {
             setSearch(event.currentTarget.value);
+            resetToFirstPage();
+          }}
+          w={280}
+        />
+        <MultiSelect
+          label="Access level"
+          placeholder="Any"
+          clearable
+          data={ROLE_FILTER_OPTIONS}
+          value={roleFilter}
+          onChange={(value) => {
+            setRoleFilter(value as UserRole[]);
             resetToFirstPage();
           }}
           w={280}
@@ -153,7 +186,7 @@ export function AdminUsersPage() {
                 <Table.Tr>
                   <Table.Th>Name</Table.Th>
                   <Table.Th>Email</Table.Th>
-                  <Table.Th>Role</Table.Th>
+                  <Table.Th>Access levels</Table.Th>
                   <Table.Th>Status</Table.Th>
                   <Table.Th>Last login</Table.Th>
                   <Table.Th />
@@ -165,9 +198,7 @@ export function AdminUsersPage() {
                     <Table.Td>{user.name}</Table.Td>
                     <Table.Td>{user.email}</Table.Td>
                     <Table.Td>
-                      {user.roles.length > 0
-                        ? user.roles.map((role) => roleLabels[role]).join(", ")
-                        : EMPLOYEE_LABEL}
+                      <AccessLevelBadges roles={user.roles} />
                     </Table.Td>
                     <Table.Td>
                       <Badge color={user.is_active ? "green" : "gray"} variant="light">

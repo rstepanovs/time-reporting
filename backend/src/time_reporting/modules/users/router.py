@@ -90,9 +90,16 @@ async def list_users(
     offset: Annotated[int, Query(ge=0)] = 0,
     search: Annotated[str | None, Query(max_length=255)] = None,
     include_inactive: bool = True,
+    role: Annotated[list[UserRole] | None, Query()] = None,
 ) -> UserPageResponse:
     page = await bus.query(
-        ListUsers(limit=limit, offset=offset, search=search, include_inactive=include_inactive)
+        ListUsers(
+            limit=limit,
+            offset=offset,
+            search=search,
+            include_inactive=include_inactive,
+            roles=frozenset(role) if role else None,
+        )
     )
     return UserPageResponse.model_validate(page)
 

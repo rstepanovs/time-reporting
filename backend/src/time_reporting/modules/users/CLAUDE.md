@@ -11,9 +11,10 @@ password changes/resets, which invalidates existing JWTs (see the `auth` module)
   `accountant` is a flag only for now (real permissions arrive with the invoices module). Every
   account is implicitly an "employee" — reports time, can be a project member, sees the personal
   dashboard — which is never stored since it can't be granted or taken away.
-- `GET /users` is admin-only. `GET /users/directory` (`ManagerDep`) is a minimal, active-only,
-  search-filtered user list for pickers (e.g. adding a project member or, via a repeated `role` query
-  param backed by `ListUsers.roles`, a project's manager — any-of, only users holding `manager`).
+- `GET /users` (admin-only) and `GET /users/directory` (`ManagerDep`, minimal, active-only fields,
+  for pickers such as adding a project member or, via the same param, a project's manager) both take
+  a repeated `role` query param backed by `ListUsers.roles` — any-of, only users holding at least one
+  of the given levels.
 - Search goes through a repository-level helper built on the shared `db/queries.py:escape_like`;
   the roles filter uses the array column's `overlap()` (Postgres `&&`) for "holds any of".
 - `GetUsersByIds` is the batch query other modules use for display data (names, emails, roles).

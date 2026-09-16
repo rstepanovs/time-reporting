@@ -2118,6 +2118,7 @@ export interface operations {
                 offset?: number;
                 search?: string | null;
                 include_inactive?: boolean;
+                role?: components["schemas"]["UserRole"][] | null;
             };
             header?: never;
             path?: never;

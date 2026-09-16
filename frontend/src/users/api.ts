@@ -15,8 +15,8 @@ export class UserEmailConflictError extends Error {
   }
 }
 
-/** A business rule was violated, e.g. an admin editing their own role (400). The backend's
- * message. */
+/** A business rule was violated, e.g. an admin removing their own administrator access or
+ * deactivating themselves (400). The backend's message. */
 export class UserRuleError extends Error {
   constructor(message: string) {
     super(message);
@@ -55,12 +55,14 @@ export async function searchUserDirectory(params: {
   return data;
 }
 
-/** Admin-only: the full user list (active and inactive by default), for the administration page. */
+/** Admin-only: the full user list (active and inactive by default), for the administration page.
+ * `roles` narrows to users holding any of the given levels. */
 export async function listUsers(params: {
   search?: string;
   includeInactive?: boolean;
   limit?: number;
   offset?: number;
+  roles?: UserRole[];
 }): Promise<UserPage> {
   const { data, response } = await api.GET("/api/v1/users", {
     params: {
@@ -69,6 +71,7 @@ export async function listUsers(params: {
         include_inactive: params.includeInactive,
         limit: params.limit,
         offset: params.offset,
+        role: params.roles,
       },
     },
   });

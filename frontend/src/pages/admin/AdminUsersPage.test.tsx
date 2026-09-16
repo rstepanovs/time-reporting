@@ -54,8 +54,9 @@ describe("AdminUsersPage", () => {
 
     await screen.findByText(testManager.email);
     expect(screen.getByText(testEmployee.email)).toBeTruthy();
-    expect(screen.getByText("Manager")).toBeTruthy();
-    expect(screen.getByText("Employee")).toBeTruthy();
+    const table = screen.getByRole("table");
+    expect(within(table).getByText("Manager")).toBeTruthy();
+    expect(within(table).getByText("Employee")).toBeTruthy();
   });
 
   it("searches with a debounce", async () => {
@@ -160,7 +161,7 @@ describe("AdminUsersPage", () => {
     expect(await screen.findByRole("heading", { name: "Remove user" })).toBeTruthy();
   });
 
-  it("disables edit and remove on the signed-in admin's own row", async () => {
+  it("disables remove, but not edit, on the signed-in admin's own row", async () => {
     vi.mocked(listUsers).mockResolvedValue(page([testAdmin, testEmployee]));
     renderApp("/admin/users");
     const row = (await screen.findByText(testAdmin.email)).closest("tr")!;
@@ -169,7 +170,53 @@ describe("AdminUsersPage", () => {
 
     const editItem = await screen.findByRole("menuitem", { name: "Edit" });
     const removeItem = await screen.findByRole("menuitem", { name: "Remove…" });
-    expect(editItem.getAttribute("data-disabled")).toBe("true");
+    expect(editItem.getAttribute("data-disabled")).toBeNull();
     expect(removeItem.getAttribute("data-disabled")).toBe("true");
+  });
+
+  it("disables the own Administrator checkbox when an admin edits themselves", async () => {
+    vi.mocked(listUsers).mockResolvedValue(page([testAdmin, testEmployee]));
+    renderApp("/admin/users");
+    const row = (await screen.findByText(testAdmin.email)).closest("tr")!;
+
+    fireEvent.click(within(row).getByRole("button", { name: "Actions" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }));
+    const dialog = await screen.findByRole("dialog");
+
+    const adminCheckbox = within(dialog).getByRole("checkbox", { name: /^Administrator/ });
+    const managerCheckbox = within(dialog).getByRole("checkbox", { name: /^Manager/ });
+    expect((adminCheckbox as HTMLInputElement).disabled).toBe(true);
+    expect((managerCheckbox as HTMLInputElement).disabled).toBe(false);
+  });
+
+  it("creates a user with multiple access levels", async () => {
+    vi.mocked(createUser).mockResolvedValue({ ...testAdmin, id: "new-id" });
+    renderApp("/admin/users");
+    await screen.findByText(testManager.email);
+
+    fireEvent.click(screen.getByRole("button", { name: "New user" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText(/^name/i), { target: { value: "Max Multi" } });
+    fireEvent.change(within(dialog).getByLabelText(/^email/i), {
+      target: { value: "max@example.com" },
+    });
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: /^Administrator/ }));
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: /^Manager/ }));
+    fireEvent.change(within(dialog).getByLabelText(/^password/i), {
+      target: { value: "a-strong-password" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create user" }));
+
+    await waitFor(() =>
+      expect(createUser).toHaveBeenCalledWith(
+        {
+          name: "Max Multi",
+          email: "max@example.com",
+          roles: ["admin", "manager"],
+          password: "a-strong-password",
+        },
+        expect.anything(),
+      ),
+    );
   });
 });
