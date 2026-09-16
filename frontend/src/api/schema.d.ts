@@ -786,10 +786,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/backups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Backups */
+        get: operations["list_backups_api_v1_admin_backups_get"];
+        put?: never;
+        /** Create Backup */
+        post: operations["create_backup_api_v1_admin_backups_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/backups/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Backup */
+        get: operations["download_backup_api_v1_admin_backups__name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** BackupListResponse */
+        BackupListResponse: {
+            /** Backups */
+            backups: components["schemas"]["BackupResponse"][];
+            /** Last Backup At */
+            last_backup_at: string | null;
+        };
+        /** BackupResponse */
+        BackupResponse: {
+            /** Name */
+            name: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Revision */
+            revision: string | null;
+            /** Size Bytes */
+            size_bytes: number;
+        };
         /** BillingAddressRequest */
         BillingAddressRequest: {
             /** Line1 */
@@ -1560,6 +1616,12 @@ export interface components {
             holiday_subdivision: string | null;
             /** Daily Working Hours */
             daily_working_hours: string;
+            /** Backup Dir */
+            backup_dir: string;
+            /** Backup Retention Count */
+            backup_retention_count: number;
+            /** Backup Timeout Seconds */
+            backup_timeout_seconds: number;
         };
         /** SystemStatusResponse */
         SystemStatusResponse: {
@@ -1577,6 +1639,8 @@ export interface components {
             started_at: string;
             /** Uptime Seconds */
             uptime_seconds: number;
+            /** Last Backup At */
+            last_backup_at: string | null;
         };
         /** TableStatsResponse */
         TableStatsResponse: {
@@ -4220,6 +4284,77 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SystemConfigResponse"];
+                };
+            };
+        };
+    };
+    list_backups_api_v1_admin_backups_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupListResponse"];
+                };
+            };
+        };
+    };
+    create_backup_api_v1_admin_backups_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupResponse"];
+                };
+            };
+        };
+    };
+    download_backup_api_v1_admin_backups__name__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

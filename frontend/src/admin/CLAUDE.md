@@ -4,8 +4,8 @@ The shared archive-or-delete UI for users, customers and projects, plus the dash
 Administration section. Backend: `modules/admin`.
 
 - `AdminShortcutsCard.tsx` — the dashboard's Administration section for `admin` users: a single
-  `DashboardCard` with link-only shortcuts to Users/Customers/Projects/Calendar/System status, no
-  data calls.
+  `DashboardCard` with link-only shortcuts to Users/Customers/Projects/Calendar/Backups/System
+  status, no data calls.
 
 - `api.ts` — `getRemovalImpact`/`removeEntity` against `/api/v1/admin/...`, plus
   `RemovalBlockedError` (409, carries `blockers`), `RemovalRuleError` (400) and
@@ -25,6 +25,6 @@ Administration section. Backend: `modules/admin`.
   their own row in `UserFormModal`, mirroring the backend guard), and cannot remove themselves from
   `AdminUsersPage`.
 - `AdminCalendarPage` — non-working days, via `calendar/`.
-- `AdminSystemStatusPage` (`/admin/status`) — health badges (polled directly, no area of their own)
-  plus Versions/Database/Tables/Uptime/Configuration cards backed by `system/`; see
-  `system/CLAUDE.md`.
+- `AdminBackupsPage` (`/admin/backups`) and `AdminSystemStatusPage` (`/admin/status`, health badges
+  polled directly, no area of their own, plus Versions/Database/Tables/Uptime/Backups/Configuration
+  cards) — both backed by `system/`; see `system/CLAUDE.md`.

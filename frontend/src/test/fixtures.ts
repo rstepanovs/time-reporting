@@ -2,7 +2,7 @@ import type { CurrentUser } from "@/auth/api";
 import type { CalendarDay, NonWorkingDay } from "@/calendar/api";
 import type { Customer } from "@/customers/api";
 import type { BillingItem, Project, ProjectMember } from "@/projects/api";
-import type { SystemConfig, SystemStatus } from "@/system/api";
+import type { Backup, BackupList, SystemConfig, SystemStatus } from "@/system/api";
 import type {
   MonthCalendar,
   MonthHours,
@@ -159,6 +159,7 @@ export const testSystemStatus: SystemStatus = {
   ],
   started_at: "2026-09-15T08:00:00Z",
   uptime_seconds: 93_784,
+  last_backup_at: "2026-09-16T02:00:00Z",
 };
 
 export const testSystemConfig: SystemConfig = {
@@ -172,6 +173,21 @@ export const testSystemConfig: SystemConfig = {
   holiday_country: "DE",
   holiday_subdivision: "BE",
   daily_working_hours: "8.00",
+  backup_dir: "/var/backups/time-reporting",
+  backup_retention_count: 14,
+  backup_timeout_seconds: 300,
+};
+
+export const testBackup: Backup = {
+  name: "time-reporting-20260916T020000Z-0010_add_audit_events.dump",
+  created_at: "2026-09-16T02:00:00Z",
+  revision: "0010_add_audit_events",
+  size_bytes: 52_428_800,
+};
+
+export const testBackupList: BackupList = {
+  backups: [testBackup],
+  last_backup_at: testBackup.created_at,
 };
 
 export const testNonWorkingDay: NonWorkingDay = {

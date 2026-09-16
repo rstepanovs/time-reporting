@@ -1,11 +1,30 @@
-import { Alert, Badge, Card, Group, Loader, SimpleGrid, Stack, Table, Text, Title } from "@mantine/core";
+import {
+  Alert,
+  Anchor,
+  Badge,
+  Card,
+  Group,
+  Loader,
+  SimpleGrid,
+  Stack,
+  Table,
+  Text,
+  Title,
+} from "@mantine/core";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { Link } from "react-router";
 
 import { api } from "@/api/client";
 import type { SystemStatus } from "@/system/api";
+import { formatBytes } from "@/system/format";
 import { useSystemConfig, useSystemStatus } from "@/system/hooks";
 
 const POLL_INTERVAL_MS = 10_000;
+// Matches `BACKUP_INTERVAL_HOURS`'s default in compose.yaml; the actual configured interval isn't
+// part of `GetSystemConfig` (it only governs the `backup` service's schedule), so this warns
+// generously at 2x the default rather than not warning at all.
+const STALE_BACKUP_THRESHOLD_MS = 2 * 24 * 60 * 60 * 1000;
 
 function useProbe(key: string, request: () => Promise<{ response: Response }>) {
   return useQuery({
@@ -30,17 +49,6 @@ function ProbeRow({ name, probe }: { name: string; probe: UseQueryResult<boolean
       <Badge color={color}>{label}</Badge>
     </Group>
   );
-}
-
-function formatBytes(bytes: number): string {
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let value = bytes;
-  let unitIndex = 0;
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex += 1;
-  }
-  return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
 }
 
 function formatUptime(seconds: number): string {
@@ -146,6 +154,45 @@ function UptimeCard({ status }: { status: SystemStatus }) {
   );
 }
 
+/** `Date.now()`, kept in state (not read directly during render, which React's purity rule flags
+ * as impure) and refreshed on the same cadence as the health probes. */
+function useNow(): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), POLL_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
+
+function BackupsCard({ lastBackupAt }: { lastBackupAt: string | null }) {
+  const now = useNow();
+  const isStale =
+    lastBackupAt === null || now - new Date(lastBackupAt).getTime() > STALE_BACKUP_THRESHOLD_MS;
+
+  return (
+    <Card withBorder>
+      <Stack gap="sm">
+        <Group justify="space-between">
+          <Text fw={500}>Backups</Text>
+          <Anchor component={Link} to="/admin/backups" size="sm">
+            Manage →
+          </Anchor>
+        </Group>
+        {isStale && (
+          <Alert color="orange" variant="light">
+            {lastBackupAt ? "The last backup is older than expected." : "No backup has been made yet."}
+          </Alert>
+        )}
+        <Group justify="space-between">
+          <Text>Last backup</Text>
+          <Text c="dimmed">{lastBackupAt ? new Date(lastBackupAt).toLocaleString() : "never"}</Text>
+        </Group>
+      </Stack>
+    </Card>
+  );
+}
+
 function ConfigurationCard() {
   const config = useSystemConfig();
 
@@ -175,6 +222,9 @@ function ConfigurationCard() {
     ["Auth cookie secure", config.data.auth_cookie_secure ? "yes" : "no"],
     ["Holiday calendar", holiday],
     ["Daily working hours", config.data.daily_working_hours],
+    ["Backup directory", config.data.backup_dir],
+    ["Backup retention", `${config.data.backup_retention_count} backups`],
+    ["Backup timeout", `${config.data.backup_timeout_seconds} s`],
   ];
 
   return (
@@ -215,6 +265,7 @@ export function AdminSystemStatusPage() {
           <DatabaseCard database={status.data.database} />
           <TablesCard tables={status.data.tables} />
           <UptimeCard status={status.data} />
+          <BackupsCard lastBackupAt={status.data.last_backup_at} />
           <ConfigurationCard />
         </SimpleGrid>
       )}

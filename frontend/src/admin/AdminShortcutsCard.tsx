@@ -8,6 +8,7 @@ const ADMIN_SHORTCUTS = [
   { to: "/admin/customers", label: "Customers" },
   { to: "/admin/projects", label: "Projects" },
   { to: "/admin/calendar", label: "Calendar" },
+  { to: "/admin/backups", label: "Backups" },
   { to: "/admin/status", label: "System status" },
 ];
 

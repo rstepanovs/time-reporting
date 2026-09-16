@@ -3,6 +3,7 @@ import { createBrowserRouter, Navigate, type RouteObject } from "react-router";
 import { RequireAuth } from "@/auth/RequireAuth";
 import { RequireRole } from "@/auth/RequireRole";
 import { AppLayout } from "@/components/AppLayout";
+import { AdminBackupsPage } from "@/pages/admin/AdminBackupsPage";
 import { AdminCalendarPage } from "@/pages/admin/AdminCalendarPage";
 import { AdminCustomersPage } from "@/pages/admin/AdminCustomersPage";
 import { AdminProjectsPage } from "@/pages/admin/AdminProjectsPage";
@@ -53,6 +54,7 @@ export const routes: RouteObject[] = [
               { path: "customers", element: <AdminCustomersPage /> },
               { path: "projects", element: <AdminProjectsPage /> },
               { path: "calendar", element: <AdminCalendarPage /> },
+              { path: "backups", element: <AdminBackupsPage /> },
               { path: "status", element: <AdminSystemStatusPage /> },
             ],
           },
