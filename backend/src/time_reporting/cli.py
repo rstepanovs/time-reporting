@@ -5,13 +5,22 @@ import asyncio
 import getpass
 import sys
 from collections.abc import Awaitable, Callable, Sequence
+from pathlib import Path
 
 from pydantic import EmailStr, TypeAdapter, ValidationError
 
+from time_reporting.core.config import get_settings
 from time_reporting.core.cqrs import Bus
 from time_reporting.core.passwords import PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH
 from time_reporting.db.session import SessionFactory, engine
 from time_reporting.modules.registry import build_registry
+from time_reporting.modules.system.backup_service import BackupService, parse_backup_filename
+from time_reporting.modules.system.contracts import (
+    BackupFailedError,
+    BackupInfoDTO,
+    BackupInProgressError,
+    CreateBackup,
+)
 from time_reporting.modules.users.contracts import (
     CreateUser,
     EmailAlreadyExistsError,
@@ -44,6 +53,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _seed_demo_command(args)
     if args.command == "import-holidays":
         return _import_holidays_command(args)
+    if args.command == "backup":
+        return _backup_command(args)
+    if args.command == "restore":
+        return _restore_command(args)
     return _create_admin_command(args)
 
 
@@ -79,6 +92,22 @@ def _build_parser() -> argparse.ArgumentParser:
         "existing non-working days (imported or manual) are left untouched",
     )
     import_holidays_parser.add_argument("--year", required=True, type=int)
+
+    backup_parser = commands.add_parser("backup", help="create a pg_dump backup of the database")
+    backup_parser.add_argument(
+        "--if-pending-migrations",
+        action="store_true",
+        help="only back up if the database has been migrated before and isn't already at head "
+        "(used by the `migrate` service, before applying pending migrations)",
+    )
+
+    restore_parser = commands.add_parser(
+        "restore", help="restore the database from a backup file (destructive; stops the app)"
+    )
+    restore_parser.add_argument("file", help="path to a .dump file, e.g. one from `backup`")
+    restore_parser.add_argument(
+        "--yes", action="store_true", help="confirm the restore; refused without this"
+    )
     return parser
 
 
@@ -149,6 +178,38 @@ def _import_holidays_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def _backup_command(args: argparse.Namespace) -> int:
+    try:
+        backup = asyncio.run(
+            _backup_in_database(only_if_migrations_pending=args.if_pending_migrations)
+        )
+    except (BackupInProgressError, BackupFailedError) as exc:
+        return _fail(str(exc))
+    if backup is None:
+        print("Database is already at head; nothing to back up")
+        return 0
+    print(f"Created backup {backup.name}")
+    return 0
+
+
+def _restore_command(args: argparse.Namespace) -> int:
+    if not args.yes:
+        return _fail("refusing to restore without --yes (this replaces the database's contents)")
+
+    path = Path(args.file)
+    parsed = parse_backup_filename(path.name)
+    if parsed is not None:
+        _, revision = parsed
+        print(f"Restoring backup from revision {revision or 'unknown'}")
+
+    try:
+        asyncio.run(_restore_in_database(path))
+    except BackupFailedError as exc:
+        return _fail(str(exc))
+    print(f"Restored database from {path}")
+    return 0
+
+
 async def _create_admin_in_database(*, name: str, email: str, password: str) -> UserDTO:
     return await _with_bus(lambda bus: create_admin(bus, name=name, email=email, password=password))
 
@@ -159,6 +220,19 @@ async def _seed_demo_in_database(*, password: str) -> SeedReport:
 
 async def _import_holidays_in_database(*, year: int) -> int:
     return await _with_bus(lambda bus: bus.execute(ImportPublicHolidays(year=year)))
+
+
+async def _backup_in_database(*, only_if_migrations_pending: bool) -> BackupInfoDTO | None:
+    return await _with_bus(
+        lambda bus: bus.execute(CreateBackup(only_if_migrations_pending=only_if_migrations_pending))
+    )
+
+
+async def _restore_in_database(path: Path) -> None:
+    # Deliberately not `_with_bus`: a restore replaces the whole database from the outside (a
+    # `pg_restore` subprocess), independent of the app's session/engine — there is nothing for a
+    # `Bus` to do here.
+    await BackupService(get_settings()).restore(path)
 
 
 async def _with_bus[T](action: Callable[[Bus], Awaitable[T]]) -> T:

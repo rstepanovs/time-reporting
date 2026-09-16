@@ -46,6 +46,10 @@ async def test_admin_can_get_system_status(
     assert database["current_revision"] == database["head_revision"]
     assert database["migrations_pending"] is False
     assert any(table["name"] == "users" for table in body["tables"])
+    # No backup was made in this test; whether an older run of `time-reporting backup` happened to
+    # leave one in the configured backup_dir is environment-dependent, so only check the field is
+    # reported (a datetime or None), not its exact value.
+    assert "last_backup_at" in body
 
 
 async def test_admin_can_get_system_config_without_secrets(
@@ -68,4 +72,7 @@ async def test_admin_can_get_system_config_without_secrets(
         "holiday_country",
         "holiday_subdivision",
         "daily_working_hours",
+        "backup_dir",
+        "backup_retention_count",
+        "backup_timeout_seconds",
     }

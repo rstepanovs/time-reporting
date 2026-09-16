@@ -22,10 +22,12 @@ class SystemService:
     def __init__(self, repository: SystemRepository) -> None:
         self._repository = repository
 
-    async def get_status(self, *, started_at: datetime) -> SystemStatusDTO:
+    async def get_status(
+        self, *, started_at: datetime, last_backup_at: datetime | None
+    ) -> SystemStatusDTO:
         settings = get_settings()
         current_revision = await self._repository.get_current_revision()
-        head_revision = _get_head_revision(settings.alembic_config_path)
+        head_revision = get_head_revision(settings.alembic_config_path)
         database = DatabaseStatusDTO(
             server_version=await self._repository.get_server_version(),
             size_bytes=await self._repository.get_database_size(),
@@ -41,13 +43,14 @@ class SystemService:
             tables=await self._repository.get_table_stats(),
             started_at=started_at,
             uptime_seconds=(datetime.now(UTC) - started_at).total_seconds(),
+            last_backup_at=last_backup_at,
         )
 
     async def get_config(self) -> SystemConfigDTO:
         return _config_dto(get_settings())
 
 
-def _get_head_revision(alembic_config_path: str) -> str | None:
+def get_head_revision(alembic_config_path: str) -> str | None:
     config = Config(alembic_config_path)
     script = ScriptDirectory.from_config(config)
     return script.get_current_head()
@@ -63,4 +66,7 @@ def _config_dto(settings: Settings) -> SystemConfigDTO:
         holiday_country=settings.holiday_country,
         holiday_subdivision=settings.holiday_subdivision,
         daily_working_hours=settings.daily_working_hours,
+        backup_dir=settings.backup_dir,
+        backup_retention_count=settings.backup_retention_count,
+        backup_timeout_seconds=settings.backup_timeout_seconds,
     )

@@ -33,6 +33,7 @@ class SystemStatusResponse(BaseModel):
     tables: list[TableStatsResponse]
     started_at: datetime
     uptime_seconds: float
+    last_backup_at: datetime | None
 
 
 class SystemConfigResponse(BaseModel):
@@ -46,3 +47,22 @@ class SystemConfigResponse(BaseModel):
     holiday_country: str
     holiday_subdivision: str | None
     daily_working_hours: Decimal
+    backup_dir: str
+    backup_retention_count: int
+    backup_timeout_seconds: int
+
+
+class BackupResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str
+    created_at: datetime
+    revision: str | None
+    size_bytes: int
+
+
+class BackupListResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    backups: list[BackupResponse]
+    last_backup_at: datetime | None

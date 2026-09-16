@@ -2,6 +2,7 @@
 
 import io
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -9,6 +10,11 @@ import pytest
 from support import DEFAULT_PASSWORD, UserFactory
 from time_reporting.cli import create_admin, main
 from time_reporting.core.cqrs import Bus
+from time_reporting.modules.system.contracts import (
+    BackupFailedError,
+    BackupInfoDTO,
+    BackupInProgressError,
+)
 from time_reporting.modules.users.contracts import EmailAlreadyExistsError, UserDTO, UserRole
 from time_reporting.modules.work_calendar.contracts import HolidayCountryNotSupportedError
 
@@ -177,3 +183,108 @@ def test_import_holidays_reports_unsupported_country(
 
     assert exit_code == 1
     assert "not supported" in capsys.readouterr().err
+
+
+# --- backup / restore ---
+
+
+def _fake_backup(*, revision: str | None = "abcdef012345") -> BackupInfoDTO:
+    return BackupInfoDTO(
+        name=f"time-reporting-20260101T000000Z-{revision or 'unknown'}.dump",
+        created_at=datetime.now(UTC),
+        revision=revision,
+        size_bytes=1024,
+    )
+
+
+def _stub_backup(
+    monkeypatch: pytest.MonkeyPatch, outcome: BackupInfoDTO | Exception | None
+) -> None:
+    async def fake_backup_in_database(*, only_if_migrations_pending: bool) -> BackupInfoDTO | None:
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    monkeypatch.setattr("time_reporting.cli._backup_in_database", fake_backup_in_database)
+
+
+def test_backup_prints_the_created_name(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _stub_backup(monkeypatch, _fake_backup())
+
+    exit_code = main(["backup"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "Created backup time-reporting-20260101T000000Z-abcdef012345.dump" in out
+
+
+def test_backup_if_pending_migrations_with_nothing_to_do_reports_that(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _stub_backup(monkeypatch, None)
+
+    exit_code = main(["backup", "--if-pending-migrations"])
+
+    assert exit_code == 0
+    assert "nothing to back up" in capsys.readouterr().out
+
+
+def test_backup_reports_a_conflict(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _stub_backup(monkeypatch, BackupInProgressError())
+
+    exit_code = main(["backup"])
+
+    assert exit_code == 1
+    assert "already in progress" in capsys.readouterr().err
+
+
+def test_backup_reports_a_failure(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _stub_backup(monkeypatch, BackupFailedError())
+
+    exit_code = main(["backup"])
+
+    assert exit_code == 1
+    assert "Backup failed" in capsys.readouterr().err
+
+
+def test_restore_refuses_without_yes(capsys: pytest.CaptureFixture[str]) -> None:
+    exit_code = main(["restore", "time-reporting-20260101T000000Z-abcdef012345.dump"])
+
+    assert exit_code == 1
+    assert "--yes" in capsys.readouterr().err
+
+
+def test_restore_prints_the_revision_and_confirms(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    async def fake_restore_in_database(path: Path) -> None:
+        assert path == Path("time-reporting-20260101T000000Z-abcdef012345.dump")
+
+    monkeypatch.setattr("time_reporting.cli._restore_in_database", fake_restore_in_database)
+
+    exit_code = main(["restore", "time-reporting-20260101T000000Z-abcdef012345.dump", "--yes"])
+
+    out = capsys.readouterr().out
+    assert exit_code == 0
+    assert "revision abcdef012345" in out
+    assert "Restored database from" in out
+
+
+def test_restore_reports_a_failure(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    async def fake_restore_in_database(path: Path) -> None:
+        raise BackupFailedError()
+
+    monkeypatch.setattr("time_reporting.cli._restore_in_database", fake_restore_in_database)
+
+    exit_code = main(["restore", "backup.dump", "--yes"])
+
+    assert exit_code == 1
+    assert "Backup failed" in capsys.readouterr().err

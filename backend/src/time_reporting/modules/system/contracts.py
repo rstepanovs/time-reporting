@@ -7,8 +7,9 @@ process and application settings. No other module depends on this one.
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
+from pathlib import Path
 
-from time_reporting.core.cqrs import Query
+from time_reporting.core.cqrs import Command, Query
 
 # --- DTOs ---
 
@@ -39,6 +40,7 @@ class SystemStatusDTO:
     tables: tuple[TableStatsDTO, ...]
     started_at: datetime
     uptime_seconds: float
+    last_backup_at: datetime | None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -53,6 +55,25 @@ class SystemConfigDTO:
     holiday_country: str
     holiday_subdivision: str | None
     daily_working_hours: Decimal
+    backup_dir: str
+    backup_retention_count: int
+    backup_timeout_seconds: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class BackupInfoDTO:
+    name: str
+    created_at: datetime
+    # The alembic revision the database was at when the dump was taken; `None` only for a dump
+    # made before the database had ever been migrated.
+    revision: str | None
+    size_bytes: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class BackupListDTO:
+    backups: tuple[BackupInfoDTO, ...]
+    last_backup_at: datetime | None
 
 
 # --- Queries ---
@@ -68,3 +89,51 @@ class GetSystemStatus(Query[SystemStatusDTO]):
 @dataclass(frozen=True, slots=True, kw_only=True)
 class GetSystemConfig(Query[SystemConfigDTO]):
     pass
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ListBackups(Query[BackupListDTO]):
+    pass
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetBackupPath(Query[Path]):
+    """Resolves a backup file name to its path on disk, for the download endpoint."""
+
+    name: str
+
+
+# --- Commands ---
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CreateBackup(Command[BackupInfoDTO | None]):
+    # Used by `migrate` before applying pending migrations: only back up (and return non-`None`)
+    # when the database has already been migrated at least once and isn't already at head.
+    only_if_migrations_pending: bool = False
+
+
+# --- Exceptions ---
+
+
+class SystemError(Exception):
+    """Base class for system module domain errors."""
+
+
+class BackupInProgressError(SystemError):
+    def __init__(self) -> None:
+        super().__init__("A backup is already in progress")
+
+
+class BackupFailedError(SystemError):
+    """`pg_dump`/`pg_restore` exited non-zero or timed out. The stderr tail is logged, never
+    included here — it may contain connection details."""
+
+    def __init__(self, message: str = "Backup failed; see server logs for details") -> None:
+        super().__init__(message)
+
+
+class BackupNotFoundError(SystemError):
+    def __init__(self, name: str) -> None:
+        super().__init__(f"Backup {name!r} not found")
+        self.name = name

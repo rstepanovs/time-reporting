@@ -81,8 +81,9 @@ head`) → `backend` → `frontend` (nginx, proxies `/api/` to `backend`).
 - **`migrations/env.py`** — async Alembic environment; reads the DB URL from `Settings`, not from
   `alembic.ini`, so it always agrees with the running app.
 - **`cli.py`** — the `time-reporting` console script (`[project.scripts]` in `backend/pyproject.toml`);
-  `create-admin`, `seed-demo` and `import-holidays`, each run through a `Bus` built the same way as in
-  a request.
+  `create-admin`, `seed-demo`, `import-holidays` and `backup` each run through a `Bus` built the same
+  way as in a request; `restore` is the one exception — it replaces the whole database from the
+  outside via `BackupService`, so it bypasses the bus/session entirely.
 - **`seed.py`** — idempotent demo data for local development; tests seed uniquely renamed copies,
   because the test database doubles as the dev database. Details: the `seed-test-data` skill.
 - **Shared kernel** (not owned by a module): `core/passwords.py` (Argon2id via `pwdlib`, hashing off
@@ -123,7 +124,8 @@ Modules (each documented in its own `CLAUDE.md`):
   billing handoff and locking.
 - **`admin`** — no tables; orchestrates archiving/permanent deletion of users, customers, projects.
 - **`system`** — no tables; backend/database version and status, non-secret configuration view, read
-  from PostgreSQL catalogs and application settings, under `/admin/system/*`.
+  from PostgreSQL catalogs and application settings, under `/admin/system/*`; `pg_dump`/`pg_restore`
+  backups (`BackupService`) under `/admin/backups/*` (restore is CLI-only, never over HTTP).
 
 Permanently deleting any entity is admin-only and goes through the `admin` module; archiving uses the
 owning module's `PATCH` endpoint (`ManagerDep`).

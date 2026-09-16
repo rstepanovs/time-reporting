@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     # directory (`/app`), where `backend/alembic.ini` is also copied.
     alembic_config_path: str = "backend/alembic.ini"
 
+    # Where `pg_dump` backups are written; `/var/backups/time-reporting` (a named volume) in
+    # compose. A relative path resolves against the process's working directory.
+    backup_dir: str = "backups"
+    backup_retention_count: int = Field(default=14, gt=0)
+    backup_timeout_seconds: int = Field(default=300, gt=0)
+
     cors_origins: list[str] = ["http://localhost:5173"]
 
     # Signs and verifies JWT access tokens; generate with `openssl rand -hex 32`.

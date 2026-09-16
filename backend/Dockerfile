@@ -27,6 +27,19 @@ FROM python:3.13-slim-bookworm
 
 ARG GIT_SHA
 
+# Debian bookworm ships only PostgreSQL 15's client, which can't `pg_dump`/`pg_restore` against a
+# 17 server (`db`'s image, compose.yaml) — pull `postgresql-client-17` from the PGDG apt repo
+# instead.
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates gnupg \
+    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+        | gpg --dearmor -o /usr/share/keyrings/postgresql.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+        > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-client-17 \
+    && apt-get purge -y --auto-remove curl gnupg \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN groupadd --system app && useradd --system --gid app --home-dir /app app
 
 WORKDIR /app
