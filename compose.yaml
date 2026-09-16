@@ -4,6 +4,8 @@ x-backend-env: &backend-env
   DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-time_reporting}:${POSTGRES_PASSWORD:-time_reporting}@db:5432/${POSTGRES_DB:-time_reporting}
   CORS_ORIGINS: '["http://localhost:8080"]'
   JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set JWT_SECRET_KEY in .env}
+  BACKUP_DIR: /var/backups/time-reporting
+  BACKUP_RETENTION_COUNT: ${BACKUP_RETENTION_COUNT:-14}
 
 services:
   db:
@@ -26,8 +28,17 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    command: ["alembic", "-c", "backend/alembic.ini", "upgrade", "head"]
+    # Back up first (skipped if the database has never been migrated, or is already at head), so a
+    # failed migration can be rolled back with `restore` — see docs/operations.md.
+    command:
+      [
+        "sh",
+        "-c",
+        "time-reporting backup --if-pending-migrations && alembic -c backend/alembic.ini upgrade head",
+      ]
     environment: *backend-env
+    volumes:
+      - backups:/var/backups/time-reporting
     depends_on:
       db:
         condition: service_healthy
@@ -39,8 +50,30 @@ services:
       args:
         GIT_SHA: ${GIT_SHA:-}
     environment: *backend-env
+    volumes:
+      - backups:/var/backups/time-reporting
     ports:
       - "8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  backup:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command:
+      [
+        "sh",
+        "-c",
+        "while true; do time-reporting backup; sleep \"$${BACKUP_INTERVAL_HOURS:-24}h\"; done",
+      ]
+    environment:
+      <<: *backend-env
+      BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS:-24}
+    volumes:
+      - backups:/var/backups/time-reporting
+    restart: unless-stopped
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -55,5 +88,24 @@ services:
     depends_on:
       - backend
 
+  # Optional: `docker compose --profile tools up pgadmin`. Bound to localhost only; see
+  # docs/operations.md for using it against a remote host over an SSH tunnel.
+  pgadmin:
+    image: dpage/pgadmin4:9
+    profiles: ["tools"]
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-change-me}
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+      - ./deploy/pgadmin/servers.json:/pgadmin4/servers.json:ro
+    ports:
+      - "127.0.0.1:${PGADMIN_PORT:-5050}:80"
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   db-data:
+  backups:
+  pgadmin-data:

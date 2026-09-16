@@ -48,6 +48,11 @@ COPY --from=builder --chown=app:app /app/.venv /app/.venv
 COPY --chown=app:app backend/alembic.ini backend/alembic.ini
 COPY --chown=app:app backend/migrations backend/migrations
 
+# `compose.yaml` mounts the `backups` named volume here; a directory owned by `app` must already
+# exist in the image, otherwise Docker initializes the empty volume as root-owned and `app` can't
+# write to it.
+RUN mkdir -p /var/backups/time-reporting && chown app:app /var/backups/time-reporting
+
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     APP_GIT_SHA=$GIT_SHA

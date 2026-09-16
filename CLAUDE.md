@@ -55,8 +55,13 @@ cp .env.example .env
 docker compose up --build   # frontend :8080, backend :8000
 ```
 
-`compose.yaml` runs services in dependency order: `db` (Postgres) → `migrate` (one-shot `alembic upgrade
-head`) → `backend` → `frontend` (nginx, proxies `/api/` to `backend`).
+`compose.yaml` runs services in dependency order: `db` (Postgres) → `migrate` (one-shot: backs up first
+via `time-reporting backup --if-pending-migrations`, then `alembic upgrade head`) → `backend` →
+`frontend` (nginx, proxies `/api/` to `backend`). A `backup` service loops `time-reporting backup`
+every `BACKUP_INTERVAL_HOURS`; all three backend-image services share the `backups` named volume
+(`/var/backups/time-reporting`). An optional `pgadmin` service (profile `tools`, `127.0.0.1` only:
+`docker compose --profile tools up pgadmin`) pre-registers the `db` server from
+`deploy/pgadmin/servers.json`.
 
 ## Architecture
 
