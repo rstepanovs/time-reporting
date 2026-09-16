@@ -1,7 +1,7 @@
 """Timesheets HTTP API.
 
-Every authenticated user reads and writes their own week/dashboard; admins and project managers
-may also read (but not write) another user's data.
+Every authenticated user reads and writes their own week/dashboard; managers may also read (but
+not write) another user's data.
 """
 
 from datetime import date

@@ -108,7 +108,7 @@ export async function submitTimesheetWeek(weekStart: string): Promise<TimesheetW
   return data;
 }
 
-/** Approve `userId`'s submitted week (admin/project manager only). */
+/** Approve `userId`'s submitted week (manager only). */
 export async function approveTimesheetWeek(params: {
   weekStart: string;
   userId: string;

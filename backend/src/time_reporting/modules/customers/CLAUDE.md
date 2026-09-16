@@ -4,8 +4,8 @@ Owns the `Customer` entity: name, legal details, a structured billing address (I
 country), a billing period (`interval_count` × `BillingIntervalUnit`, counted from `anchor_date`),
 currency (ISO 4217) and payment terms.
 
-- Any authenticated user can read customers; writes require `ManagerDep` (`admin` or
-  `project_manager`).
+- Any authenticated user can read customers; writes require `ManagerDep` (the `manager` access
+  level).
 - `UpdateCustomer` treats `None` as "unchanged"; optional text fields are cleared by naming them in
   `clear_fields`, which the router fills from fields sent as JSON `null`.
 - `ListCustomers` filters by a `search` substring against name or legal name (via the shared

@@ -1,4 +1,4 @@
-"""Read-side aggregation for the worker dashboard: a month calendar, a year's hours by month, a
+"""Read-side aggregation for the employee dashboard: a month calendar, a year's hours by month, a
 single month's time (hours + benefits) and a rolling window of weekly hours. Kept separate from
 ``service.py`` (week read/write) since this is pure aggregation over already-saved entries — it
 never writes.

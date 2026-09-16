@@ -41,8 +41,9 @@ class Project(TimestampMixin, Base):
     # Archived by default (billing data will reference projects); the admin module can permanently
     # delete one that nothing references yet.
     is_active: Mapped[bool] = mapped_column(default=True, server_default=true())
-    # The one manager responsible for this project (an active admin/project_manager); referenced
-    # by table name, never by importing users.models. Nullable: not every project has one yet.
+    # The one manager responsible for this project (an active user holding the manager level);
+    # referenced by table name, never by importing users.models. Nullable: not every project has
+    # one yet.
     manager_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), index=True
     )

@@ -70,7 +70,7 @@ const NAV_ITEMS = [
   { to: "/projects", label: "Projects" },
 ];
 
-// Shown only to admins/project managers, right after "My hours".
+// Shown only to managers, right after "My hours".
 const APPROVALS_NAV_ITEM = { to: "/approvals", label: "Approvals" };
 const TEAM_NAV_ITEM = { to: "/team", label: "Team" };
 

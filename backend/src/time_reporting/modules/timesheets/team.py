@@ -1,7 +1,7 @@
 """Read-side aggregation for a manager's team overview: timesheet status and hours across every
 project a manager (or, for an admin's "all" view, every active project) manages, plus each
 project's billing-period readiness (the "send to billing" handoff itself is a command added
-alongside ``ProjectBillingPeriod``). Kept separate from ``summary.py`` (a worker's own dashboard)
+alongside ``ProjectBillingPeriod``). Kept separate from ``summary.py`` (an employee's own dashboard)
 and ``service.py`` (week read/write), but reuses their pure helpers.
 """
 

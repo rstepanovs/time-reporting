@@ -55,7 +55,7 @@ Depends on: `projects.contracts` (`ListMemberProjectsWithBillingItems`,
   quantity via `TimeEntryRepository.sum_hours_by_user_week`, optional `manager_id` for the "my
   projects" scope) backs the frontend's approvals page.
 
-## Worker dashboard queries
+## Employee dashboard queries
 
 All follow the week endpoint's view rule (own data, or another user's for a `manager`) via the HTTP
 layer's `_resolve_target_user`. `today` is a field of each query (the router fills in the real

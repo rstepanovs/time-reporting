@@ -12,7 +12,7 @@ type Props = {
 };
 
 /** Loads and renders one user's month calendar. Reusable wherever a month calendar is needed
- * (the `/hours` page, a manager's view of a worker's month, ...) — see `MonthCalendarTable` for
+ * (the `/hours` page, a manager's view of an employee's month, ...) — see `MonthCalendarTable` for
  * the presentational half if the data is already at hand. */
 export function MonthCalendar({ userId, year, month, today, title }: Props) {
   const query = useMonthCalendar(userId, year, month);

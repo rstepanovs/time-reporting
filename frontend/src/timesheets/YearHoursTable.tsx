@@ -10,7 +10,7 @@ type Props = {
 };
 
 /** Loads and renders one user's year of hours. Reusable wherever a year table is needed (the
- * `/hours` page, a manager's view of a worker's year, ...) — see `YearHoursTableView` for the
+ * `/hours` page, a manager's view of an employee's year, ...) — see `YearHoursTableView` for the
  * presentational half if the data is already at hand. */
 export function YearHoursTable({ userId, year, title }: Props) {
   const query = useYearHours(userId, year);

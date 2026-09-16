@@ -21,8 +21,8 @@ Backend: `modules/projects`.
 
 ## Pages
 
-- `pages/ProjectsPage.tsx` has a Manager column and, for admins/project managers, a "Managed by me"
-  filter (`manager_id` = the signed-in user).
+- `pages/ProjectsPage.tsx` has a Manager column and, for managers, a "Managed by me" filter
+  (`manager_id` = the signed-in user).
 - `pages/ProjectDetailsPage.tsx` shows the project's manager; its "Billing items" section is readable
   by anyone, editable by managers, and offers "Delete permanently" to admins only — the one write in
   this router that isn't `ManagerDep`.

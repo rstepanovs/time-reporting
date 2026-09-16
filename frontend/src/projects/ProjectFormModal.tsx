@@ -176,7 +176,7 @@ export function ProjectFormModal(props: Props) {
           />
           <NumberInput
             label="Normal working hours per day"
-            description="Used to prefill a new timesheet week when the worker has just this one project"
+            description="Used to prefill a new timesheet week when the employee has just this one project"
             required
             min={0.25}
             max={24}

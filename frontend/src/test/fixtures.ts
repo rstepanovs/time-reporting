@@ -30,7 +30,7 @@ export const testManager: CurrentUser = {
 export const testEmployee: CurrentUser = {
   ...testManager,
   id: "7b1a2c3d-4e5f-6789-0abc-def123456789",
-  name: "Wendy Worker",
+  name: "Wendy Employee",
   email: "wendy@example.com",
   roles: [],
 };

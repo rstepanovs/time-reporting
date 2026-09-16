@@ -2573,7 +2573,7 @@ export interface operations {
                     "application/json": components["schemas"]["ProjectResponse"];
                 };
             };
-            /** @description The manager does not exist, is inactive, or is not an admin/project manager */
+            /** @description The manager does not exist, is inactive, or does not hold the manager level */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -2660,7 +2660,7 @@ export interface operations {
                     "application/json": components["schemas"]["ProjectResponse"];
                 };
             };
-            /** @description The manager does not exist, is inactive, or is not an admin/project manager */
+            /** @description The manager does not exist, is inactive, or does not hold the manager level */
             400: {
                 headers: {
                     [name: string]: unknown;
