@@ -13,6 +13,9 @@ from httpx import AsyncClient
 
 from support import ADMIN, EMPLOYEE, MANAGER, AuthHeaders, UserFactory
 from time_reporting.core.config import get_settings
+from time_reporting.core.cqrs import Bus
+from time_reporting.modules.audit.contracts import AuditAction, ListAuditEvents
+from time_reporting.modules.system.contracts import CreateBackup
 from time_reporting.modules.users.contracts import UserRole
 
 
@@ -103,6 +106,33 @@ async def test_admin_can_list_create_and_download_a_backup(
     download = await client.get(f"/api/v1/admin/backups/{name}", headers=headers)
     assert download.status_code == 200
     assert download.headers["content-disposition"].endswith(f'"{name}"')
+
+    events = await client.get(
+        "/api/v1/admin/audit-events",
+        headers=headers,
+        params={"action": "backup.created", "entity_type": "backup", "entity_id": name},
+    )
+    assert events.status_code == 200
+    assert events.json()["total"] == 1
+
+
+async def test_backup_without_an_actor_is_not_audited(bus: Bus) -> None:
+    """The CLI's `time-reporting backup` (a manual run or the scheduled `backup`/`migrate`
+    compose services) never audits — only the "create backup now" API call does, since logging
+    every automatic scheduled backup would drown out real admin actions in the log."""
+    backup = await bus.execute(CreateBackup())
+    assert backup is not None
+
+    events = await bus.query(
+        ListAuditEvents(
+            limit=10,
+            offset=0,
+            action=AuditAction.BACKUP_CREATED,
+            entity_type="backup",
+            entity_id=backup.name,
+        )
+    )
+    assert events.items == ()
 
 
 async def test_creating_a_backup_while_one_is_in_progress_conflicts(

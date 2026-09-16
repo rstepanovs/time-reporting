@@ -4,6 +4,7 @@ from pathlib import Path
 
 from time_reporting.core.config import get_settings
 from time_reporting.core.cqrs import Bus
+from time_reporting.modules.audit.contracts import AuditAction, RecordAuditEvent
 from time_reporting.modules.system.backup_service import BackupService
 from time_reporting.modules.system.contracts import (
     BackupInfoDTO,
@@ -22,6 +23,7 @@ from time_reporting.modules.system.service import SystemService, get_head_revisi
 
 class _Handler:
     def __init__(self, bus: Bus) -> None:
+        self._bus = bus
         self._repository = SystemRepository(bus.session)
         self._service = SystemService(self._repository)
         self._backup_service = BackupService(get_settings())
@@ -66,4 +68,16 @@ class CreateBackupHandler(_Handler):
             head_revision = get_head_revision(get_settings().alembic_config_path)
             if current_revision == head_revision:
                 return None
-        return await self._backup_service.create(revision=current_revision)
+        backup = await self._backup_service.create(revision=current_revision)
+        if command.actor_id is not None:
+            await self._bus.execute(
+                RecordAuditEvent(
+                    actor_id=command.actor_id,
+                    action=AuditAction.BACKUP_CREATED,
+                    entity_type="backup",
+                    entity_id=backup.name,
+                    summary=f"Created backup {backup.name}",
+                    details={"revision": backup.revision, "size_bytes": backup.size_bytes},
+                )
+            )
+        return backup

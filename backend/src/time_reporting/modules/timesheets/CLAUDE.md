@@ -5,7 +5,8 @@ Owns `TimeEntry`, `TimesheetRowComment`, `TimesheetWeek` (status) and `ProjectBi
 Depends on: `projects.contracts` (`ListMemberProjectsWithBillingItems`,
 `ListManagedProjectsWithMembers`, `ListProjects`, `GetProjectsByIds`,
 `GetProjectBillingItemsByIds`), `work_calendar.contracts` (`GetCalendarDays`), `users.contracts`
-(`GetUserById`, `GetUsersByIds`, `UserRole`). Consumed by `admin` via `CountTimeEntries`.
+(`GetUserById`, `GetUsersByIds`, `UserRole`), `audit.contracts` (`RecordAuditEvent`). Consumed by
+`admin` via `CountTimeEntries`.
 
 ## Entries and the weekly grid
 
@@ -128,3 +129,8 @@ project `manager_id` manages (`manager_id=None` covers every active project — 
   first of a month). `customer_id` has no column of its own on `ProjectBillingPeriod`, so it's
   resolved to that customer's project ids via `projects.ListProjects` first (capped at 10,000
   projects — plenty for any real customer), intersected with `project_id` if both are given.
+- `SendProjectMonthToBilling`/`ReopenProjectBillingPeriod` each record a `RecordAuditEvent`
+  (`billing_period.sent`/`billing_period.reopened`) in `billing.py` on success, actor being
+  `sent_by_id`/`ReopenProjectBillingPeriod.actor_id` respectively; `entity_id` is
+  `"{project_id}:{period_start}"` (no single-UUID key exists for a billing period), with the
+  project/customer names and period only in `summary`/`details` — see `audit/CLAUDE.md`.

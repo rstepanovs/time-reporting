@@ -53,9 +53,17 @@ class RemoveUserHandler(_Handler):
 
 class RemoveCustomerHandler(_Handler):
     async def handle(self, command: RemoveCustomer) -> RemovalOutcome:
-        return await self._service.remove_customer(command.customer_id, permanent=command.permanent)
+        return await self._service.remove_customer(
+            command.customer_id,
+            acting_user_id=command.acting_user_id,
+            permanent=command.permanent,
+        )
 
 
 class RemoveProjectHandler(_Handler):
     async def handle(self, command: RemoveProject) -> RemovalOutcome:
-        return await self._service.remove_project(command.project_id, permanent=command.permanent)
+        return await self._service.remove_project(
+            command.project_id,
+            acting_user_id=command.acting_user_id,
+            permanent=command.permanent,
+        )

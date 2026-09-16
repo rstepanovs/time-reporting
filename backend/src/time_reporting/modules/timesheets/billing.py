@@ -12,6 +12,7 @@ from uuid import UUID
 
 from time_reporting.core.cqrs import Bus
 from time_reporting.db.mixins import utc_now
+from time_reporting.modules.audit.contracts import AuditAction, RecordAuditEvent
 from time_reporting.modules.projects.contracts import (
     BillingUnit,
     GetProjectBillingItemsByIds,
@@ -96,6 +97,23 @@ class BillingService:
             sent_by_id=command.sent_by_id,
         )
         await self._periods.save(period)
+        await self._bus.execute(
+            RecordAuditEvent(
+                actor_id=command.sent_by_id,
+                action=AuditAction.BILLING_PERIOD_SENT,
+                entity_type="billing_period",
+                entity_id=f"{command.project_id}:{month_first.isoformat()}",
+                summary=(
+                    f"Sent {project.customer.name} · {project.name} "
+                    f"({month_first:%Y-%m}) to billing"
+                ),
+                details={
+                    "project_id": str(command.project_id),
+                    "period_start": month_first.isoformat(),
+                    "period_end": month_last.isoformat(),
+                },
+            )
+        )
 
         return await self._period_dto(period, entries, project.customer.currency, sender)
 
@@ -105,7 +123,23 @@ class BillingService:
         )
         if period is None:
             raise BillingPeriodNotFoundError(command.project_id, command.period_start)
+        # `ON DELETE RESTRICT` on `project_billing_periods.project_id` guarantees the project
+        # still exists while any of its periods (including this one, until the delete below) do.
+        project = await self._bus.query(GetProjectById(project_id=command.project_id))
+        assert project is not None
         await self._periods.delete(period)
+        await self._bus.execute(
+            RecordAuditEvent(
+                actor_id=command.actor_id,
+                action=AuditAction.BILLING_PERIOD_REOPENED,
+                entity_type="billing_period",
+                entity_id=f"{command.project_id}:{command.period_start.isoformat()}",
+                summary=(
+                    f"Reopened {project.customer.name} · {project.name} "
+                    f"({command.period_start:%Y-%m}) billing period"
+                ),
+            )
+        )
 
     async def _period_dto(
         self,

@@ -596,6 +596,7 @@ class ReopenProjectBillingPeriod(Command[None]):
 
     project_id: UUID
     period_start: date
+    actor_id: UUID
 
 
 # --- Exceptions ---

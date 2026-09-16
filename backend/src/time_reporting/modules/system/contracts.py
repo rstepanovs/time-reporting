@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
+from uuid import UUID
 
 from time_reporting.core.cqrs import Command, Query
 
@@ -111,6 +112,11 @@ class CreateBackup(Command[BackupInfoDTO | None]):
     # Used by `migrate` before applying pending migrations: only back up (and return non-`None`)
     # when the database has already been migrated at least once and isn't already at head.
     only_if_migrations_pending: bool = False
+    # Only set for the "create backup now" API call; left `None` for the CLI (`time-reporting
+    # backup`, whether run by hand or on the `backup`/`migrate` compose services' schedule), which
+    # is also why only an API-triggered backup is audited (see `CreateBackupHandler`) — logging
+    # every automatic scheduled backup would drown out real admin actions in the audit log.
+    actor_id: UUID | None = None
 
 
 # --- Exceptions ---

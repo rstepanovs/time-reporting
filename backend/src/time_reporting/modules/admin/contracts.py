@@ -87,12 +87,14 @@ class RemoveUser(Command[RemovalOutcome]):
 @dataclass(frozen=True, slots=True, kw_only=True)
 class RemoveCustomer(Command[RemovalOutcome]):
     customer_id: UUID
+    acting_user_id: UUID
     permanent: bool = False
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class RemoveProject(Command[RemovalOutcome]):
     project_id: UUID
+    acting_user_id: UUID
     permanent: bool = False
 
 

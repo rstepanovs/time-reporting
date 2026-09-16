@@ -51,9 +51,9 @@ async def list_backups(_admin: AdminDep, bus: BusDep) -> BackupListResponse:
 
 
 @backups_router.post("", status_code=status.HTTP_201_CREATED)
-async def create_backup(_admin: AdminDep, bus: BusDep) -> BackupResponse:
+async def create_backup(admin: AdminDep, bus: BusDep) -> BackupResponse:
     try:
-        backup = await bus.execute(CreateBackup())
+        backup = await bus.execute(CreateBackup(actor_id=admin.id))
     except BackupInProgressError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except BackupFailedError as exc:

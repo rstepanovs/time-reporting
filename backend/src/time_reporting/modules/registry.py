@@ -2,6 +2,7 @@
 
 from time_reporting.core.cqrs import HandlerRegistry
 from time_reporting.modules.admin import module as admin_module
+from time_reporting.modules.audit import module as audit_module
 from time_reporting.modules.customers import module as customers_module
 from time_reporting.modules.projects import module as projects_module
 from time_reporting.modules.system import module as system_module
@@ -12,6 +13,7 @@ from time_reporting.modules.work_calendar import module as work_calendar_module
 
 def build_registry() -> HandlerRegistry:
     registry = HandlerRegistry()
+    audit_module.register(registry)
     users_module.register(registry)
     customers_module.register(registry)
     projects_module.register(registry)

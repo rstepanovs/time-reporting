@@ -340,11 +340,13 @@ async def send_project_month_to_billing(
     responses={status.HTTP_404_NOT_FOUND: {"description": "No sent period found"}},
 )
 async def reopen_project_billing_period(
-    project_id: UUID, period_start: date, _admin: AdminDep, bus: BusDep
+    project_id: UUID, period_start: date, admin: AdminDep, bus: BusDep
 ) -> None:
     try:
         await bus.execute(
-            ReopenProjectBillingPeriod(project_id=project_id, period_start=period_start)
+            ReopenProjectBillingPeriod(
+                project_id=project_id, period_start=period_start, actor_id=admin.id
+            )
         )
     except BillingPeriodNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc

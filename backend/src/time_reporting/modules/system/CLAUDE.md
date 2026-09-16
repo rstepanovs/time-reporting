@@ -43,11 +43,14 @@ configuration, for `/admin/system/*` and `/admin/backups/*` (both `AdminDep` onl
   - The DSN passed on the command line never carries the password (`_libpq_connection` strips it
     from `database_url` via `sqlalchemy.engine.make_url`); it goes to the subprocess only through
     the `PGPASSWORD` environment variable.
-- `CreateBackup(only_if_migrations_pending=...)` (command) → `BackupInfoDTO | None`: `False` (the
-  API's "create backup now") always backs up and never returns `None`; `True` (the CLI's `backup
-  --if-pending-migrations`, used by the `migrate` compose service before applying migrations) skips
-  and returns `None` when there's no `alembic_version` yet (nothing to protect) or the database is
-  already at head — otherwise it backs up under the *current* (pre-migration) revision.
+- `CreateBackup(only_if_migrations_pending=..., actor_id=...)` (command) → `BackupInfoDTO | None`:
+  `False` (the API's "create backup now") always backs up and never returns `None`; `True` (the
+  CLI's `backup --if-pending-migrations`, used by the `migrate` compose service before applying
+  migrations) skips and returns `None` when there's no `alembic_version` yet (nothing to protect)
+  or the database is already at head — otherwise it backs up under the *current* (pre-migration)
+  revision. `actor_id` is set only by the "create backup now" route; a successful backup records a
+  `RecordAuditEvent` (`backup.created`) only when it is set, so CLI/scheduled backups (`actor_id`
+  always `None` there) are never logged — see `audit/CLAUDE.md`.
 - `ListBackups` (query) → `BackupListDTO` (`backups`, `last_backup_at`); `GetBackupPath(name)`
   (query) → `Path`, used only by the download route.
 - `GET /admin/backups`, `POST /admin/backups`, `GET /admin/backups/{name}` (`FileResponse`).

@@ -95,6 +95,8 @@ class CreateUser(Command[UserDTO]):
     email: str
     roles: frozenset[UserRole]
     password: str = field(repr=False)
+    # `None` for the CLI's `create-admin` (there is no signed-in actor yet at that point).
+    actor_id: UUID | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -111,10 +113,12 @@ class UpdateUser(Command[UserDTO]):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ResetUserPassword(Command[None]):
-    """Set a new password and invalidate the user's issued tokens."""
+    """Set a new password and invalidate the user's issued tokens. Admin only, so unlike
+    ``CreateUser`` there is always an actor."""
 
     user_id: UUID
     new_password: str = field(repr=False)
+    actor_id: UUID
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

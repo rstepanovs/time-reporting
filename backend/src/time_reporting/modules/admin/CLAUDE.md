@@ -2,12 +2,17 @@
 
 Owns no tables — it orchestrates archiving or permanently deleting a user, customer or project by
 calling the owning module's commands, reached only through `users.contracts` /
-`customers.contracts` / `projects.contracts` (plus `timesheets.contracts.CountTimeEntries`).
+`customers.contracts` / `projects.contracts` (plus `timesheets.contracts.CountTimeEntries` and
+`audit.contracts.RecordAuditEvent`, the latter for every branch of `RemoveCustomer`/`RemoveProject`
+and the permanent-delete branch of `RemoveUser` — see `audit/CLAUDE.md` for exactly which action
+each records and why a user's *archive* branch does not also get its own event here).
 
-- `RemoveUser` / `RemoveCustomer` / `RemoveProject` (`AdminDep` only, under `/admin`) default to
-  archiving (the same `UpdateUser`/`UpdateCustomer`/`UpdateProject` a manager already uses) and, with
-  `permanent=True`, permanently delete once nothing blocks it: a customer with any project, or a user
-  deleting themselves, raise `RemovalBlockedError` / `SelfRemovalError` (409 / 400) without changing
+- `RemoveUser` / `RemoveCustomer` / `RemoveProject` (`AdminDep` only, under `/admin`, each carrying
+  an `acting_user_id` filled by the router from the caller for the self-removal guard and, since
+  T9, the audit actor too) default to archiving (the same
+  `UpdateUser`/`UpdateCustomer`/`UpdateProject` a manager already uses) and, with `permanent=True`,
+  permanently delete once nothing blocks it: a customer with any project, or a user deleting
+  themselves, raise `RemovalBlockedError` / `SelfRemovalError` (409 / 400) without changing
   anything.
 - Deleting a user first removes its project memberships (`RemoveUserFromAllProjects`) so the
   `ON DELETE RESTRICT` foreign key doesn't get in the way, and clears `manager_id` on projects they

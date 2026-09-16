@@ -6,6 +6,7 @@ Handlers translate between bus messages and the service/repository and never ret
 from datetime import timedelta
 
 from time_reporting.core.cqrs import Bus
+from time_reporting.modules.audit.contracts import AuditAction, RecordAuditEvent
 from time_reporting.modules.work_calendar.contracts import (
     MAX_CALENDAR_RANGE_DAYS,
     WEEKEND_ISO_WEEKDAYS,
@@ -76,6 +77,7 @@ class GetCalendarDaysHandler(_QueryHandler):
 
 class _CommandHandler:
     def __init__(self, bus: Bus) -> None:
+        self._bus = bus
         self._service = WorkCalendarService(bus.session)
 
 
@@ -104,4 +106,15 @@ class DeleteNonWorkingDayHandler(_CommandHandler):
 
 class ImportPublicHolidaysHandler(_CommandHandler):
     async def handle(self, command: ImportPublicHolidays) -> int:
-        return await self._service.import_public_holidays(command.year)
+        added = await self._service.import_public_holidays(command.year)
+        await self._bus.execute(
+            RecordAuditEvent(
+                actor_id=command.actor_id,
+                action=AuditAction.PUBLIC_HOLIDAYS_IMPORTED,
+                entity_type="calendar",
+                entity_id=str(command.year),
+                summary=f"Imported {added} public holiday(s) for {command.year}",
+                details={"year": command.year, "added": added},
+            )
+        )
+        return added

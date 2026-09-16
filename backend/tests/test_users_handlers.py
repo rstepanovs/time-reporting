@@ -5,6 +5,7 @@ import pytest
 from support import ADMIN, ADMIN_ONLY, DEFAULT_PASSWORD, MANAGER, ProjectFactory, UserFactory
 from time_reporting.core.cqrs import Bus
 from time_reporting.core.passwords import verify_password
+from time_reporting.modules.audit.contracts import AuditAction, AuditEventDTO, ListAuditEvents
 from time_reporting.modules.projects.contracts import AddProjectMember, RemoveUserFromAllProjects
 from time_reporting.modules.users.contracts import (
     ChangeOwnPassword,
@@ -24,6 +25,19 @@ from time_reporting.modules.users.contracts import (
     UserNotFoundError,
     UserRole,
 )
+
+
+async def _user_events(
+    bus: Bus, user_id: object, *, action: AuditAction | None = None
+) -> tuple[AuditEventDTO, ...]:
+    """``make_user`` itself calls ``CreateUser``, so a user created through it already has its own
+    ``USER_CREATED`` event; pass ``action`` to isolate the event(s) a later command adds."""
+    page = await bus.query(
+        ListAuditEvents(
+            limit=10, offset=0, entity_type="user", entity_id=str(user_id), action=action
+        )
+    )
+    return page.items
 
 
 async def test_create_user_normalizes_email_and_hashes_password(bus: Bus) -> None:
@@ -46,6 +60,43 @@ async def test_create_user_normalizes_email_and_hashes_password(bus: Bus) -> Non
     assert credentials is not None
     assert credentials.id == user.id
     assert (await verify_password(DEFAULT_PASSWORD, credentials.password_hash))[0]
+
+
+async def test_create_user_records_one_audit_event_with_no_actor(bus: Bus) -> None:
+    """The CLI's ``create-admin``/``seed-demo`` call ``CreateUser`` without an actor."""
+    user = await bus.execute(
+        CreateUser(name="Ann", email="ann2@example.com", roles=MANAGER, password=DEFAULT_PASSWORD)
+    )
+
+    events = await _user_events(bus, user.id)
+
+    assert len(events) == 1
+    assert events[0].action is AuditAction.USER_CREATED
+    assert events[0].actor_id is None
+    assert events[0].actor_name is None
+
+
+async def test_create_user_records_one_audit_event_with_actor(
+    bus: Bus, make_user: UserFactory
+) -> None:
+    admin = await make_user(roles=ADMIN)
+
+    user = await bus.execute(
+        CreateUser(
+            name="Bob",
+            email="bob2@example.com",
+            roles=MANAGER,
+            password=DEFAULT_PASSWORD,
+            actor_id=admin.id,
+        )
+    )
+
+    events = await _user_events(bus, user.id)
+
+    assert len(events) == 1
+    assert events[0].action is AuditAction.USER_CREATED
+    assert events[0].actor_id == admin.id
+    assert events[0].actor_name == admin.name
 
 
 async def test_duplicate_email_is_rejected_and_session_stays_usable(
@@ -83,6 +134,48 @@ async def test_update_user_changes_only_given_fields(bus: Bus, make_user: UserFa
     assert updated.roles == MANAGER
     assert not updated.is_active
     assert updated.updated_at >= user.updated_at
+
+    # Both roles and is_active actually changed in this one command, so both get their own event.
+    assert len(await _user_events(bus, user.id, action=AuditAction.USER_ROLES_CHANGED)) == 1
+    assert len(await _user_events(bus, user.id, action=AuditAction.USER_DEACTIVATED)) == 1
+
+
+async def test_update_user_roles_changed_records_one_audit_event(
+    bus: Bus, make_user: UserFactory
+) -> None:
+    admin = await make_user(roles=ADMIN)
+    user = await make_user()
+
+    await bus.execute(UpdateUser(user_id=user.id, acting_user_id=admin.id, roles=MANAGER))
+
+    events = await _user_events(bus, user.id, action=AuditAction.USER_ROLES_CHANGED)
+    assert len(events) == 1
+    assert events[0].actor_id == admin.id
+
+
+async def test_update_user_roles_unchanged_records_no_audit_event(
+    bus: Bus, make_user: UserFactory
+) -> None:
+    """Setting ``roles`` to the value it already has is not a change worth logging."""
+    admin = await make_user(roles=ADMIN)
+    user = await make_user(roles=MANAGER)
+
+    await bus.execute(UpdateUser(user_id=user.id, acting_user_id=admin.id, roles=MANAGER))
+
+    assert await _user_events(bus, user.id, action=AuditAction.USER_ROLES_CHANGED) == ()
+
+
+async def test_update_user_activated_records_one_audit_event(
+    bus: Bus, make_user: UserFactory
+) -> None:
+    admin = await make_user(roles=ADMIN)
+    user = await make_user()
+    await bus.execute(UpdateUser(user_id=user.id, acting_user_id=admin.id, is_active=False))
+
+    await bus.execute(UpdateUser(user_id=user.id, acting_user_id=admin.id, is_active=True))
+
+    assert len(await _user_events(bus, user.id, action=AuditAction.USER_ACTIVATED)) == 1
+    assert len(await _user_events(bus, user.id, action=AuditAction.USER_DEACTIVATED)) == 1
 
 
 async def test_update_unknown_user_raises(bus: Bus, make_user: UserFactory) -> None:
@@ -143,14 +236,21 @@ async def test_admin_can_edit_own_profile(bus: Bus, make_user: UserFactory) -> N
 
 
 async def test_reset_password_invalidates_tokens(bus: Bus, make_user: UserFactory) -> None:
+    admin = await make_user(roles=ADMIN)
     user = await make_user(email="reset@example.com")
 
-    await bus.execute(ResetUserPassword(user_id=user.id, new_password="brand-new-password"))
+    await bus.execute(
+        ResetUserPassword(user_id=user.id, new_password="brand-new-password", actor_id=admin.id)
+    )
 
     credentials = await bus.query(GetUserCredentialsByEmail(email="reset@example.com"))
     assert credentials is not None
     assert credentials.token_version == user.token_version + 1
     assert (await verify_password("brand-new-password", credentials.password_hash))[0]
+
+    events = await _user_events(bus, user.id, action=AuditAction.USER_PASSWORD_RESET)
+    assert len(events) == 1
+    assert events[0].actor_id == admin.id
 
 
 async def test_change_own_password_requires_current_password(
@@ -176,6 +276,9 @@ async def test_change_own_password_requires_current_password(
     changed = await bus.query(GetUserById(user_id=user.id))
     assert changed is not None
     assert changed.token_version == user.token_version + 1
+
+    # Self-service, not "password reset by admin" — not audited.
+    assert await _user_events(bus, user.id, action=AuditAction.USER_PASSWORD_RESET) == ()
 
 
 async def test_record_successful_login(bus: Bus, make_user: UserFactory) -> None:

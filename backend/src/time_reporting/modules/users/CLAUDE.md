@@ -26,3 +26,10 @@ password changes/resets, which invalidates existing JWTs (see the `auth` module)
   still a project member, or has time entries (the FK violation is mapped to `UserInUseError`).
   Deletion is orchestrated by the `admin` module (`RemoveUser`), which clears memberships and managed
   projects first via `projects.contracts.RemoveUserFromAllProjects`.
+- `CreateUser`/`UpdateUser`/`ResetUserPassword` each record an `audit.contracts.RecordAuditEvent`
+  (nested command) on success — `user.created`, `user.roles_changed` and/or
+  `user.activated`/`user.deactivated` (only for a field that actually changed — one `UpdateUser`
+  call can write both), and `user.password_reset` respectively. `CreateUser.actor_id` is optional
+  (`None` for the CLI's `create-admin`/`seed-demo`); `ResetUserPassword.actor_id` and `UpdateUser`'s
+  existing `acting_user_id` are not, since both are admin-only routes. `ChangeOwnPassword` is
+  deliberately never audited (self-service, not "by admin"). See `audit/CLAUDE.md`.

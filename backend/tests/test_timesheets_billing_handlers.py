@@ -6,6 +6,7 @@ import pytest
 
 from support import ADMIN, MANAGER, CustomerFactory, ProjectFactory, UserFactory
 from time_reporting.core.cqrs import Bus
+from time_reporting.modules.audit.contracts import AuditAction, ListAuditEvents
 from time_reporting.modules.projects.contracts import (
     AddProjectMember,
     BillingItemPreset,
@@ -90,6 +91,67 @@ async def test_send_to_billing_happy_path(
     assert period.hours.normal_hours == Decimal("4")
     assert period.period_start == date(2026, 9, 1)
     assert period.period_end == date(2026, 9, 30)
+
+    events = await bus.query(
+        ListAuditEvents(
+            limit=10,
+            offset=0,
+            action=AuditAction.BILLING_PERIOD_SENT,
+            entity_type="billing_period",
+            entity_id=f"{project.id}:2026-09-01",
+        )
+    )
+    assert len(events.items) == 1
+    assert events.items[0].actor_id == manager.id
+
+
+async def test_send_to_billing_rolls_back_the_audit_event_on_later_failure(
+    bus: Bus,
+    make_project: ProjectFactory,
+    make_user: UserFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``RecordAuditEvent`` is a nested command, so if anything after it in the same outer command
+    still fails, the whole thing (including the audit row) rolls back together."""
+    from time_reporting.modules.timesheets import billing as billing_module
+
+    manager = await make_user(roles=MANAGER)
+    admin = await make_user(roles=ADMIN)
+    worker = await make_user()
+    project = await make_project(manager_id=manager.id)
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
+    item_id = await _normal_hours_item_id(bus, project.id)
+    await _book_and_approve(
+        bus,
+        worker_id=worker.id,
+        admin_id=admin.id,
+        item_id=item_id,
+        entry_date=WEEK_1,
+        week_start=WEEK_1,
+    )
+
+    async def failing_period_dto(self: object, *args: object, **kwargs: object) -> None:
+        raise RuntimeError("simulated failure")
+
+    monkeypatch.setattr(billing_module.BillingService, "_period_dto", failing_period_dto)
+
+    with pytest.raises(RuntimeError, match="simulated failure"):
+        await bus.execute(
+            SendProjectMonthToBilling(
+                project_id=project.id, year=2026, month=9, sent_by_id=manager.id
+            )
+        )
+
+    events = await bus.query(
+        ListAuditEvents(
+            limit=10,
+            offset=0,
+            action=AuditAction.BILLING_PERIOD_SENT,
+            entity_type="billing_period",
+            entity_id=f"{project.id}:2026-09-01",
+        )
+    )
+    assert events.items == ()
 
 
 async def test_send_is_allowed_before_the_month_ends(
@@ -393,8 +455,22 @@ async def test_reopen_unlocks_the_period(
     )
 
     await bus.execute(
-        ReopenProjectBillingPeriod(project_id=project.id, period_start=date(2026, 9, 1))
+        ReopenProjectBillingPeriod(
+            project_id=project.id, period_start=date(2026, 9, 1), actor_id=admin.id
+        )
     )
+
+    events = await bus.query(
+        ListAuditEvents(
+            limit=10,
+            offset=0,
+            action=AuditAction.BILLING_PERIOD_REOPENED,
+            entity_type="billing_period",
+            entity_id=f"{project.id}:2026-09-01",
+        )
+    )
+    assert len(events.items) == 1
+    assert events.items[0].actor_id == admin.id
 
     # WEEK_1 itself stays locked by its own (still-approved) status; WEEK_2, blocked only by the
     # now-lifted billing lock, is editable again.
@@ -409,11 +485,16 @@ async def test_reopen_unlocks_the_period(
     assert row.entries[0].quantity == Decimal("6")
 
 
-async def test_reopen_unknown_period_raises(bus: Bus, make_project: ProjectFactory) -> None:
+async def test_reopen_unknown_period_raises(
+    bus: Bus, make_user: UserFactory, make_project: ProjectFactory
+) -> None:
+    admin = await make_user(roles=ADMIN)
     project = await make_project()
     with pytest.raises(BillingPeriodNotFoundError):
         await bus.execute(
-            ReopenProjectBillingPeriod(project_id=project.id, period_start=date(2026, 9, 1))
+            ReopenProjectBillingPeriod(
+                project_id=project.id, period_start=date(2026, 9, 1), actor_id=admin.id
+            )
         )
 
 

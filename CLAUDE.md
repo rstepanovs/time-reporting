@@ -135,6 +135,8 @@ Modules (each documented in its own `CLAUDE.md`):
 - **`system`** — no tables; backend/database version and status, non-secret configuration view, read
   from PostgreSQL catalogs and application settings, under `/admin/system/*`; `pg_dump`/`pg_restore`
   backups (`BackupService`) under `/admin/backups/*` (restore is CLI-only, never over HTTP).
+- **`audit`** — `AuditEvent`: an immutable log of administrative actions, written by other modules'
+  command handlers via a nested `RecordAuditEvent`; `GET /admin/audit-events` (`AdminDep`).
 
 Permanently deleting any entity is admin-only and goes through the `admin` module; archiving uses the
 owning module's `PATCH` endpoint (`ManagerDep`).

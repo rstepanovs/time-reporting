@@ -10,6 +10,9 @@ Owns `NonWorkingDay`: one company-wide calendar of public holidays, bridge days 
   (and optional subdivision) in `Settings.holiday_country`/`holiday_subdivision`, skipping dates
   already present (manually added or previously imported) so it's safe to re-run; an unsupported
   country/subdivision raises `HolidayCountryNotSupportedError`. Also reachable via the
-  `time-reporting import-holidays --year` CLI command.
+  `time-reporting import-holidays --year` CLI command (its optional `actor_id` is `None` there,
+  set by the router otherwise). Records one `RecordAuditEvent`
+  (`calendar.public_holidays_imported`, `entity_id` the year) unconditionally on success, even when
+  `added == 0` — see `audit/CLAUDE.md`.
 - Any authenticated user reads the calendar; only admins add, edit (`day`/`name`; `kind` is
   immutable), delete or import.
