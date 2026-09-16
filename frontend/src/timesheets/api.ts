@@ -32,6 +32,8 @@ export type TeamMemberWarning = components["schemas"]["TeamMemberResponse"]["war
 export type TeamStatusCounts = components["schemas"]["TeamStatusCountsResponse"];
 export type ProjectBillingPeriod = components["schemas"]["ProjectBillingPeriodResponse"];
 export type BillingPeriodStatus = components["schemas"]["ProjectBillingPeriodResponse"]["status"];
+export type BillingPeriodListItem = components["schemas"]["BillingPeriodListItemResponse"];
+export type BillingPeriodPage = components["schemas"]["BillingPeriodPageResponse"];
 export type TeamScope = "mine" | "all";
 
 /** A project/billing-item pair picked from the options list, before it has any entries — the
@@ -231,6 +233,32 @@ export async function sendProjectMonthToBilling(params: {
 }): Promise<ProjectBillingPeriod> {
   const { data, response } = await api.POST("/api/v1/timesheets/billing-periods", {
     body: { project_id: params.projectId, year: params.year, month: params.month },
+  });
+  if (!data) throw await timesheetAwareError(response);
+  return data;
+}
+
+/** Admin only: every sent billing period, newest first, filterable by project/customer/month
+ * range and paginated. */
+export async function listBillingPeriods(params: {
+  projectId?: string;
+  customerId?: string;
+  monthFrom?: string;
+  monthTo?: string;
+  limit?: number;
+  offset?: number;
+} = {}): Promise<BillingPeriodPage> {
+  const { data, response } = await api.GET("/api/v1/timesheets/billing-periods", {
+    params: {
+      query: {
+        project_id: params.projectId,
+        customer_id: params.customerId,
+        month_from: params.monthFrom,
+        month_to: params.monthTo,
+        limit: params.limit,
+        offset: params.offset,
+      },
+    },
   });
   if (!data) throw await timesheetAwareError(response);
   return data;

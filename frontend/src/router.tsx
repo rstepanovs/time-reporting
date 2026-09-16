@@ -4,6 +4,7 @@ import { RequireAuth } from "@/auth/RequireAuth";
 import { RequireRole } from "@/auth/RequireRole";
 import { AppLayout } from "@/components/AppLayout";
 import { AdminBackupsPage } from "@/pages/admin/AdminBackupsPage";
+import { AdminBillingPage } from "@/pages/admin/AdminBillingPage";
 import { AdminCalendarPage } from "@/pages/admin/AdminCalendarPage";
 import { AdminCustomersPage } from "@/pages/admin/AdminCustomersPage";
 import { AdminProjectsPage } from "@/pages/admin/AdminProjectsPage";
@@ -54,6 +55,7 @@ export const routes: RouteObject[] = [
               { path: "customers", element: <AdminCustomersPage /> },
               { path: "projects", element: <AdminProjectsPage /> },
               { path: "calendar", element: <AdminCalendarPage /> },
+              { path: "billing", element: <AdminBillingPage /> },
               { path: "backups", element: <AdminBackupsPage /> },
               { path: "status", element: <AdminSystemStatusPage /> },
             ],

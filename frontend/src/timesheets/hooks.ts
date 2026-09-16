@@ -8,6 +8,7 @@ import {
   getTimesheetWeek,
   getWeeklyHours,
   getYearHours,
+  listBillingPeriods,
   listSubmittedTimesheetWeeks,
   listTimesheetOptions,
   reopenProjectBillingPeriod,
@@ -42,6 +43,8 @@ export const timesheetKeys = {
   team: () => [...timesheetKeys.all, "team"] as const,
   teamMonth: (year: number, month: number, scope?: TeamScope) =>
     [...timesheetKeys.team(), year, month, scope] as const,
+  billingPeriods: (params: Parameters<typeof listBillingPeriods>[0]) =>
+    [...timesheetKeys.all, "billingPeriods", params] as const,
 };
 
 /** `userId` selects whose week to load; pass the viewer's own id for "my timesheet". */
@@ -184,7 +187,16 @@ export function useSendProjectMonthToBilling() {
   });
 }
 
-/** Admin only: reopen a sent billing period. Same invalidation as sending one. */
+/** Admin only: every sent billing period, newest first — the `/admin/billing` list. */
+export function useBillingPeriods(params: Parameters<typeof listBillingPeriods>[0] = {}) {
+  return useQuery({
+    queryKey: timesheetKeys.billingPeriods(params),
+    queryFn: () => listBillingPeriods(params),
+  });
+}
+
+/** Admin only: reopen a sent billing period. Same invalidation as sending one, plus the
+ * `/admin/billing` list. */
 export function useReopenProjectBillingPeriod() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -193,6 +205,9 @@ export function useReopenProjectBillingPeriod() {
       void queryClient.invalidateQueries({ queryKey: timesheetKeys.team() });
       void queryClient.invalidateQueries({ queryKey: timesheetKeys.allSubmissions() });
       void queryClient.invalidateQueries({ queryKey: timesheetKeys.weeks() });
+      void queryClient.invalidateQueries({
+        queryKey: [...timesheetKeys.all, "billingPeriods"],
+      });
     },
   });
 }

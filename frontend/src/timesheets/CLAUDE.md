@@ -8,15 +8,16 @@ Backend: `modules/timesheets` (workflow statuses, locks and billing readiness ar
   `listSubmittedTimesheetWeeks` (an optional `{ scope: "mine" | "all" }`), the caller's
   project/billing-item picker, the dashboard's `getMonthCalendar`/`getYearHours`/
   `getMonthTimeSummary`/`getWeeklyHours`, the manager team dashboard's `getTeamMonthOverview` (also
-  `scope`-aware) and `sendProjectMonthToBilling`/`reopenProjectBillingPeriod`, plus
-  `TimesheetRuleError` covering 400/403/404 and `TimesheetConflictError` for a 409 — the week's
-  status changed underneath the caller, or a billing period isn't ready yet / was already sent — both
-  with the backend's `detail` as the message.
+  `scope`-aware) and `sendProjectMonthToBilling`/`reopenProjectBillingPeriod`, admin-only
+  `listBillingPeriods` (project/customer/month-range filters, pagination — backs
+  `pages/admin/AdminBillingPage.tsx`), plus `TimesheetRuleError` covering 400/403/404 and
+  `TimesheetConflictError` for a 409 — the week's status changed underneath the caller, or a billing
+  period isn't ready yet / was already sent — both with the backend's `detail` as the message.
 - `hooks.ts` — `timesheetKeys` + `useTimesheetWeek`/`useTimesheetOptions`/`useMonthCalendar`/
   `useYearHours`/`useMonthTimeSummary`/`useWeeklyHours`/`useSubmittedTimesheetWeeks`/
-  `useTeamMonthOverview` queries and `useSaveTimesheetWeek`/`useSubmitTimesheetWeek`/
-  `useApproveTimesheetWeek`/`useReturnTimesheetWeek`/`useSendProjectMonthToBilling`/
-  `useReopenProjectBillingPeriod` mutations. Cache rules:
+  `useTeamMonthOverview`/`useBillingPeriods` queries and `useSaveTimesheetWeek`/
+  `useSubmitTimesheetWeek`/`useApproveTimesheetWeek`/`useReturnTimesheetWeek`/
+  `useSendProjectMonthToBilling`/`useReopenProjectBillingPeriod` mutations. Cache rules:
   - the first four mutations write their result straight into the week's query cache instead of
     invalidating;
   - saving also invalidates `timesheetKeys.summaries()` so the dashboard and `/hours` pick up a
@@ -24,7 +25,8 @@ Backend: `modules/timesheets` (workflow statuses, locks and billing readiness ar
   - submit/approve/return also invalidate `timesheetKeys.allSubmissions()` (every cached
     `submissions(scope)`);
   - sending/reopening a billing period invalidate `team()`, `allSubmissions()` and every cached week
-    (`timesheetKeys.weeks()`, since locks may have changed what they allow).
+    (`timesheetKeys.weeks()`, since locks may have changed what they allow); reopening also
+    invalidates every cached `billingPeriods(params)` entry so `/admin/billing` drops the row.
 
 ## Pure helpers
 

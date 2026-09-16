@@ -13,5 +13,5 @@ area's `CLAUDE.md` before changing a page:
 | `TeamPage` | `/team?scope=&month=` | `timesheets/CLAUDE.md` (manager views) |
 | `ProjectsPage`, `ProjectDetailsPage` | `/projects`, `/projects/:projectId` | `projects/CLAUDE.md` |
 | `ChangePasswordPage` | `/account/password` | `auth/CLAUDE.md` |
-| `admin/*` | `/admin/...` | `admin/CLAUDE.md` |
+| `admin/*` | `/admin/...` | `admin/CLAUDE.md` (`AdminBillingPage` also uses `timesheets/CLAUDE.md`) |
 | `NotFoundPage` | `*` (and non-permitted `RequireRole` routes) | `auth/CLAUDE.md` (`RequireRole`) |

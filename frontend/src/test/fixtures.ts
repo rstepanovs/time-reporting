@@ -4,6 +4,8 @@ import type { Customer } from "@/customers/api";
 import type { BillingItem, Project, ProjectMember } from "@/projects/api";
 import type { Backup, BackupList, SystemConfig, SystemStatus } from "@/system/api";
 import type {
+  BillingPeriodListItem,
+  BillingPeriodPage,
   MonthCalendar,
   MonthHours,
   MonthTimeSummary,
@@ -662,6 +664,24 @@ export const testReadyBillingPeriod: ProjectBillingPeriod = {
   hours: { ...zeroHours, normal_hours: "160.00", total_hours: "160.00" },
   per_diem_days: "0",
   expenses: [],
+};
+
+export const testBillingPeriodListItem: BillingPeriodListItem = {
+  project_id: testReadyBillingPeriod.project_id,
+  project_name: "Platform Migration",
+  customer_name: testCustomer.name,
+  period_start: testReadyBillingPeriod.period_start,
+  period_end: testReadyBillingPeriod.period_end,
+  sent_at: "2026-09-02T09:00:00Z",
+  sent_by_id: testManager.id,
+  sent_by_name: testManager.name,
+};
+
+export const testBillingPeriodPage: BillingPeriodPage = {
+  items: [testBillingPeriodListItem],
+  total: 1,
+  limit: 20,
+  offset: 0,
 };
 
 export const testTeamMonthOverview: TeamMonthOverview = {

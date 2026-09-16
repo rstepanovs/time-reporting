@@ -538,7 +538,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** List Billing Periods */
+        get: operations["list_billing_periods_api_v1_timesheets_billing_periods_get"];
         put?: never;
         /** Send Project Month To Billing */
         post: operations["send_project_month_to_billing_api_v1_timesheets_billing_periods_post"];
@@ -926,6 +927,51 @@ export interface components {
             markup_percent?: number | string | null;
             /** Is Active */
             is_active?: boolean | null;
+        };
+        /** BillingPeriodListItemResponse */
+        BillingPeriodListItemResponse: {
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Project Name */
+            project_name: string;
+            /** Customer Name */
+            customer_name: string;
+            /**
+             * Period Start
+             * Format: date
+             */
+            period_start: string;
+            /**
+             * Period End
+             * Format: date
+             */
+            period_end: string;
+            /**
+             * Sent At
+             * Format: date-time
+             */
+            sent_at: string;
+            /**
+             * Sent By Id
+             * Format: uuid
+             */
+            sent_by_id: string;
+            /** Sent By Name */
+            sent_by_name: string;
+        };
+        /** BillingPeriodPageResponse */
+        BillingPeriodPageResponse: {
+            /** Items */
+            items: components["schemas"]["BillingPeriodListItemResponse"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
         };
         /**
          * BillingPeriodRequest
@@ -3702,6 +3748,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TeamMonthOverviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_billing_periods_api_v1_timesheets_billing_periods_get: {
+        parameters: {
+            query?: {
+                project_id?: string | null;
+                customer_id?: string | null;
+                month_from?: string | null;
+                month_to?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingPeriodPageResponse"];
                 };
             };
             /** @description Validation Error */
