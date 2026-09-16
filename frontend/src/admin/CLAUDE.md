@@ -25,4 +25,6 @@ Administration section. Backend: `modules/admin`.
   their own row in `UserFormModal`, mirroring the backend guard), and cannot remove themselves from
   `AdminUsersPage`.
 - `AdminCalendarPage` — non-working days, via `calendar/`.
-- `AdminSystemStatusPage` (`/admin/status`) just polls the health endpoints for an API/database badge.
+- `AdminSystemStatusPage` (`/admin/status`) — health badges (polled directly, no area of their own)
+  plus Versions/Database/Tables/Uptime/Configuration cards backed by `system/`; see
+  `system/CLAUDE.md`.

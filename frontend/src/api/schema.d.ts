@@ -752,6 +752,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/system/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get System Status */
+        get: operations["get_system_status_api_v1_admin_system_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/system/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get System Config */
+        get: operations["get_system_config_api_v1_admin_system_config_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1045,6 +1079,21 @@ export interface components {
             notes?: string | null;
             /** Is Active */
             is_active?: boolean | null;
+        };
+        /** DatabaseStatusResponse */
+        DatabaseStatusResponse: {
+            /** Server Version */
+            server_version: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Connection Count */
+            connection_count: number;
+            /** Current Revision */
+            current_revision: string | null;
+            /** Head Revision */
+            head_revision: string | null;
+            /** Migrations Pending */
+            migrations_pending: boolean;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1492,6 +1541,49 @@ export interface components {
              * @description Session lifetime in seconds
              */
             expires_in: number;
+        };
+        /** SystemConfigResponse */
+        SystemConfigResponse: {
+            /** App Name */
+            app_name: string;
+            /** Debug */
+            debug: boolean;
+            /** Cors Origins */
+            cors_origins: string[];
+            /** Access Token Expire Minutes */
+            access_token_expire_minutes: number;
+            /** Auth Cookie Secure */
+            auth_cookie_secure: boolean;
+            /** Holiday Country */
+            holiday_country: string;
+            /** Holiday Subdivision */
+            holiday_subdivision: string | null;
+            /** Daily Working Hours */
+            daily_working_hours: string;
+        };
+        /** SystemStatusResponse */
+        SystemStatusResponse: {
+            /** Backend Version */
+            backend_version: string;
+            /** Git Sha */
+            git_sha: string | null;
+            database: components["schemas"]["DatabaseStatusResponse"];
+            /** Tables */
+            tables: components["schemas"]["TableStatsResponse"][];
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Uptime Seconds */
+            uptime_seconds: number;
+        };
+        /** TableStatsResponse */
+        TableStatsResponse: {
+            /** Name */
+            name: string;
+            /** Estimated Rows */
+            estimated_rows: number;
         };
         /** TeamMemberResponse */
         TeamMemberResponse: {
@@ -4088,6 +4180,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_system_status_api_v1_admin_system_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemStatusResponse"];
+                };
+            };
+        };
+    };
+    get_system_config_api_v1_admin_system_config_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemConfigResponse"];
                 };
             };
         };

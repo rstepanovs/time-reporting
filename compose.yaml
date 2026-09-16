@@ -48,6 +48,8 @@ services:
   frontend:
     build:
       context: frontend
+      args:
+        VITE_GIT_SHA: ${GIT_SHA:-}
     ports:
       - "8080:80"
     depends_on:

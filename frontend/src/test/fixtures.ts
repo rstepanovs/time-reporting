@@ -2,6 +2,7 @@ import type { CurrentUser } from "@/auth/api";
 import type { CalendarDay, NonWorkingDay } from "@/calendar/api";
 import type { Customer } from "@/customers/api";
 import type { BillingItem, Project, ProjectMember } from "@/projects/api";
+import type { SystemConfig, SystemStatus } from "@/system/api";
 import type {
   MonthCalendar,
   MonthHours,
@@ -140,6 +141,38 @@ export const testProjectMember: ProjectMember = {
 
 // 2026-09-14 is a Monday.
 export const TEST_WEEK_START = "2026-09-14";
+
+export const testSystemStatus: SystemStatus = {
+  backend_version: "1.2.3",
+  git_sha: "abc123def456",
+  database: {
+    server_version: "17.4",
+    size_bytes: 52_428_800,
+    connection_count: 3,
+    current_revision: "0010_add_audit_events",
+    head_revision: "0010_add_audit_events",
+    migrations_pending: false,
+  },
+  tables: [
+    { name: "users", estimated_rows: 5 },
+    { name: "customers", estimated_rows: 3 },
+  ],
+  started_at: "2026-09-15T08:00:00Z",
+  uptime_seconds: 93_784,
+};
+
+export const testSystemConfig: SystemConfig = {
+  // Deliberately distinct from AppLayout's hardcoded "Time Reporting" header title, so tests can
+  // tell the two apart.
+  app_name: "Time Reporting (staging)",
+  debug: false,
+  cors_origins: ["http://localhost:5173"],
+  access_token_expire_minutes: 60,
+  auth_cookie_secure: true,
+  holiday_country: "DE",
+  holiday_subdivision: "BE",
+  daily_working_hours: "8.00",
+};
 
 export const testNonWorkingDay: NonWorkingDay = {
   id: "d1a1a1a1-1111-1111-1111-111111111111",

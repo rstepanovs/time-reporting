@@ -2,6 +2,9 @@
 
 FROM node:24-alpine AS build
 
+ARG VITE_GIT_SHA
+ENV VITE_GIT_SHA=$VITE_GIT_SHA
+
 WORKDIR /app
 
 COPY package.json package-lock.json ./
