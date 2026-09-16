@@ -16,31 +16,47 @@ import type {
   YearHours,
 } from "@/timesheets/api";
 
-export const testUser: CurrentUser = {
+export const testManager: CurrentUser = {
   id: "3f0c8a52-6a55-4f5e-9d0e-6a1c1f1f2b10",
   name: "Ada Lovelace",
   email: "ada@example.com",
-  role: "project_manager",
+  roles: ["manager"],
   is_active: true,
   last_login_at: "2026-09-14T08:00:00Z",
   created_at: "2026-09-01T08:00:00Z",
   updated_at: "2026-09-01T08:00:00Z",
 };
 
-export const testWorker: CurrentUser = {
-  ...testUser,
+export const testEmployee: CurrentUser = {
+  ...testManager,
   id: "7b1a2c3d-4e5f-6789-0abc-def123456789",
-  name: "Wendy Worker",
+  name: "Wendy Employee",
   email: "wendy@example.com",
-  role: "worker",
+  roles: [],
 };
 
 export const testAdmin: CurrentUser = {
-  ...testUser,
+  ...testManager,
   id: "a1d2e3f4-5678-4abc-9def-0123456789ab",
   name: "Alice Admin",
   email: "alice@example.com",
-  role: "admin",
+  roles: ["admin", "manager"],
+};
+
+export const testAdminOnly: CurrentUser = {
+  ...testAdmin,
+  id: "a1d2e3f4-5678-4abc-9def-0123456789ac",
+  name: "Ann Admin-Only",
+  email: "ann@example.com",
+  roles: ["admin"],
+};
+
+export const testAccountant: CurrentUser = {
+  ...testManager,
+  id: "a1d2e3f4-5678-4abc-9def-0123456789ad",
+  name: "Andy Accountant",
+  email: "andy@example.com",
+  roles: ["accountant"],
 };
 
 export const testCustomer: Customer = {
@@ -114,10 +130,10 @@ export const testCustomBillingItem: BillingItem = {
 };
 
 export const testProjectMember: ProjectMember = {
-  user_id: testWorker.id,
-  name: testWorker.name,
-  email: testWorker.email,
-  role: testWorker.role,
+  user_id: testEmployee.id,
+  name: testEmployee.name,
+  email: testEmployee.email,
+  roles: testEmployee.roles,
   is_active: true,
   added_at: "2026-02-02T08:00:00Z",
 };
@@ -173,7 +189,7 @@ export const testTimesheetRow: TimesheetRow = {
 };
 
 export const testTimesheetWeek: TimesheetWeek = {
-  user: { id: testWorker.id, name: testWorker.name, email: testWorker.email },
+  user: { id: testEmployee.id, name: testEmployee.name, email: testEmployee.email },
   week_start: TEST_WEEK_START,
   status: "draft",
   submitted_at: null,
@@ -192,7 +208,7 @@ export const testTimesheetWeek: TimesheetWeek = {
 // week (today is 2026-09-15): Sep 14 is fully booked, Sep 15 (today) and Sep 17-18 aren't yet,
 // and Sep 16 is the custom non-working day already used by testCalendarDays.
 export const testMonthCalendar: MonthCalendar = {
-  user: { id: testWorker.id, name: testWorker.name, email: testWorker.email },
+  user: { id: testEmployee.id, name: testEmployee.name, email: testEmployee.email },
   year: 2026,
   month: 9,
   weeks: [
@@ -373,7 +389,7 @@ export const testMonthHoursPast: MonthHours = {
 };
 
 export const testYearHours: YearHours = {
-  user: { id: testWorker.id, name: testWorker.name, email: testWorker.email },
+  user: { id: testEmployee.id, name: testEmployee.name, email: testEmployee.email },
   year: 2026,
   months: [testMonthHoursCurrent, testMonthHoursPast],
   expected_hours: "256.00",
@@ -389,7 +405,7 @@ export const testYearHours: YearHours = {
 
 // Matches testMonthHoursCurrent's hours (46h booked of 88 expected, 56 to date) plus benefits.
 export const testMonthTimeSummary: MonthTimeSummary = {
-  user: { id: testWorker.id, name: testWorker.name, email: testWorker.email },
+  user: { id: testEmployee.id, name: testEmployee.name, email: testEmployee.email },
   year: 2026,
   month: 9,
   is_current: true,
@@ -409,7 +425,7 @@ export const testMonthTimeSummary: MonthTimeSummary = {
 
 // Matches testMonthHoursPast's hours (172h of 168 expected); no benefits this month.
 export const testMonthTimeSummaryPrevious: MonthTimeSummary = {
-  user: { id: testWorker.id, name: testWorker.name, email: testWorker.email },
+  user: { id: testEmployee.id, name: testEmployee.name, email: testEmployee.email },
   year: 2026,
   month: 8,
   is_current: false,
@@ -430,7 +446,7 @@ export const testMonthTimeSummaryPrevious: MonthTimeSummary = {
 // 6 ISO weeks ending with the current one (2026-09-14, matching TEST_WEEK_START and its 6h booked
 // in testMonthCalendar).
 export const testWeeklyHours: WeeklyHours = {
-  user: { id: testWorker.id, name: testWorker.name, email: testWorker.email },
+  user: { id: testEmployee.id, name: testEmployee.name, email: testEmployee.email },
   weeks: [
     {
       week_start: "2026-08-10",
@@ -538,7 +554,7 @@ export const testWeeklyHours: WeeklyHours = {
 };
 
 export const testTimesheetWeekSummary: TimesheetWeekSummary = {
-  user: { id: testWorker.id, name: testWorker.name, email: testWorker.email },
+  user: { id: testEmployee.id, name: testEmployee.name, email: testEmployee.email },
   week_start: TEST_WEEK_START,
   status: "submitted",
   submitted_at: "2026-09-14T09:00:00Z",
@@ -614,7 +630,7 @@ export const testTeamMonthOverview: TeamMonthOverview = {
       project: testTimesheetRow.project,
       members: [
         {
-          user: { id: testWorker.id, name: testWorker.name, email: testWorker.email },
+          user: { id: testEmployee.id, name: testEmployee.name, email: testEmployee.email },
           is_member: true,
           project_hours: "19.00",
           total_hours_in_month: "19.00",
@@ -635,7 +651,7 @@ export const testTeamMonthOverview: TeamMonthOverview = {
       },
       members: [
         {
-          user: { id: testUser.id, name: testUser.name, email: testUser.email },
+          user: { id: testManager.id, name: testManager.name, email: testManager.email },
           is_member: true,
           project_hours: "160.00",
           total_hours_in_month: "160.00",

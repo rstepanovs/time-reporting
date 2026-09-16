@@ -68,7 +68,14 @@ Backend: `modules/timesheets` (workflow statuses, locks and billing readiness ar
   `pages/HoursPage.tsx` (`/hours`, month navigation via a `?month=YYYY-MM` param) and, for the
   current/previous month, by the dashboard's `MonthTimeCard.tsx`.
 
-## Worker dashboard widgets (composed by `pages/DashboardPage.tsx`)
+## Dashboard (`pages/DashboardPage.tsx`)
+
+The dashboard is a list of sections gated by the level(s) the signed-in user holds, always in this
+order: **My time** (everyone) → **My team** (`manager`) → **Billing** (`accountant`) →
+**Administration** (`admin`); a combined user (e.g. `admin`+`manager`) sees every section their
+levels unlock.
+
+### My time (everyone)
 
 All render inside `components/DashboardCard.tsx`, in a responsive `SimpleGrid`.
 - `QuickActionsCard.tsx` — "Report time" / "Previous week" shortcuts to `/timesheet`.
@@ -81,14 +88,23 @@ All render inside `components/DashboardCard.tsx`, in a responsive `SimpleGrid`.
   sharing `WeeklyHoursChart`'s query/cache.
 - `MyProjectsCard.tsx` — the user's projects, linking to each.
 
+### Billing (`accountant`)
+
+- `AccountantPlaceholderCard.tsx` — a single `DashboardCard` noting that invoicing tools are coming;
+  static text only, no data calls. The accountant level is only a flag until the invoices module
+  lands.
+
+The Administration section (`admin`) is `admin/AdminShortcutsCard.tsx`, documented in
+`admin/CLAUDE.md`.
+
 ## Manager views
 
-- `TeamScopeToggle` — "My projects"/"All" (admin only; a project manager is always scoped to their
-  own). URL-backed (`?scope=`) on `/approvals` and `/team`, local state on the dashboard.
+- `TeamScopeToggle` — "My projects"/"All", available to any manager. URL-backed (`?scope=`) on
+  `/approvals` and `/team`, local state on the dashboard.
 - `pages/ApprovalsPage.tsx` (`/approvals`) lists weeks awaiting review via
   `useSubmittedTimesheetWeeks` narrowed by the scope, each row linking to `/timesheet?week=&user=`.
-- The dashboard's "My team" section (admin/project manager only), driven by `useTeamMonthOverview`
-  for the current month:
+- The dashboard's "My team" section (`manager` only), driven by `useTeamMonthOverview` for the
+  current month:
   - `TeamTimesheetsCard.tsx` — awaiting-approval/returned/not-submitted counts, linking to
     `/approvals?scope=`.
   - `ProjectBillingCard.tsx` — each managed project's hours, weeks-approved x/y and billing status

@@ -82,8 +82,8 @@ class TimesheetWeekDTO:
     can_edit: bool
     # Whether the caller may submit this week: same condition as ``can_edit``.
     can_submit: bool
-    # Whether the caller may approve/return this week: an admin or project manager, not reviewing
-    # their own week, and the week is submitted or approved.
+    # Whether the caller may approve/return this week: the caller holds the manager level, isn't
+    # reviewing their own week, and the week is submitted or approved.
     can_review: bool
     days: tuple[CalendarDayDTO, ...]
     rows: tuple[TimesheetRowDTO, ...]
@@ -96,7 +96,7 @@ class HoursTotalsDTO:
     ``normal_hours``/``overtime_hours``/``travel_hours`` come from entries on the matching preset;
     ``other_hours`` is every other ``hour``-unit entry (custom items). ``total_hours`` is the sum
     of all four. ``day``- and ``amount``-unit entries (per diems, expenses) are not part of this —
-    the worker dashboard only shows hours.
+    the employee dashboard only shows hours.
     """
 
     normal_hours: Decimal
@@ -190,7 +190,7 @@ class CurrencyAmountDTO:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class MonthTimeSummaryDTO:
-    """One month's booked time for the worker dashboard's "My time" card: hours split by preset
+    """One month's booked time for the employee dashboard's "My time" card: hours split by preset
     (``hours``, as in ``HoursTotalsDTO``), plus the benefits that aren't hours — ``day``-unit
     entries (per diems) as ``per_diem_days`` and ``amount``-unit entries (expenses) summed per
     currency as ``expenses``.
@@ -394,7 +394,7 @@ class CountTimeEntries(Query[int]):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class GetMonthCalendar(Query[MonthCalendarDTO]):
-    """``month``'s calendar for the worker dashboard, spanning full ISO weeks. ``today`` drives
+    """``month``'s calendar for the employee dashboard, spanning full ISO weeks. ``today`` drives
     ``expected_hours_to_date`` and is supplied by the caller (the router fills in the real date) so
     the result is deterministic. Raises ``UserNotFoundError`` if ``user_id`` doesn't exist."""
 
@@ -406,7 +406,7 @@ class GetMonthCalendar(Query[MonthCalendarDTO]):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class GetYearHours(Query[YearHoursDTO]):
-    """``year``'s hours by month for the worker dashboard. ``today`` is supplied by the caller,
+    """``year``'s hours by month for the employee dashboard. ``today`` is supplied by the caller,
     like ``GetMonthCalendar``. Raises ``UserNotFoundError`` if ``user_id`` doesn't exist."""
 
     user_id: UUID
@@ -416,7 +416,7 @@ class GetYearHours(Query[YearHoursDTO]):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class GetMonthTimeSummary(Query[MonthTimeSummaryDTO]):
-    """A single month's booked time for the worker dashboard's "My time" card. ``today`` is
+    """A single month's booked time for the employee dashboard's "My time" card. ``today`` is
     supplied by the caller (the router fills in the real date), like ``GetMonthCalendar``. Raises
     ``UserNotFoundError`` if ``user_id`` doesn't exist."""
 
@@ -450,7 +450,7 @@ class ListSubmittedTimesheetWeeks(Query[tuple[TimesheetWeekSummaryDTO, ...]]):
 class GetTeamMonthOverview(Query[TeamMonthOverviewDTO]):
     """A manager's team overview for ``year``/``month``. ``manager_id=None`` covers every active
     project (an admin's "all" view) rather than one manager's; ``today`` is supplied by the caller
-    (the router fills in the real date), like the worker dashboard's queries."""
+    (the router fills in the real date), like the employee dashboard's queries."""
 
     manager_id: UUID | None
     year: int
@@ -510,8 +510,8 @@ class SubmitTimesheetWeek(Command[TimesheetWeekDTO]):
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ApproveTimesheetWeek(Command[TimesheetWeekDTO]):
     """Move ``user_id``'s week from submitted to approved. Raises ``WeekStartNotMondayError``,
-    ``UserNotFoundError``, ``InvalidWeekStatusTransitionError`` or ``SelfReviewError`` (a project
-    manager, not an admin, reviewing their own week)."""
+    ``UserNotFoundError``, ``InvalidWeekStatusTransitionError`` or ``SelfReviewError`` (nobody, not
+    even an admin, reviews their own week)."""
 
     user_id: UUID
     week_start: date
@@ -534,11 +534,11 @@ class ReturnTimesheetWeek(Command[TimesheetWeekDTO]):
 class SendProjectMonthToBilling(Command[ProjectBillingPeriodDTO]):
     """Send ``project_id``'s ``year``/``month`` to billing: a stub that records the handoff
     (``ProjectBillingPeriod``) and locks the period — invoicing itself doesn't exist yet. Allowed
-    on any day, not only after the month ends. Raises ``TimesheetProjectNotFoundError``,
-    ``UserNotFoundError`` (``sent_by_id``), ``NotProjectManagerError`` (a project manager who isn't
-    this project's manager; admins may send any project), ``BillingPeriodNotReadyError`` (some
-    week in scope isn't approved yet, or there is nothing to send) or
-    ``BillingPeriodAlreadySentError``.
+    on any day, not only after the month ends, and by any manager regardless of the project's
+    ``manager_id`` (the router's ``ManagerDep`` is the only check). Raises
+    ``TimesheetProjectNotFoundError``, ``UserNotFoundError`` (``sent_by_id``),
+    ``BillingPeriodNotReadyError`` (some week in scope isn't approved yet, or there is nothing to
+    send) or ``BillingPeriodAlreadySentError``.
     """
 
     project_id: UUID
@@ -644,7 +644,7 @@ class InvalidWeekStatusTransitionError(TimesheetError):
 
 class SelfReviewError(TimesheetError):
     def __init__(self) -> None:
-        super().__init__("A project manager cannot approve or return their own week")
+        super().__init__("Cannot approve or return your own week")
 
 
 class ReturnCommentRequiredError(TimesheetError):
@@ -655,12 +655,6 @@ class ReturnCommentRequiredError(TimesheetError):
 class TimesheetProjectNotFoundError(TimesheetError):
     def __init__(self, project_id: UUID) -> None:
         super().__init__(f"Project {project_id} not found")
-        self.project_id = project_id
-
-
-class NotProjectManagerError(TimesheetError):
-    def __init__(self, project_id: UUID) -> None:
-        super().__init__(f"You are not project {project_id}'s manager")
         self.project_id = project_id
 
 

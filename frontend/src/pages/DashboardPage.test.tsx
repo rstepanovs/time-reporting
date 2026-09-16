@@ -3,15 +3,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fetchCurrentUser } from "@/auth/api";
 import {
+  testAccountant,
   testAdmin,
+  testAdminOnly,
   testMonthTimeSummary,
   testMonthTimeSummaryPrevious,
   testReadyBillingPeriod,
   testTeamMonthOverview,
   testTimesheetOption,
-  testUser,
+  testManager,
   testWeeklyHours,
-  testWorker,
+  testEmployee,
 } from "@/test/fixtures";
 import { renderApp } from "@/test/renderApp";
 import {
@@ -38,7 +40,7 @@ vi.mock("@/timesheets/api", async (importOriginal) => ({
 
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+  vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
   vi.mocked(getMonthTimeSummary).mockImplementation(async ({ month }) => {
     if (month === 9) return testMonthTimeSummary;
     if (month === 8) return testMonthTimeSummaryPrevious;
@@ -136,34 +138,63 @@ describe("DashboardPage", () => {
     expect(link.getAttribute("href")).toBe(`/projects/${testTimesheetOption.project.id}`);
   });
 
-  it("does not show a team section to a worker", async () => {
+  it("shows only the My time section to a plain employee", async () => {
     renderApp("/");
 
-    await screen.findByText(/Website Revamp/);
+    await screen.findByRole("heading", { name: "My time" });
     expect(screen.queryByRole("heading", { name: "My team" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Billing" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Administration" })).toBeNull();
   });
 
-  it("shows the team section to a project manager, without a scope toggle", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+  it("shows the team section and a scope toggle to a manager", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     renderApp("/");
 
     await screen.findByRole("heading", { name: "My team" });
     expect(await screen.findByText("Awaiting approval")).toBeTruthy();
     expect(screen.getByText("Not submitted")).toBeTruthy();
-    expect(screen.queryByRole("radio", { name: "All" })).toBeNull();
-  });
-
-  it("shows an admin the scope toggle", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testAdmin);
-    renderApp("/");
-
-    await screen.findByRole("heading", { name: "My team" });
     expect(await screen.findByRole("radio", { name: "My projects" })).toBeTruthy();
     expect(screen.getByRole("radio", { name: "All" })).toBeTruthy();
   });
 
+  it("shows an Administration section, but not My team, to an admin who isn't also a manager", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testAdminOnly);
+    renderApp("/");
+
+    // "Administration" is both the section heading (h3) and its single card's title (h4).
+    await screen.findByRole("heading", { name: "Administration", level: 3 });
+    expect(screen.queryByRole("heading", { name: "My team" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Billing" })).toBeNull();
+    const usersLink = screen.getByRole("link", { name: "Users" });
+    expect(usersLink.getAttribute("href")).toBe("/admin/users");
+    expect(screen.getByRole("link", { name: "System status" }).getAttribute("href")).toBe(
+      "/admin/status",
+    );
+  });
+
+  it("shows a Billing placeholder to an accountant", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testAccountant);
+    renderApp("/");
+
+    await screen.findByRole("heading", { name: "Billing" });
+    expect(screen.queryByRole("heading", { name: "My team" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Administration", level: 3 })).toBeNull();
+  });
+
+  it("shows both My team and Administration to an admin who is also a manager", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testAdmin);
+    renderApp("/");
+
+    await screen.findByRole("heading", { name: "My team" });
+    expect(screen.getByRole("heading", { name: "Administration", level: 3 })).toBeTruthy();
+    // "My team" already has a "Billing" card (ProjectBillingCard); only the Billing *section*
+    // (h3) is gated by the accountant level.
+    expect(screen.queryByRole("heading", { name: "Billing", level: 3 })).toBeNull();
+  });
+
   it("lets a manager send a ready project's month to billing", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     vi.mocked(sendProjectMonthToBilling).mockResolvedValue(testReadyBillingPeriod);
     renderApp("/");
     await screen.findByRole("heading", { name: "My team" });

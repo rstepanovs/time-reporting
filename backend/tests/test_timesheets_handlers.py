@@ -4,7 +4,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from support import ProjectFactory, UserFactory
+from support import ADMIN, EMPLOYEE, MANAGER, ProjectFactory, UserFactory
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.projects.contracts import (
     AddProjectMember,
@@ -37,7 +37,7 @@ from time_reporting.modules.timesheets.contracts import (
     TimesheetWeekStatus,
     WeekStartNotMondayError,
 )
-from time_reporting.modules.users.contracts import UserNotFoundError, UserRole
+from time_reporting.modules.users.contracts import UserNotFoundError
 
 # 2026-09-14 is a Monday.
 A_MONDAY = date(2026, 9, 14)
@@ -613,8 +613,8 @@ async def _member_worker_and_manager(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> tuple[UUID, UUID, UUID]:
     """A worker booked onto a project, plus its normal-hours item id and a project manager."""
-    worker = await make_user(role=UserRole.WORKER)
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    worker = await make_user(roles=EMPLOYEE)
+    manager = await make_user(roles=MANAGER)
     project = await make_project()
     await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
     item_id = await _normal_hours_item_id(bus, project.id)
@@ -726,7 +726,7 @@ async def test_return_requires_a_non_blank_comment(
 async def test_project_manager_cannot_review_their_own_week(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    manager = await make_user(roles=MANAGER)
     project = await make_project()
     await bus.execute(AddProjectMember(project_id=project.id, user_id=manager.id))
     await bus.execute(SubmitTimesheetWeek(user_id=manager.id, week_start=A_MONDAY))
@@ -737,25 +737,25 @@ async def test_project_manager_cannot_review_their_own_week(
         )
 
 
-async def test_admin_can_review_their_own_week(
+async def test_admin_manager_cannot_review_their_own_week(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
-    admin = await make_user(role=UserRole.ADMIN)
+    admin = await make_user(roles=ADMIN)
     project = await make_project()
     await bus.execute(AddProjectMember(project_id=project.id, user_id=admin.id))
     await bus.execute(SubmitTimesheetWeek(user_id=admin.id, week_start=A_MONDAY))
 
-    approved = await bus.execute(
-        ApproveTimesheetWeek(user_id=admin.id, week_start=A_MONDAY, reviewer_id=admin.id)
-    )
-    assert approved.status is TimesheetWeekStatus.APPROVED
+    with pytest.raises(SelfReviewError):
+        await bus.execute(
+            ApproveTimesheetWeek(user_id=admin.id, week_start=A_MONDAY, reviewer_id=admin.id)
+        )
 
 
 async def test_can_review_reflects_role_and_status(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
     worker_id, _item_id, manager_id = await _member_worker_and_manager(bus, make_project, make_user)
-    other_worker = await make_user(role=UserRole.WORKER)
+    other_worker = await make_user(roles=EMPLOYEE)
 
     draft_view = await bus.query(
         GetTimesheetWeek(user_id=worker_id, week_start=A_MONDAY, viewer_id=manager_id)

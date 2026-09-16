@@ -113,7 +113,8 @@ Modules talk to each other exclusively through the in-process CQRS bus in `core/
 - `api/deps.py:BusDep` builds a request-scoped `Bus`; `cli.py` builds one per invocation the same way.
 
 Modules (each documented in its own `CLAUDE.md`):
-- **`users`** — `User`, roles (`admin`/`project_manager`/`worker`), account management, user directory.
+- **`users`** — `User`, access levels (`admin`/`manager`/`accountant`, combinable, on top of the
+  implicit "employee" baseline every account has), account management, user directory.
 - **`auth`** — JWT issuing/validation, login/session cookie, route guards (`auth/dependencies.py`).
 - **`customers`** — `Customer`: legal details, billing address/period, currency, payment terms.
 - **`projects`** — `Project`, `ProjectMember`, `ProjectBillingItem`, a project's `manager_id`.
@@ -140,17 +141,20 @@ owning module's `PATCH` endpoint (`ManagerDep`).
   Each area's `CLAUDE.md` has the details.
 - **`router.tsx`** — route tree (`routes`, also used by tests): `/login` is public, everything else sits
   under `RequireAuth` → `AppLayout`. Page components live in `pages/` (see `pages/CLAUDE.md`), shared
-  chrome in `components/`. `/` (`DashboardPage`) is the default landing page; `/timesheet` (query
+  chrome in `components/`. `/` (`DashboardPage`) is the default landing page, a list of sections
+  assembled from the viewer's access levels (My time for everyone, then My team/Billing/
+  Administration per level — see `pages/CLAUDE.md`); `/timesheet` (query
   params `week`/`user`), `/hours` (`month`), `/projects`, `/projects/:projectId`,
   `/account/password`; `/approvals` and `/team`
-  sit under `RequireRole roles={["admin","project_manager"]}`;
+  sit under `RequireRole roles={["manager"]}` (any-of, so an admin who is also a manager passes too);
   `/admin/{users,customers,projects,calendar,status}` sit under `RequireRole roles={["admin"]}`, with
   `/admin` redirecting to `/admin/users`.
-- **`components/AppLayout.tsx`** — the signed-in shell: header with the account menu and an
-  `AppShell.Navbar` (collapsible on mobile via a `Burger`) linking to the pages in `pages/`
-  (Dashboard, Timesheet, My hours, Projects, in that order — plus Approvals then Team, inserted
-  right after My hours, shown only when `canManage(user.role)`), plus an "Administration" nav group
-  (Users/Customers/Projects/Calendar/System status) shown only when `isAdmin(user.role)`.
+- **`components/AppLayout.tsx`** — the signed-in shell: header with the account menu (shows a badge
+  per access level the user holds, or "Employee" if none) and an `AppShell.Navbar` (collapsible on
+  mobile via a `Burger`) linking to the pages in `pages/` (Dashboard, Timesheet, My hours, Projects,
+  in that order — plus Approvals then Team, inserted right after My hours, shown only when
+  `canManage(user)`), plus an "Administration" nav group (Users/Customers/Projects/Calendar/System
+  status) shown only when `isAdmin(user)`.
   `components/DashboardCard.tsx` is the shared frame the dashboard's widget cards render inside
   (title, content, an optional "Details →" style footer link, a highlight tint via
   `data-highlighted`).
@@ -181,9 +185,11 @@ URL is hardcoded in the frontend.
   `DELETE /auth/session` clears it. `get_current_user` accepts a bearer header (which wins) or that
   cookie; cookie-authenticated unsafe requests (not GET/HEAD/OPTIONS) must also carry `X-Requested-With`
   or get 403 (CSRF defense). Signing out only clears the cookie — the JWT stays valid until it expires.
-- Route guards every router uses: `auth/dependencies.py` — `CurrentUserDep`, `require_roles`,
-  `AdminDep`, `ManagerDep` (`admin` or `project_manager`). Role and `is_active` are re-read from the
-  database on every request, so deactivation/role/password changes take effect immediately.
+- Route guards every router uses: `auth/dependencies.py` — `CurrentUserDep`, `require_roles`
+  (admits a user holding *any* of the given levels), `AdminDep`, `ManagerDep`, `AccountantDep`. A
+  user's access levels are orthogonal (a plain `CurrentUserDep` is the implicit "employee" every
+  account has); levels and `is_active` are re-read from the database on every request, so
+  deactivation/level/password changes take effect immediately.
 - Tests need a running, migrated Postgres (`docker compose up -d db`, then `alembic upgrade head`):
   `tests/conftest.py`'s `db_session` fixture runs each test in a rolled-back transaction on a real
   connection, so there is no SQLite/mock fallback.

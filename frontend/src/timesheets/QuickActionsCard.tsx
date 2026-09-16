@@ -4,7 +4,7 @@ import { Link } from "react-router";
 import { DashboardCard } from "@/components/DashboardCard";
 import { addWeeks, startOfIsoWeek, todayIso } from "@/timesheets/week";
 
-/** Shortcuts to the two things a worker opens the dashboard to do: book today's time, or catch up
+/** Shortcuts to the two things an employee opens the dashboard to do: book today's time, or catch up
  * on last week. */
 export function QuickActionsCard() {
   const previousWeekStart = addWeeks(startOfIsoWeek(todayIso()), -1);

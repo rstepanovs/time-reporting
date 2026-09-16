@@ -18,7 +18,7 @@ export const userKeys = {
 };
 
 /** Debounce `search` in the caller; this hook just runs the query as given. `roles` narrows the
- * picker (e.g. to admins/project managers for a project's manager field). */
+ * picker (e.g. to managers for a project's manager field). */
 export function useUserDirectory(search: string, roles?: UserRole[]) {
   return useQuery({
     queryKey: userKeys.directory(search, roles),
@@ -47,7 +47,7 @@ export function useUpdateUser(userId: string) {
     mutationFn: (body: {
       name?: string;
       email?: string;
-      role?: UserRole;
+      roles?: UserRole[];
       is_active?: boolean;
     }): Promise<User> => updateUser(userId, body),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: userKeys.all }),

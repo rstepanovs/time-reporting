@@ -15,14 +15,14 @@ import {
   updateProject,
   updateProjectBillingItem,
 } from "@/projects/api";
-import { searchUserDirectory } from "@/users/api";
+import { searchUserDirectory, type UserRole } from "@/users/api";
 import {
   testAdmin,
   testBillingItem,
   testProject,
   testProjectMember,
-  testUser,
-  testWorker,
+  testManager,
+  testEmployee,
 } from "@/test/fixtures";
 import { renderApp } from "@/test/renderApp";
 
@@ -59,7 +59,7 @@ beforeEach(() => {
 
 describe("ProjectDetailsPage", () => {
   it("renders the project, its members and its billing items", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     renderApp(`/projects/${testProject.id}`);
 
     await screen.findByRole("heading", { name: testProject.name });
@@ -74,12 +74,12 @@ describe("ProjectDetailsPage", () => {
     expect(screen.getByText("90.00 EUR / hour")).toBeTruthy();
   });
 
-  it("hides write controls from a worker", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+  it("hides write controls from a plain employee", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
     renderApp(`/projects/${testProject.id}`);
 
     await screen.findByRole("heading", { name: testProject.name });
-    // A worker can still read billing items, just not act on them; wait for them to render
+    // A plain employee can still read billing items, just not act on them; wait for them to render
     // before asserting the write controls are absent, so the page has settled.
     await screen.findByText(testBillingItem.name);
     expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
@@ -91,19 +91,19 @@ describe("ProjectDetailsPage", () => {
   });
 
   it("lets a manager add a member", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     const candidate = {
       id: "new-member-id",
       name: "New Member",
       email: "new-member@example.com",
-      role: "worker" as const,
+      roles: [] as UserRole[],
     };
     vi.mocked(searchUserDirectory).mockResolvedValue([candidate]);
     vi.mocked(addProjectMember).mockResolvedValue({
       user_id: candidate.id,
       name: candidate.name,
       email: candidate.email,
-      role: candidate.role,
+      roles: candidate.roles,
       is_active: true,
       added_at: "2026-03-01T08:00:00Z",
     });
@@ -122,7 +122,7 @@ describe("ProjectDetailsPage", () => {
   });
 
   it("lets a manager remove a member after confirming", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     vi.mocked(removeProjectMember).mockResolvedValue();
     renderApp(`/projects/${testProject.id}`);
     await screen.findByRole("heading", { name: testProject.name });
@@ -137,7 +137,7 @@ describe("ProjectDetailsPage", () => {
   });
 
   it("shows 'None' when the project has no manager", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     renderApp(`/projects/${testProject.id}`);
 
     await screen.findByRole("heading", { name: testProject.name });
@@ -145,7 +145,7 @@ describe("ProjectDetailsPage", () => {
   });
 
   it("shows the project's manager when assigned", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     vi.mocked(getProject).mockResolvedValue({
       ...testProject,
       manager: { id: "mgr-1", name: "Mark Manager", email: "mark@example.com", is_active: true },
@@ -157,12 +157,12 @@ describe("ProjectDetailsPage", () => {
   });
 
   it("lets a manager assign a project manager", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     const candidate = {
       id: "mgr-1",
       name: "Mark Manager",
       email: "mark@example.com",
-      role: "project_manager" as const,
+      roles: ["manager"] as UserRole[],
     };
     vi.mocked(searchUserDirectory).mockResolvedValue([candidate]);
     vi.mocked(updateProject).mockResolvedValue({
@@ -186,7 +186,7 @@ describe("ProjectDetailsPage", () => {
   });
 
   it("lets a manager change normal working hours per day", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     vi.mocked(updateProject).mockResolvedValue({
       ...testProject,
       normal_working_hours: "6.00",
@@ -208,7 +208,7 @@ describe("ProjectDetailsPage", () => {
   });
 
   it("archives the project after confirming", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     vi.mocked(updateProject).mockResolvedValue({ ...testProject, is_active: false });
     renderApp(`/projects/${testProject.id}`);
     await screen.findByRole("heading", { name: testProject.name });
@@ -223,7 +223,7 @@ describe("ProjectDetailsPage", () => {
   });
 
   it("lets a manager add a billing item, swapping the rate field for a markup field by unit", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     vi.mocked(addProjectBillingItem).mockResolvedValue({
       ...testBillingItem,
       id: "new-item-id",
@@ -263,7 +263,7 @@ describe("ProjectDetailsPage", () => {
   });
 
   it("lets a manager edit a billing item's rate", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     vi.mocked(updateProjectBillingItem).mockResolvedValue({
       ...testBillingItem,
       unit_rate: "95.00",
@@ -287,7 +287,7 @@ describe("ProjectDetailsPage", () => {
   });
 
   it("shows archived billing items only once the switch is toggled", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     renderApp(`/projects/${testProject.id}`);
     await screen.findByRole("heading", { name: testProject.name });
     expect(listProjectBillingItems).toHaveBeenCalledWith(testProject.id, false);
@@ -300,7 +300,7 @@ describe("ProjectDetailsPage", () => {
   });
 
   it("offers permanently deleting a billing item only to an admin", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser); // a project manager
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager); // a project manager
     renderApp(`/projects/${testProject.id}`);
     await screen.findByRole("heading", { name: testProject.name });
 
@@ -326,7 +326,7 @@ describe("ProjectDetailsPage", () => {
   });
 
   it("shows a conflict error when adding a duplicate billing item name", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     vi.mocked(addProjectBillingItem).mockRejectedValue(new BillingItemConflictError());
     renderApp(`/projects/${testProject.id}`);
     await screen.findByRole("heading", { name: testProject.name });
@@ -342,7 +342,7 @@ describe("ProjectDetailsPage", () => {
   });
 
   it("shows a not-found state for an unknown project", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     vi.mocked(getProject).mockRejectedValue(new ProjectNotFoundError());
     renderApp(`/projects/${testProject.id}`);
 

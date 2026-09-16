@@ -2,7 +2,7 @@ from uuid import uuid4
 
 import pytest
 
-from support import DEFAULT_PASSWORD, ProjectFactory, UserFactory
+from support import ADMIN, ADMIN_ONLY, DEFAULT_PASSWORD, MANAGER, ProjectFactory, UserFactory
 from time_reporting.core.cqrs import Bus
 from time_reporting.core.passwords import verify_password
 from time_reporting.modules.projects.contracts import AddProjectMember, RemoveUserFromAllProjects
@@ -31,13 +31,13 @@ async def test_create_user_normalizes_email_and_hashes_password(bus: Bus) -> Non
         CreateUser(
             name="Ann",
             email="  Ann@Example.COM ",
-            role=UserRole.PROJECT_MANAGER,
+            roles=MANAGER,
             password=DEFAULT_PASSWORD,
         )
     )
 
     assert user.email == "ann@example.com"
-    assert user.role is UserRole.PROJECT_MANAGER
+    assert user.roles == MANAGER
     assert user.is_active
     assert user.token_version == 0
     assert user.last_login_at is None
@@ -65,7 +65,7 @@ async def test_get_unknown_user_returns_none(bus: Bus) -> None:
 
 
 async def test_update_user_changes_only_given_fields(bus: Bus, make_user: UserFactory) -> None:
-    admin = await make_user(role=UserRole.ADMIN)
+    admin = await make_user(roles=ADMIN)
     user = await make_user(name="Old Name")
 
     updated = await bus.execute(
@@ -73,27 +73,27 @@ async def test_update_user_changes_only_given_fields(bus: Bus, make_user: UserFa
             user_id=user.id,
             acting_user_id=admin.id,
             email="New@Example.com",
-            role=UserRole.PROJECT_MANAGER,
+            roles=MANAGER,
             is_active=False,
         )
     )
 
     assert updated.name == "Old Name"
     assert updated.email == "new@example.com"
-    assert updated.role is UserRole.PROJECT_MANAGER
+    assert updated.roles == MANAGER
     assert not updated.is_active
     assert updated.updated_at >= user.updated_at
 
 
 async def test_update_unknown_user_raises(bus: Bus, make_user: UserFactory) -> None:
-    admin = await make_user(role=UserRole.ADMIN)
+    admin = await make_user(roles=ADMIN)
 
     with pytest.raises(UserNotFoundError):
         await bus.execute(UpdateUser(user_id=uuid4(), acting_user_id=admin.id, name="X"))
 
 
 async def test_update_rejects_taken_email(bus: Bus, make_user: UserFactory) -> None:
-    admin = await make_user(role=UserRole.ADMIN)
+    admin = await make_user(roles=ADMIN)
     await make_user(email="taken@example.com")
     user = await make_user()
 
@@ -104,26 +104,37 @@ async def test_update_rejects_taken_email(bus: Bus, make_user: UserFactory) -> N
 
 
 @pytest.mark.parametrize(
-    "changes", [{"role": UserRole.WORKER}, {"is_active": False}], ids=["demote", "deactivate"]
+    "changes", [{"roles": MANAGER}, {"is_active": False}], ids=["remove-own-admin", "deactivate"]
 )
-async def test_admin_cannot_demote_or_deactivate_self(
+async def test_admin_cannot_remove_own_admin_level_or_deactivate_self(
     bus: Bus, make_user: UserFactory, changes: dict[str, object]
 ) -> None:
-    admin = await make_user(role=UserRole.ADMIN)
+    admin = await make_user(roles=ADMIN)
 
     with pytest.raises(SelfModificationError):
         await bus.execute(UpdateUser(user_id=admin.id, acting_user_id=admin.id, **changes))  # type: ignore[arg-type]
 
 
+async def test_admin_can_change_own_manager_level(bus: Bus, make_user: UserFactory) -> None:
+    """An admin may drop their own ``manager`` level, unlike ``admin`` (lock-out guard)."""
+    admin = await make_user(roles=ADMIN)
+
+    updated = await bus.execute(
+        UpdateUser(user_id=admin.id, acting_user_id=admin.id, roles=ADMIN_ONLY)
+    )
+
+    assert updated.roles == ADMIN_ONLY
+
+
 async def test_admin_can_edit_own_profile(bus: Bus, make_user: UserFactory) -> None:
-    admin = await make_user(role=UserRole.ADMIN)
+    admin = await make_user(roles=ADMIN)
 
     updated = await bus.execute(
         UpdateUser(
             user_id=admin.id,
             acting_user_id=admin.id,
             name="Renamed",
-            role=UserRole.ADMIN,
+            roles=ADMIN,
             is_active=True,
         )
     )
@@ -215,23 +226,32 @@ async def test_list_users_filters_by_search_and_active_status(
 
 
 async def test_list_users_filters_by_roles(bus: Bus, make_user: UserFactory) -> None:
-    admin = await make_user(role=UserRole.ADMIN, name="Ada Admin", email="ada-roles@example.com")
-    manager = await make_user(
-        role=UserRole.PROJECT_MANAGER, name="Mark Manager", email="mark-roles@example.com"
-    )
-    await make_user(role=UserRole.WORKER, name="Wendy Worker", email="wendy-roles@example.com")
+    admin = await make_user(roles=ADMIN_ONLY, name="Ada Admin", email="ada-roles@example.com")
+    manager = await make_user(roles=MANAGER, name="Mark Manager", email="mark-roles@example.com")
+    await make_user(name="Wendy Worker", email="wendy-roles@example.com")
 
     page = await bus.query(
-        ListUsers(
-            limit=100,
-            offset=0,
-            roles=frozenset({UserRole.ADMIN, UserRole.PROJECT_MANAGER}),
-        )
+        ListUsers(limit=100, offset=0, roles=frozenset({UserRole.ADMIN, UserRole.MANAGER}))
     )
 
     ids = {u.id for u in page.items}
     assert admin.id in ids
     assert manager.id in ids
+
+
+async def test_list_users_roles_filter_is_any_of(bus: Bus, make_user: UserFactory) -> None:
+    """A user holding both levels matches a filter naming either one, not just the combination."""
+    combined = await make_user(roles=ADMIN, name="Max Multi", email="max-roles@example.com")
+
+    admin_only_page = await bus.query(
+        ListUsers(limit=100, offset=0, roles=frozenset({UserRole.ADMIN}))
+    )
+    manager_only_page = await bus.query(
+        ListUsers(limit=100, offset=0, roles=frozenset({UserRole.MANAGER}))
+    )
+
+    assert combined.id in {u.id for u in admin_only_page.items}
+    assert combined.id in {u.id for u in manager_only_page.items}
 
 
 async def test_list_users_search_treats_wildcards_as_literal(
@@ -261,7 +281,7 @@ async def test_get_users_by_ids_with_empty_set_returns_empty(bus: Bus) -> None:
 
 
 async def test_delete_user_removes_the_row(bus: Bus, make_user: UserFactory) -> None:
-    admin = await make_user(role=UserRole.ADMIN)
+    admin = await make_user(roles=ADMIN)
     user = await make_user()
 
     await bus.execute(DeleteUser(user_id=user.id, acting_user_id=admin.id))
@@ -270,7 +290,7 @@ async def test_delete_user_removes_the_row(bus: Bus, make_user: UserFactory) -> 
 
 
 async def test_delete_user_rejects_self_deletion(bus: Bus, make_user: UserFactory) -> None:
-    admin = await make_user(role=UserRole.ADMIN)
+    admin = await make_user(roles=ADMIN)
 
     with pytest.raises(SelfModificationError):
         await bus.execute(DeleteUser(user_id=admin.id, acting_user_id=admin.id))
@@ -279,7 +299,7 @@ async def test_delete_user_rejects_self_deletion(bus: Bus, make_user: UserFactor
 
 
 async def test_delete_unknown_user_raises(bus: Bus, make_user: UserFactory) -> None:
-    admin = await make_user(role=UserRole.ADMIN)
+    admin = await make_user(roles=ADMIN)
 
     with pytest.raises(UserNotFoundError):
         await bus.execute(DeleteUser(user_id=uuid4(), acting_user_id=admin.id))
@@ -288,7 +308,7 @@ async def test_delete_unknown_user_raises(bus: Bus, make_user: UserFactory) -> N
 async def test_delete_user_blocked_by_project_membership(
     bus: Bus, make_user: UserFactory, make_project: ProjectFactory
 ) -> None:
-    admin = await make_user(role=UserRole.ADMIN)
+    admin = await make_user(roles=ADMIN)
     user = await make_user()
     project = await make_project()
     await bus.execute(AddProjectMember(project_id=project.id, user_id=user.id))

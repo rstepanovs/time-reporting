@@ -13,7 +13,7 @@ Backend: `modules/projects`.
 - `ProjectFormModal.tsx` — shared create/edit form used by `pages/ProjectsPage.tsx`,
   `pages/ProjectDetailsPage.tsx` and `pages/admin/AdminProjectsPage.tsx`; an optional `onCreated`
   callback lets the admin page stay put instead of navigating to the new project. A searchable,
-  clearable "Manager" picker (`useUserDirectory` with `roles: ["admin","project_manager"]`)
+  clearable "Manager" picker (`useUserDirectory` with `roles: ["manager"]`)
   sets/clears `manager_id`, keeping the current manager selectable even when a search narrows the
   directory past them.
 - `BillingItemFormModal.tsx` — create/edit a billing item; the unit is locked once editing, and its
@@ -21,8 +21,8 @@ Backend: `modules/projects`.
 
 ## Pages
 
-- `pages/ProjectsPage.tsx` has a Manager column and, for admins/project managers, a "Managed by me"
-  filter (`manager_id` = the signed-in user).
+- `pages/ProjectsPage.tsx` has a Manager column and, for managers, a "Managed by me" filter
+  (`manager_id` = the signed-in user).
 - `pages/ProjectDetailsPage.tsx` shows the project's manager; its "Billing items" section is readable
   by anyone, editable by managers, and offers "Delete permanently" to admins only — the one write in
   this router that isn't `ManagerDep`.

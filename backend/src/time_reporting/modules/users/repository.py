@@ -87,7 +87,7 @@ class UserRepository:
         if not include_inactive:
             statement = statement.where(User.is_active.is_(True))
         if roles:
-            statement = statement.where(User.role.in_(roles))
+            statement = statement.where(User.roles.overlap(list(roles)))
         if search:
             pattern = f"%{escape_like(search)}%"
             statement = statement.where(

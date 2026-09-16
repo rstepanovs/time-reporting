@@ -90,9 +90,16 @@ async def list_users(
     offset: Annotated[int, Query(ge=0)] = 0,
     search: Annotated[str | None, Query(max_length=255)] = None,
     include_inactive: bool = True,
+    role: Annotated[list[UserRole] | None, Query()] = None,
 ) -> UserPageResponse:
     page = await bus.query(
-        ListUsers(limit=limit, offset=offset, search=search, include_inactive=include_inactive)
+        ListUsers(
+            limit=limit,
+            offset=offset,
+            search=search,
+            include_inactive=include_inactive,
+            roles=frozenset(role) if role else None,
+        )
     )
     return UserPageResponse.model_validate(page)
 
@@ -106,7 +113,7 @@ async def search_user_directory(
     role: Annotated[list[UserRole] | None, Query()] = None,
 ) -> list[UserSummaryResponse]:
     """Minimal, active-only user list for pickers (e.g. adding a project member or a project
-    manager, the latter via ``role=admin&role=project_manager``)."""
+    manager, the latter via ``role=manager``)."""
     page = await bus.query(
         ListUsers(
             limit=limit,
@@ -123,7 +130,7 @@ async def search_user_directory(
 async def create_user(body: UserCreateRequest, _admin: AdminDep, bus: BusDep) -> UserResponse:
     try:
         user = await bus.execute(
-            CreateUser(name=body.name, email=body.email, role=body.role, password=body.password)
+            CreateUser(name=body.name, email=body.email, roles=body.roles, password=body.password)
         )
     except EmailAlreadyExistsError as exc:
         raise _email_conflict() from exc
@@ -144,7 +151,8 @@ async def read_user(user_id: UUID, _admin: AdminDep, bus: BusDep) -> UserRespons
         **_NOT_FOUND_RESPONSE,
         **_EMAIL_CONFLICT_RESPONSE,
         status.HTTP_400_BAD_REQUEST: {
-            "description": "Administrators cannot change their own role or deactivate themselves"
+            "description": "Users cannot remove their own administrator access, or deactivate "
+            "or delete themselves"
         },
     },
 )
@@ -158,7 +166,7 @@ async def update_user(
                 acting_user_id=admin.id,
                 name=body.name,
                 email=body.email,
-                role=body.role,
+                roles=body.roles,
                 is_active=body.is_active,
             )
         )

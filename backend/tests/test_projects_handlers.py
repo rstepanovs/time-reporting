@@ -6,7 +6,15 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from support import CustomerFactory, ProjectFactory, UserFactory
+from support import (
+    ADMIN,
+    ADMIN_ONLY,
+    EMPLOYEE,
+    MANAGER,
+    CustomerFactory,
+    ProjectFactory,
+    UserFactory,
+)
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.customers.contracts import UpdateCustomer
 from time_reporting.modules.projects.contracts import (
@@ -46,7 +54,7 @@ from time_reporting.modules.projects.contracts import (
     UpdateProjectBillingItem,
 )
 from time_reporting.modules.projects.models import ProjectBillingItem
-from time_reporting.modules.users.contracts import UpdateUser, UserRole
+from time_reporting.modules.users.contracts import UpdateUser
 
 
 async def test_create_project_embeds_customer_and_defaults_description(
@@ -271,7 +279,7 @@ async def test_list_projects_filters_by_customer_member_search_and_active_status
 async def test_create_project_with_manager_embeds_manager(
     bus: Bus, make_customer: CustomerFactory, make_user: UserFactory
 ) -> None:
-    manager = await make_user(role=UserRole.PROJECT_MANAGER, name="Mark Manager")
+    manager = await make_user(roles=MANAGER, name="Mark Manager")
     customer = await make_customer()
 
     project = await bus.execute(
@@ -293,18 +301,31 @@ async def test_create_project_manager_must_exist(bus: Bus, make_customer: Custom
 async def test_create_project_rejects_worker_as_manager(
     bus: Bus, make_customer: CustomerFactory, make_user: UserFactory
 ) -> None:
-    worker = await make_user(role=UserRole.WORKER)
+    worker = await make_user(roles=EMPLOYEE)
     customer = await make_customer()
 
     with pytest.raises(ProjectManagerNotEligibleError):
         await bus.execute(CreateProject(customer_id=customer.id, name="X", manager_id=worker.id))
 
 
+async def test_create_project_rejects_admin_without_manager_level(
+    bus: Bus, make_customer: CustomerFactory, make_user: UserFactory
+) -> None:
+    """Levels are orthogonal: an admin who doesn't also hold the manager level isn't eligible."""
+    admin_only = await make_user(roles=ADMIN_ONLY)
+    customer = await make_customer()
+
+    with pytest.raises(ProjectManagerNotEligibleError):
+        await bus.execute(
+            CreateProject(customer_id=customer.id, name="X", manager_id=admin_only.id)
+        )
+
+
 async def test_create_project_rejects_inactive_manager(
     bus: Bus, make_customer: CustomerFactory, make_user: UserFactory
 ) -> None:
-    admin = await make_user(role=UserRole.ADMIN)
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    admin = await make_user(roles=ADMIN)
+    manager = await make_user(roles=MANAGER)
     await bus.execute(UpdateUser(user_id=manager.id, acting_user_id=admin.id, is_active=False))
     customer = await make_customer()
 
@@ -316,7 +337,7 @@ async def test_update_project_assigns_and_clears_manager(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
     project = await make_project()
-    manager = await make_user(role=UserRole.ADMIN)
+    manager = await make_user(roles=ADMIN)
 
     assigned = await bus.execute(UpdateProject(project_id=project.id, manager_id=manager.id))
     assert assigned.manager is not None
@@ -332,7 +353,7 @@ async def test_update_project_rejects_ineligible_manager(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
     project = await make_project()
-    worker = await make_user(role=UserRole.WORKER)
+    worker = await make_user(roles=EMPLOYEE)
 
     with pytest.raises(ProjectManagerNotEligibleError):
         await bus.execute(UpdateProject(project_id=project.id, manager_id=worker.id))
@@ -341,7 +362,7 @@ async def test_update_project_rejects_ineligible_manager(
 async def test_list_projects_filters_by_manager(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    manager = await make_user(roles=MANAGER)
     managed = await make_project(manager_id=manager.id)
     await make_project()
 
@@ -353,7 +374,7 @@ async def test_list_projects_filters_by_manager(
 async def test_remove_user_from_all_projects_clears_manager_assignment(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    manager = await make_user(roles=MANAGER)
     project = await make_project(manager_id=manager.id)
 
     await bus.execute(RemoveUserFromAllProjects(user_id=manager.id))
@@ -372,8 +393,8 @@ async def test_list_managed_projects_with_members_filters_by_manager(
     make_project: ProjectFactory,
     make_user: UserFactory,
 ) -> None:
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
-    other_manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    manager = await make_user(roles=MANAGER)
+    other_manager = await make_user(roles=MANAGER)
     customer_b = await make_customer(name="Beta")
     customer_a = await make_customer(name="Alpha")
     managed_a = await make_project(customer_id=customer_a.id, name="A", manager_id=manager.id)
@@ -392,7 +413,7 @@ async def test_list_managed_projects_with_members_filters_by_manager(
 async def test_list_managed_projects_with_members_none_means_all_active(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    manager = await make_user(roles=MANAGER)
     managed = await make_project(manager_id=manager.id)
     unmanaged = await make_project()
     archived = await make_project()
@@ -408,7 +429,7 @@ async def test_list_managed_projects_with_members_none_means_all_active(
 async def test_list_managed_projects_with_members_excludes_archived_projects(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    manager = await make_user(roles=MANAGER)
     archived = await make_project(manager_id=manager.id)
     await bus.execute(UpdateProject(project_id=archived.id, is_active=False))
 
@@ -426,7 +447,7 @@ async def test_add_member_rejects_unknown_or_inactive_user_or_archived_project(
         await bus.execute(AddProjectMember(project_id=project.id, user_id=uuid4()))
 
     inactive_user = await make_user()
-    admin = await make_user(role=UserRole.ADMIN)
+    admin = await make_user(roles=ADMIN)
     await bus.execute(
         UpdateUser(user_id=inactive_user.id, acting_user_id=admin.id, is_active=False)
     )
@@ -457,7 +478,7 @@ async def test_list_members_orders_by_name_and_keeps_deactivated_members(
     project = await make_project()
     zed = await make_user(name="Zed")
     ann = await make_user(name="Ann")
-    admin = await make_user(role=UserRole.ADMIN)
+    admin = await make_user(roles=ADMIN)
     await bus.execute(AddProjectMember(project_id=project.id, user_id=zed.id))
     await bus.execute(AddProjectMember(project_id=project.id, user_id=ann.id))
     await bus.execute(UpdateUser(user_id=zed.id, acting_user_id=admin.id, is_active=False))

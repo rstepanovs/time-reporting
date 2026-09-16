@@ -566,7 +566,7 @@ export function TimesheetGrid({ userId, weekStart, onDirtyChange }: Props) {
         <Stack>
           <Textarea
             label="Comment"
-            description="Tell the worker what needs to change"
+            description="Tell the employee what needs to change"
             required
             autosize
             minRows={3}

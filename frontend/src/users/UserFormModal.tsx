@@ -1,18 +1,42 @@
-import { Alert, Button, Modal, PasswordInput, Select, Stack, TextInput } from "@mantine/core";
+import { Alert, Button, Checkbox, Modal, PasswordInput, Stack, TextInput } from "@mantine/core";
 import { hasLength, isEmail, isNotEmpty, useForm } from "@mantine/form";
 
+import { useAuthenticatedUser } from "@/auth/hooks";
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "@/auth/passwords";
 import { roleLabels } from "@/auth/roles";
-import type { User } from "@/users/api";
+import type { User, UserRole } from "@/users/api";
 import { UserEmailConflictError, UserRuleError } from "@/users/api";
 import { useCreateUser, useUpdateUser } from "@/users/hooks";
 
-const ROLE_OPTIONS = Object.entries(roleLabels).map(([value, label]) => ({ value, label }));
+const ROLE_OPTIONS: { value: UserRole; description: string }[] = [
+  {
+    value: "admin",
+    description:
+      "System administration only: users, calendar, permanent deletion, system status, " +
+      "reopening billing periods.",
+  },
+  {
+    value: "manager",
+    description:
+      "Customers, projects, members, billing items, approvals, team overview, sending to " +
+      "billing.",
+  },
+  {
+    value: "accountant",
+    description: "A flag only for now; real permissions arrive with the invoices module.",
+  },
+];
+
+function sameRoles(a: UserRole[], b: UserRole[]): boolean {
+  if (a.length !== b.length) return false;
+  const bSet = new Set(b);
+  return a.every((role) => bSet.has(role));
+}
 
 type FormValues = {
   name: string;
   email: string;
-  role: string;
+  roles: UserRole[];
   password: string;
 };
 
@@ -22,15 +46,22 @@ type Props =
 
 export function UserFormModal(props: Props) {
   const { opened, onClose } = props;
+  const currentUser = useAuthenticatedUser();
   const createUser = useCreateUser();
   const updateUser = useUpdateUser(props.mode === "edit" ? props.user.id : "");
+  const isSelf = props.mode === "edit" && props.user.id === currentUser.id;
 
   const form = useForm<FormValues>({
     mode: "uncontrolled",
     initialValues:
       props.mode === "edit"
-        ? { name: props.user.name, email: props.user.email, role: props.user.role, password: "" }
-        : { name: "", email: "", role: "worker", password: "" },
+        ? {
+            name: props.user.name,
+            email: props.user.email,
+            roles: props.user.roles,
+            password: "",
+          }
+        : { name: "", email: "", roles: [], password: "" },
     validate: {
       name: isNotEmpty("Enter a name"),
       email: isEmail("Enter a valid email"),
@@ -52,15 +83,15 @@ export function UserFormModal(props: Props) {
         await createUser.mutateAsync({
           name: values.name,
           email: values.email,
-          role: values.role as User["role"],
+          roles: values.roles,
           password: values.password,
         });
       } else {
         const original = props.user;
-        const body: { name?: string; email?: string; role?: User["role"] } = {};
+        const body: { name?: string; email?: string; roles?: UserRole[] } = {};
         if (values.name !== original.name) body.name = values.name;
         if (values.email !== original.email) body.email = values.email;
-        if (values.role !== original.role) body.role = values.role as User["role"];
+        if (!sameRoles(values.roles, original.roles)) body.roles = values.roles;
         await updateUser.mutateAsync(body);
       }
       onClose();
@@ -98,14 +129,24 @@ export function UserFormModal(props: Props) {
             key={form.key("email")}
             {...form.getInputProps("email")}
           />
-          <Select
-            label="Role"
-            required
-            data={ROLE_OPTIONS}
-            allowDeselect={false}
-            key={form.key("role")}
-            {...form.getInputProps("role")}
-          />
+          <Checkbox.Group
+            label="Access levels"
+            description="Every user is an employee and reports time, regardless of these levels."
+            key={form.key("roles")}
+            {...form.getInputProps("roles")}
+          >
+            <Stack gap="xs" mt="xs">
+              {ROLE_OPTIONS.map((option) => (
+                <Checkbox
+                  key={option.value}
+                  value={option.value}
+                  label={roleLabels[option.value]}
+                  description={option.description}
+                  disabled={isSelf && option.value === "admin"}
+                />
+              ))}
+            </Stack>
+          </Checkbox.Group>
           {props.mode === "create" && (
             <PasswordInput
               label="Password"

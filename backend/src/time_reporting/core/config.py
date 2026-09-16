@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     holiday_subdivision: str | None = None
 
     # Hours a full working day counts as, for the "expected hours" shown against reported time on
-    # the worker dashboard (`timesheets.summary`). Not enforced anywhere — a user may report more
+    # the employee dashboard (`timesheets.summary`). Not enforced anywhere — a user may report more
     # or less on any given day.
     daily_working_hours: Decimal = Field(default=Decimal("8"), gt=0, le=24)
 

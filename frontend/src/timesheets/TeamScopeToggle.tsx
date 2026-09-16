@@ -1,7 +1,7 @@
 import { SegmentedControl } from "@mantine/core";
 
 import { useAuthenticatedUser } from "@/auth/hooks";
-import { isAdmin } from "@/auth/roles";
+import { canManage } from "@/auth/roles";
 import type { TeamScope } from "@/timesheets/api";
 
 type Props = {
@@ -9,11 +9,11 @@ type Props = {
   onScopeChange: (scope: TeamScope) => void;
 };
 
-/** "My projects / All" toggle for the manager team views. A project manager always sees their own
- * projects, so this renders nothing for them — only an admin can widen the scope. */
+/** "My projects / All" toggle for the manager team views. Available to any manager — it's only
+ * ever rendered inside a manager-only view anyway, so this check is effectively always true. */
 export function TeamScopeToggle({ scope, onScopeChange }: Props) {
   const user = useAuthenticatedUser();
-  if (!isAdmin(user.role)) return null;
+  if (!canManage(user)) return null;
 
   return (
     <SegmentedControl

@@ -29,7 +29,12 @@ _email_adapter: TypeAdapter[str] = TypeAdapter(EmailStr)
 
 async def create_admin(bus: Bus, *, name: str, email: str, password: str) -> UserDTO:
     return await bus.execute(
-        CreateUser(name=name, email=email, role=UserRole.ADMIN, password=password)
+        CreateUser(
+            name=name,
+            email=email,
+            roles=frozenset({UserRole.ADMIN, UserRole.MANAGER}),
+            password=password,
+        )
     )
 
 

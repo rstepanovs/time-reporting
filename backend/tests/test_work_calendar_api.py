@@ -1,14 +1,14 @@
 import pytest
 from httpx import AsyncClient
 
-from support import AuthHeaders, UserFactory
+from support import ADMIN, EMPLOYEE, MANAGER, AuthHeaders, UserFactory
 from time_reporting.modules.users.contracts import UserRole
 
 
 async def test_admin_can_manage_non_working_days(
     client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    headers = auth_headers(await make_user(roles=ADMIN))
 
     created = await client.post(
         "/api/v1/calendar/non-working-days",
@@ -47,7 +47,7 @@ async def test_admin_can_manage_non_working_days(
 async def test_creating_a_duplicate_date_conflicts(
     client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    headers = auth_headers(await make_user(roles=ADMIN))
     payload = {"day": "2026-01-01", "name": "New Year", "kind": "public_holiday"}
 
     first = await client.post("/api/v1/calendar/non-working-days", headers=headers, json=payload)
@@ -60,7 +60,7 @@ async def test_creating_a_duplicate_date_conflicts(
 async def test_updating_or_deleting_unknown_day_is_not_found(
     client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    headers = auth_headers(await make_user(roles=ADMIN))
     missing_id = "00000000-0000-0000-0000-000000000000"
 
     updated = await client.patch(
@@ -74,11 +74,14 @@ async def test_updating_or_deleting_unknown_day_is_not_found(
     assert deleted.status_code == 404
 
 
-@pytest.mark.parametrize("role", [UserRole.WORKER, UserRole.PROJECT_MANAGER])
+@pytest.mark.parametrize("roles", [EMPLOYEE, MANAGER])
 async def test_non_admins_read_but_get_403_on_writes(
-    client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders, role: UserRole
+    client: AsyncClient,
+    make_user: UserFactory,
+    auth_headers: AuthHeaders,
+    roles: frozenset[UserRole],
 ) -> None:
-    headers = auth_headers(await make_user(role=role))
+    headers = auth_headers(await make_user(roles=roles))
 
     listed = await client.get("/api/v1/calendar/non-working-days", headers=headers)
     days = await client.get(
@@ -104,7 +107,7 @@ async def test_non_admins_read_but_get_403_on_writes(
 async def test_get_calendar_days_marks_weekends_and_holidays(
     client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    headers = auth_headers(await make_user(roles=ADMIN))
     await client.post(
         "/api/v1/calendar/non-working-days",
         headers=headers,
@@ -128,7 +131,7 @@ async def test_get_calendar_days_marks_weekends_and_holidays(
 async def test_get_calendar_days_rejects_too_wide_a_range(
     client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.WORKER))
+    headers = auth_headers(await make_user(roles=EMPLOYEE))
 
     response = await client.get(
         "/api/v1/calendar/days",
@@ -142,7 +145,7 @@ async def test_get_calendar_days_rejects_too_wide_a_range(
 async def test_admin_can_import_public_holidays(
     client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    headers = auth_headers(await make_user(roles=ADMIN))
 
     first = await client.post(
         "/api/v1/calendar/non-working-days/import", headers=headers, json={"year": 2026}

@@ -63,7 +63,7 @@ def _member_dto(user: UserDTO, *, added_at: datetime) -> ProjectMemberDTO:
         user_id=user.id,
         name=user.name,
         email=user.email,
-        role=user.role,
+        roles=user.roles,
         is_active=user.is_active,
         added_at=added_at,
     )

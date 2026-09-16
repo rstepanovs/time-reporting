@@ -13,7 +13,7 @@ type NavIntent = { week?: string; userId?: string };
 
 export function TimesheetPage() {
   const user = useAuthenticatedUser();
-  const canPickUser = canManage(user.role);
+  const canPickUser = canManage(user);
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const [debouncedSearch] = useDebouncedValue(search, 300);

@@ -24,12 +24,21 @@ DEFAULT_BILLING_PERIOD = BillingPeriodDTO(
 
 type AuthHeaders = Callable[[UserDTO], dict[str, str]]
 
+# Shorthand level sets for tests, matching the demo/migration mapping of the old single-role model:
+# an old ``admin`` kept today's effective rights (manager included), an old ``project_manager``
+# becomes a plain manager, and an old ``worker`` is a plain employee (no levels).
+ADMIN = frozenset({UserRole.ADMIN, UserRole.MANAGER})
+MANAGER = frozenset({UserRole.MANAGER})
+EMPLOYEE: frozenset[UserRole] = frozenset()
+# An admin with no manager level, for tests of the (new) orthogonal guards.
+ADMIN_ONLY = frozenset({UserRole.ADMIN})
+
 
 class UserFactory(Protocol):
     async def __call__(
         self,
         *,
-        role: UserRole = UserRole.WORKER,
+        roles: frozenset[UserRole] = EMPLOYEE,
         email: str | None = None,
         name: str = "Test User",
         password: str = DEFAULT_PASSWORD,

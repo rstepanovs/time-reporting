@@ -1,7 +1,7 @@
 """Timesheets HTTP API.
 
-Every authenticated user reads and writes their own week/dashboard; admins and project managers
-may also read (but not write) another user's data.
+Every authenticated user reads and writes their own week/dashboard; managers may also read (but
+not write) another user's data.
 """
 
 from datetime import date
@@ -30,7 +30,6 @@ from time_reporting.modules.timesheets.contracts import (
     InvalidWeekStatusTransitionError,
     ListSubmittedTimesheetWeeks,
     ListTimesheetOptions,
-    NotProjectManagerError,
     QuantityOutOfRangeError,
     ReopenProjectBillingPeriod,
     ReturnCommentRequiredError,
@@ -68,8 +67,6 @@ Scope = Literal["mine", "all"]
 
 router = APIRouter(prefix="/timesheets", tags=["timesheets"])
 
-_VIEW_ANY_ROLES = frozenset({UserRole.ADMIN, UserRole.PROJECT_MANAGER})
-
 _USER_NOT_FOUND_RESPONSE: dict[int | str, dict[str, Any]] = {
     status.HTTP_404_NOT_FOUND: {"description": "User not found"}
 }
@@ -99,9 +96,9 @@ def _conflict(detail: str) -> HTTPException:
 
 def _resolve_target_user(current_user: UserDTO, user_id: UUID | None) -> UUID:
     """The user whose data is being requested: ``current_user`` unless ``user_id`` names someone
-    else, which is only allowed for an admin or project manager."""
+    else, which is only allowed for a manager."""
     target_user_id = current_user.id if user_id is None else user_id
-    if target_user_id != current_user.id and current_user.role not in _VIEW_ANY_ROLES:
+    if target_user_id != current_user.id and UserRole.MANAGER not in current_user.roles:
         raise _forbidden("Cannot view another user's timesheet")
     return target_user_id
 
@@ -267,12 +264,7 @@ async def list_submitted_timesheet_weeks(
     return [TimesheetWeekSummaryResponse.model_validate(summary) for summary in summaries]
 
 
-_ALL_SCOPE_FORBIDDEN_RESPONSE: dict[int | str, dict[str, Any]] = {
-    status.HTTP_403_FORBIDDEN: {"description": "Only an admin can view every project"}
-}
-
-
-@router.get("/team/{year}/{month}", responses=_ALL_SCOPE_FORBIDDEN_RESPONSE)
+@router.get("/team/{year}/{month}")
 async def get_team_month_overview(
     year: Annotated[int, Path(ge=2000, le=2100)],
     month: Annotated[int, Path(ge=1, le=12)],
@@ -280,8 +272,6 @@ async def get_team_month_overview(
     bus: BusDep,
     scope: Annotated[Scope, Query()] = "mine",
 ) -> TeamMonthOverviewResponse:
-    if scope == "all" and current_user.role != UserRole.ADMIN:
-        raise _forbidden("Only an admin can view every project")
     manager_id = None if scope == "all" else current_user.id
     overview = await bus.query(
         GetTeamMonthOverview(manager_id=manager_id, year=year, month=month, today=date.today())
@@ -294,7 +284,6 @@ async def get_team_month_overview(
     status_code=status.HTTP_201_CREATED,
     responses={
         **_USER_NOT_FOUND_RESPONSE,
-        status.HTTP_403_FORBIDDEN: {"description": "Not this project's manager"},
         status.HTTP_409_CONFLICT: {"description": "Not ready to send, or already sent"},
     },
 )
@@ -314,8 +303,6 @@ async def send_project_month_to_billing(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except UserNotFoundError as exc:
         raise _user_not_found() from exc
-    except NotProjectManagerError as exc:
-        raise _forbidden(str(exc)) from exc
     except (BillingPeriodNotReadyError, BillingPeriodAlreadySentError) as exc:
         raise _conflict(str(exc)) from exc
     return ProjectBillingPeriodResponse.model_validate(period)

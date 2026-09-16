@@ -3,7 +3,7 @@ from datetime import date
 import pytest
 from httpx import AsyncClient
 
-from support import AuthHeaders, ProjectFactory, UserFactory
+from support import ADMIN, ADMIN_ONLY, EMPLOYEE, MANAGER, AuthHeaders, ProjectFactory, UserFactory
 from time_reporting.modules.projects.contracts import BillingItemPreset
 from time_reporting.modules.users.contracts import UserRole
 
@@ -35,9 +35,9 @@ async def test_worker_can_read_and_write_their_own_week(
     make_project: ProjectFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    admin = await make_user(role=UserRole.ADMIN)
+    admin = await make_user(roles=ADMIN)
     admin_headers = auth_headers(admin)
-    worker = await make_user(role=UserRole.WORKER)
+    worker = await make_user(roles=EMPLOYEE)
     worker_headers = auth_headers(worker)
     project = await make_project()
     await _add_member(client, admin_headers, str(project.id), str(worker.id))
@@ -70,8 +70,8 @@ async def test_worker_can_read_and_write_their_own_week(
 async def test_worker_cannot_view_or_edit_someone_elses_week(
     client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
 ) -> None:
-    worker = await make_user(role=UserRole.WORKER)
-    other = await make_user(role=UserRole.WORKER)
+    worker = await make_user(roles=EMPLOYEE)
+    other = await make_user(roles=EMPLOYEE)
     headers = auth_headers(worker)
 
     response = await client.get(
@@ -83,17 +83,17 @@ async def test_worker_cannot_view_or_edit_someone_elses_week(
     assert response.status_code == 403
 
 
-@pytest.mark.parametrize("role", [UserRole.ADMIN, UserRole.PROJECT_MANAGER])
+@pytest.mark.parametrize("roles", [ADMIN, MANAGER])
 async def test_manager_can_view_but_not_edit_someone_elses_week(
     client: AsyncClient,
     make_user: UserFactory,
     make_project: ProjectFactory,
     auth_headers: AuthHeaders,
-    role: UserRole,
+    roles: frozenset[UserRole],
 ) -> None:
-    manager = await make_user(role=role)
+    manager = await make_user(roles=roles)
     manager_headers = auth_headers(manager)
-    worker = await make_user(role=UserRole.WORKER)
+    worker = await make_user(roles=EMPLOYEE)
     project = await make_project()
     await _add_member(client, manager_headers, str(project.id), str(worker.id))
     item_id = await _normal_hours_item_id(client, manager_headers, str(project.id))
@@ -131,8 +131,8 @@ async def test_save_week_reports_rule_violations_with_detail(
     make_project: ProjectFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    admin_headers = auth_headers(await make_user(role=UserRole.ADMIN))
-    worker = await make_user(role=UserRole.WORKER)
+    admin_headers = auth_headers(await make_user(roles=ADMIN))
+    worker = await make_user(roles=EMPLOYEE)
     worker_headers = auth_headers(worker)
     project = await make_project()
     await _add_member(client, admin_headers, str(project.id), str(worker.id))
@@ -151,7 +151,7 @@ async def test_save_week_reports_rule_violations_with_detail(
 async def test_save_week_rejects_unknown_billing_item_with_404(
     client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.WORKER))
+    headers = auth_headers(await make_user(roles=EMPLOYEE))
 
     response = await client.put(
         f"/api/v1/timesheets/weeks/{A_MONDAY}/entries",
@@ -184,8 +184,8 @@ async def test_list_timesheet_options_returns_member_projects(
     make_project: ProjectFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    admin_headers = auth_headers(await make_user(role=UserRole.ADMIN))
-    worker = await make_user(role=UserRole.WORKER)
+    admin_headers = auth_headers(await make_user(roles=ADMIN))
+    worker = await make_user(roles=EMPLOYEE)
     worker_headers = auth_headers(worker)
     project = await make_project()
     await _add_member(client, admin_headers, str(project.id), str(worker.id))
@@ -201,7 +201,7 @@ async def test_list_timesheet_options_returns_member_projects(
 async def test_worker_can_read_own_month_calendar_and_year_hours(
     client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
 ) -> None:
-    worker = await make_user(role=UserRole.WORKER)
+    worker = await make_user(roles=EMPLOYEE)
     headers = auth_headers(worker)
 
     calendar = await client.get(
@@ -221,8 +221,8 @@ async def test_worker_can_read_own_month_calendar_and_year_hours(
 async def test_worker_cannot_view_someone_elses_calendar_or_year_hours(
     client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
 ) -> None:
-    worker = await make_user(role=UserRole.WORKER)
-    other = await make_user(role=UserRole.WORKER)
+    worker = await make_user(roles=EMPLOYEE)
+    other = await make_user(roles=EMPLOYEE)
     headers = auth_headers(worker)
 
     calendar = await client.get(
@@ -238,12 +238,15 @@ async def test_worker_cannot_view_someone_elses_calendar_or_year_hours(
     assert year.status_code == 403
 
 
-@pytest.mark.parametrize("role", [UserRole.ADMIN, UserRole.PROJECT_MANAGER])
+@pytest.mark.parametrize("roles", [ADMIN, MANAGER])
 async def test_manager_can_view_someone_elses_calendar_and_year_hours(
-    client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders, role: UserRole
+    client: AsyncClient,
+    make_user: UserFactory,
+    auth_headers: AuthHeaders,
+    roles: frozenset[UserRole],
 ) -> None:
-    manager_headers = auth_headers(await make_user(role=role))
-    worker = await make_user(role=UserRole.WORKER)
+    manager_headers = auth_headers(await make_user(roles=roles))
+    worker = await make_user(roles=EMPLOYEE)
 
     calendar = await client.get(
         "/api/v1/timesheets/calendar",
@@ -265,7 +268,7 @@ async def test_manager_can_view_someone_elses_calendar_and_year_hours(
 async def test_calendar_and_year_hours_default_to_today(
     client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.WORKER))
+    headers = auth_headers(await make_user(roles=EMPLOYEE))
 
     calendar = await client.get("/api/v1/timesheets/calendar", headers=headers)
 
@@ -278,7 +281,7 @@ async def test_calendar_and_year_hours_default_to_today(
 async def test_calendar_and_year_hours_for_unknown_user_return_404(
     client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
 ) -> None:
-    admin_headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    admin_headers = auth_headers(await make_user(roles=ADMIN))
     unknown_user_id = "00000000-0000-0000-0000-000000000000"
 
     calendar = await client.get(
@@ -299,7 +302,7 @@ async def test_calendar_and_year_hours_for_unknown_user_return_404(
 async def test_calendar_and_year_hours_reject_out_of_range_query_params(
     client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.WORKER))
+    headers = auth_headers(await make_user(roles=EMPLOYEE))
 
     bad_month = await client.get(
         "/api/v1/timesheets/calendar", headers=headers, params={"year": 2026, "month": 13}
@@ -321,7 +324,7 @@ async def test_calendar_and_year_hours_require_authentication(client: AsyncClien
 async def test_worker_can_read_own_month_summary_and_weekly_hours(
     client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
 ) -> None:
-    worker = await make_user(role=UserRole.WORKER)
+    worker = await make_user(roles=EMPLOYEE)
     headers = auth_headers(worker)
 
     summary = await client.get("/api/v1/timesheets/months/2026/9/summary", headers=headers)
@@ -341,8 +344,8 @@ async def test_worker_can_read_own_month_summary_and_weekly_hours(
 async def test_worker_cannot_view_someone_elses_month_summary_or_weekly_hours(
     client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
 ) -> None:
-    worker = await make_user(role=UserRole.WORKER)
-    other = await make_user(role=UserRole.WORKER)
+    worker = await make_user(roles=EMPLOYEE)
+    other = await make_user(roles=EMPLOYEE)
     headers = auth_headers(worker)
 
     summary = await client.get(
@@ -358,12 +361,15 @@ async def test_worker_cannot_view_someone_elses_month_summary_or_weekly_hours(
     assert weekly.status_code == 403
 
 
-@pytest.mark.parametrize("role", [UserRole.ADMIN, UserRole.PROJECT_MANAGER])
+@pytest.mark.parametrize("roles", [ADMIN, MANAGER])
 async def test_manager_can_view_someone_elses_month_summary_and_weekly_hours(
-    client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders, role: UserRole
+    client: AsyncClient,
+    make_user: UserFactory,
+    auth_headers: AuthHeaders,
+    roles: frozenset[UserRole],
 ) -> None:
-    manager_headers = auth_headers(await make_user(role=role))
-    worker = await make_user(role=UserRole.WORKER)
+    manager_headers = auth_headers(await make_user(roles=roles))
+    worker = await make_user(roles=EMPLOYEE)
 
     summary = await client.get(
         "/api/v1/timesheets/months/2026/9/summary",
@@ -385,7 +391,7 @@ async def test_manager_can_view_someone_elses_month_summary_and_weekly_hours(
 async def test_weekly_hours_defaults_to_six_weeks(
     client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.WORKER))
+    headers = auth_headers(await make_user(roles=EMPLOYEE))
 
     weekly = await client.get("/api/v1/timesheets/weekly-hours", headers=headers)
 
@@ -396,7 +402,7 @@ async def test_weekly_hours_defaults_to_six_weeks(
 async def test_month_summary_and_weekly_hours_for_unknown_user_return_404(
     client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
 ) -> None:
-    admin_headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    admin_headers = auth_headers(await make_user(roles=ADMIN))
     unknown_user_id = "00000000-0000-0000-0000-000000000000"
 
     summary = await client.get(
@@ -417,7 +423,7 @@ async def test_month_summary_and_weekly_hours_for_unknown_user_return_404(
 async def test_month_summary_and_weekly_hours_reject_out_of_range_query_params(
     client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.WORKER))
+    headers = auth_headers(await make_user(roles=EMPLOYEE))
 
     bad_month = await client.get("/api/v1/timesheets/months/2026/13/summary", headers=headers)
     bad_weeks = await client.get(
@@ -447,8 +453,8 @@ async def test_save_week_creates_and_clears_a_row_comment(
     make_project: ProjectFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    admin_headers = auth_headers(await make_user(role=UserRole.ADMIN))
-    worker = await make_user(role=UserRole.WORKER)
+    admin_headers = auth_headers(await make_user(roles=ADMIN))
+    worker = await make_user(roles=EMPLOYEE)
     worker_headers = auth_headers(worker)
     project = await make_project()
     await _add_member(client, admin_headers, str(project.id), str(worker.id))
@@ -486,9 +492,9 @@ async def _setup_worker_with_hours(
     auth_headers: AuthHeaders,
 ) -> tuple[dict[str, str], dict[str, str]]:
     """A worker with 8 booked hours in ``A_MONDAY``'s week, plus a project manager's headers."""
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    manager = await make_user(roles=MANAGER)
     manager_headers = auth_headers(manager)
-    worker = await make_user(role=UserRole.WORKER)
+    worker = await make_user(roles=EMPLOYEE)
     worker_headers = auth_headers(worker)
     project = await make_project()
     await _add_member(client, manager_headers, str(project.id), str(worker.id))
@@ -600,6 +606,34 @@ async def test_worker_cannot_approve_return_or_list_submissions(
     assert submissions.status_code == 403
 
 
+async def test_admin_only_cannot_approve_or_view_others_week(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    worker_headers, _manager_headers = await _setup_worker_with_hours(
+        client, make_user, make_project, auth_headers
+    )
+    worker_id = (await client.get("/api/v1/users/me", headers=worker_headers)).json()["id"]
+    await client.post(f"/api/v1/timesheets/weeks/{A_MONDAY}/submit", headers=worker_headers)
+    admin_headers = auth_headers(await make_user(roles=ADMIN_ONLY))
+
+    view = await client.get(
+        f"/api/v1/timesheets/weeks/{A_MONDAY}",
+        headers=admin_headers,
+        params={"user_id": worker_id},
+    )
+    approve = await client.post(
+        f"/api/v1/timesheets/weeks/{A_MONDAY}/approve",
+        headers=admin_headers,
+        params={"user_id": worker_id},
+    )
+
+    assert view.status_code == 403
+    assert approve.status_code == 403
+
+
 async def test_submissions_list_includes_a_submitted_week(
     client: AsyncClient,
     make_user: UserFactory,
@@ -627,10 +661,10 @@ async def test_submissions_scope_mine_excludes_other_managers_projects(
     make_project: ProjectFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    other_manager = await make_user(role=UserRole.PROJECT_MANAGER)
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    other_manager = await make_user(roles=MANAGER)
+    manager = await make_user(roles=MANAGER)
     manager_headers = auth_headers(manager)
-    worker = await make_user(role=UserRole.WORKER)
+    worker = await make_user(roles=EMPLOYEE)
     worker_headers = auth_headers(worker)
     project = await make_project(manager_id=other_manager.id)
     await _add_member(client, manager_headers, str(project.id), str(worker.id))
@@ -664,9 +698,9 @@ async def test_team_overview_defaults_to_the_managers_own_projects(
     make_project: ProjectFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    manager = await make_user(roles=MANAGER)
     manager_headers = auth_headers(manager)
-    other_manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    other_manager = await make_user(roles=MANAGER)
     mine = await make_project(manager_id=manager.id, name="Mine")
     await make_project(manager_id=other_manager.id, name="Theirs")
 
@@ -679,14 +713,14 @@ async def test_team_overview_defaults_to_the_managers_own_projects(
     assert "counts" in body and "weeks" in body
 
 
-async def test_team_overview_scope_all_requires_admin(
+async def test_team_overview_scope_all_is_available_to_any_manager(
     client: AsyncClient,
     make_user: UserFactory,
     make_project: ProjectFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
-    admin = await make_user(role=UserRole.ADMIN)
+    manager = await make_user(roles=MANAGER)
+    admin = await make_user(roles=ADMIN)
     await make_project(manager_id=manager.id)
 
     as_manager = await client.get(
@@ -698,14 +732,14 @@ async def test_team_overview_scope_all_requires_admin(
         "/api/v1/timesheets/team/2026/9", headers=auth_headers(admin), params={"scope": "all"}
     )
 
-    assert as_manager.status_code == 403
+    assert as_manager.status_code == 200
     assert as_admin.status_code == 200
 
 
 async def test_team_overview_requires_manager_access(
     client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
 ) -> None:
-    worker = await make_user(role=UserRole.WORKER)
+    worker = await make_user(roles=EMPLOYEE)
     response = await client.get("/api/v1/timesheets/team/2026/9", headers=auth_headers(worker))
     assert response.status_code == 403
 
@@ -719,11 +753,11 @@ async def test_send_project_month_to_billing_and_reopen(
     make_project: ProjectFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    admin = await make_user(role=UserRole.ADMIN)
+    admin = await make_user(roles=ADMIN)
     admin_headers = auth_headers(admin)
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    manager = await make_user(roles=MANAGER)
     manager_headers = auth_headers(manager)
-    worker = await make_user(role=UserRole.WORKER)
+    worker = await make_user(roles=EMPLOYEE)
     worker_headers = auth_headers(worker)
     project = await make_project(manager_id=manager.id)
     await _add_member(client, manager_headers, str(project.id), str(worker.id))
@@ -777,7 +811,7 @@ async def test_send_project_month_to_billing_not_ready(
     make_project: ProjectFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    manager = await make_user(roles=MANAGER)
     project = await make_project(manager_id=manager.id)
 
     response = await client.post(
@@ -789,23 +823,41 @@ async def test_send_project_month_to_billing_not_ready(
     assert response.status_code == 409
 
 
-async def test_send_project_month_to_billing_by_a_different_manager_is_forbidden(
+async def test_send_project_month_to_billing_by_a_different_manager_is_allowed(
     client: AsyncClient,
     make_user: UserFactory,
     make_project: ProjectFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
-    other_manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    manager = await make_user(roles=MANAGER)
+    manager_headers = auth_headers(manager)
+    other_manager = await make_user(roles=MANAGER)
+    other_manager_headers = auth_headers(other_manager)
+    worker = await make_user(roles=EMPLOYEE)
+    worker_headers = auth_headers(worker)
     project = await make_project(manager_id=manager.id)
+    await _add_member(client, manager_headers, str(project.id), str(worker.id))
+    item_id = await _normal_hours_item_id(client, manager_headers, str(project.id))
+    await client.put(
+        f"/api/v1/timesheets/weeks/{A_MONDAY}/entries",
+        headers=worker_headers,
+        json={"changes": [{"billing_item_id": item_id, "date": A_MONDAY, "quantity": "8.00"}]},
+    )
+    await client.post(f"/api/v1/timesheets/weeks/{A_MONDAY}/submit", headers=worker_headers)
+    worker_id = (await client.get("/api/v1/users/me", headers=worker_headers)).json()["id"]
+    await client.post(
+        f"/api/v1/timesheets/weeks/{A_MONDAY}/approve",
+        headers=other_manager_headers,
+        params={"user_id": worker_id},
+    )
 
     response = await client.post(
         "/api/v1/timesheets/billing-periods",
-        headers=auth_headers(other_manager),
+        headers=other_manager_headers,
         json={"project_id": str(project.id), "year": 2026, "month": 9},
     )
 
-    assert response.status_code == 403
+    assert response.status_code == 201
 
 
 async def test_reopen_unknown_billing_period_returns_404(
@@ -814,7 +866,7 @@ async def test_reopen_unknown_billing_period_returns_404(
     make_project: ProjectFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    admin = await make_user(role=UserRole.ADMIN)
+    admin = await make_user(roles=ADMIN)
     project = await make_project()
 
     response = await client.request(

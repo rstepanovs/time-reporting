@@ -4,7 +4,7 @@ from uuid import uuid4
 import pytest
 from httpx import AsyncClient
 
-from support import AuthHeaders, CustomerFactory, UserFactory
+from support import ADMIN, EMPLOYEE, MANAGER, AuthHeaders, CustomerFactory, UserFactory
 from time_reporting.modules.users.contracts import UserRole
 
 
@@ -27,11 +27,14 @@ def _payload(**overrides: Any) -> dict[str, Any]:
     return payload | overrides
 
 
-@pytest.mark.parametrize("role", [UserRole.ADMIN, UserRole.PROJECT_MANAGER])
+@pytest.mark.parametrize("roles", [ADMIN, MANAGER])
 async def test_manager_can_create_and_update_customer(
-    client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders, role: UserRole
+    client: AsyncClient,
+    make_user: UserFactory,
+    auth_headers: AuthHeaders,
+    roles: frozenset[UserRole],
 ) -> None:
-    headers = auth_headers(await make_user(role=role))
+    headers = auth_headers(await make_user(roles=roles))
 
     created = await client.post(
         "/api/v1/customers", headers=headers, json=_payload(legal_name="Acme GmbH")
@@ -63,7 +66,7 @@ async def test_worker_can_read_but_not_write(
     make_customer: CustomerFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.WORKER))
+    headers = auth_headers(await make_user(roles=EMPLOYEE))
     customer = await make_customer()
     url = f"/api/v1/customers/{customer.id}"
 
@@ -104,7 +107,7 @@ async def test_customers_require_authentication(client: AsyncClient) -> None:
 async def test_unknown_customer_returns_404(
     client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    headers = auth_headers(await make_user(roles=ADMIN))
     url = f"/api/v1/customers/{uuid4()}"
 
     assert (await client.get(url, headers=headers)).status_code == 404
@@ -117,7 +120,7 @@ async def test_duplicate_name_returns_409(
     make_customer: CustomerFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    headers = auth_headers(await make_user(roles=ADMIN))
     await make_customer(name="Taken")
     other = await make_customer()
 
@@ -162,7 +165,7 @@ async def test_invalid_create_payload_returns_422(
     auth_headers: AuthHeaders,
     payload: dict[str, Any],
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    headers = auth_headers(await make_user(roles=ADMIN))
 
     response = await client.post("/api/v1/customers", headers=headers, json=payload)
 
@@ -177,7 +180,7 @@ async def test_update_rejects_null_for_required_fields(
     auth_headers: AuthHeaders,
     field: str,
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    headers = auth_headers(await make_user(roles=ADMIN))
     customer = await make_customer()
 
     response = await client.patch(

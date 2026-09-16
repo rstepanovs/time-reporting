@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fetchCurrentUser } from "@/auth/api";
 import { getMonthCalendar, getYearHours } from "@/timesheets/api";
-import { testMonthCalendar, testWorker, testYearHours } from "@/test/fixtures";
+import { testMonthCalendar, testEmployee, testYearHours } from "@/test/fixtures";
 import { renderApp } from "@/test/renderApp";
 
 vi.mock("@/auth/api", async (importOriginal) => ({
@@ -19,7 +19,7 @@ vi.mock("@/timesheets/api", async (importOriginal) => ({
 
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.mocked(fetchCurrentUser).mockResolvedValue(testWorker);
+  vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
   vi.mocked(getMonthCalendar).mockResolvedValue(testMonthCalendar);
   vi.mocked(getYearHours).mockResolvedValue(testYearHours);
 });
@@ -32,9 +32,9 @@ describe("HoursPage", () => {
     expect(getMonthCalendar).toHaveBeenCalledWith({
       year: 2026,
       month: 9,
-      userId: testWorker.id,
+      userId: testEmployee.id,
     });
-    expect(getYearHours).toHaveBeenCalledWith({ year: 2026, userId: testWorker.id });
+    expect(getYearHours).toHaveBeenCalledWith({ year: 2026, userId: testEmployee.id });
     expect(screen.getByRole("heading", { level: 3, name: "2026" })).toBeTruthy();
   });
 
@@ -53,7 +53,7 @@ describe("HoursPage", () => {
     expect(getMonthCalendar).toHaveBeenCalledWith({
       year: 2026,
       month: 8,
-      userId: testWorker.id,
+      userId: testEmployee.id,
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Next →" }));

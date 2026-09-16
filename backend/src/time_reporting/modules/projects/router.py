@@ -62,7 +62,7 @@ _CUSTOMER_RULE_RESPONSE: dict[int | str, dict[str, Any]] = {
 }
 _MANAGER_RULE_RESPONSE: dict[int | str, dict[str, Any]] = {
     status.HTTP_400_BAD_REQUEST: {
-        "description": "The manager does not exist, is inactive, or is not an admin/project manager"
+        "description": "The manager does not exist, is inactive, or does not hold the manager level"
     }
 }
 _BILLING_ITEM_NAME_CONFLICT_RESPONSE: dict[int | str, dict[str, Any]] = {

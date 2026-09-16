@@ -35,25 +35,38 @@ would (see `cli.py`), so it exercises the same module handlers as the app.
 
 ## What `seed-demo` creates
 
-- One user per role (`admin`, `project_manager`, `worker`), all sharing the
-  password **`demo-password`**.
+- One user per access level plus a plain employee, all sharing the password
+  **`demo-password`**:
+
+  | user | email | levels |
+  | --- | --- | --- |
+  | Alice Admin | `admin@example.com` | `admin` |
+  | Mark Manager | `manager@example.com` | `manager` |
+  | Emma Employee | `employee@example.com` | *(none — a plain employee)* |
+  | Andy Accountant | `accountant@example.com` | `accountant` |
+  | Max Multi | `lead@example.com` | `admin`, `manager` |
+
+  `worker@example.com` (the old single-role demo user) is no longer seeded,
+  but is left untouched if it already exists in a dev database — seeding is
+  idempotent by email.
 - Active and archived customers, plus a few projects with members per
-  customer — the demo project manager is set as `manager_id` on every active
-  one. Projects are created for each customer *before* that customer is
-  archived, since creating a project requires an active customer.
+  customer — a `manager`-level demo user is set as `manager_id` on every
+  active one. Projects are created for each customer *before* that customer
+  is archived, since creating a project requires an active customer.
 - The current and next year's public holidays, plus one demo bridge day.
-- Normal working hours booked for the demo worker and project manager on
+- Normal working hours booked for every demo user who is a project member
+  (`admin@example.com` isn't a member of any demo project, so has none) on
   every working day of the last 3 months, plus a little overtime/travel time
-  each month — so the worker dashboard's month calendar and year-hours table
-  both have data to show.
-- Once the demo worker's (not the project manager's) weeks are freshly
-  booked, every week but the most recent is submitted then approved
-  (reviewer: a project manager among the seeded users, or an admin if none),
-  and the most recent is left submitted — so a fresh checkout's `/approvals`
-  page has something waiting. This also leaves the current month's last week
-  unapproved while earlier months are fully approved, so the manager
-  dashboard's billing card naturally shows both a not-ready (current month)
-  and a ready (an earlier month) project, with no extra seeding needed.
+  each month — so the personal dashboard's month calendar and year-hours
+  table both have data to show.
+- Once a user's weeks are freshly booked, every week but the most recent is
+  submitted then approved (reviewer: another `manager`-level demo user —
+  nobody, not even an admin, reviews their own week), and the most recent is
+  left submitted — so a fresh checkout's `/approvals` page has something
+  waiting. This also leaves the current month's last week unapproved while
+  earlier months are fully approved, so the manager dashboard's billing card
+  naturally shows both a not-ready (current month) and a ready (an earlier
+  month) project, with no extra seeding needed.
 
 ## Idempotency
 

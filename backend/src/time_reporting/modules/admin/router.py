@@ -1,7 +1,7 @@
 """Admin HTTP API: archive or permanently delete users, customers and projects.
 
 Every route requires an administrator. Archiving customers and projects is still also available
-to project managers through the existing ``PATCH`` endpoints in their own routers; this router adds
+to managers through the existing ``PATCH`` endpoints in their own routers; this router adds
 nothing beyond what an admin can already do except the permanent-delete path.
 """
 

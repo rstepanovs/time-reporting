@@ -4,19 +4,27 @@ from uuid import uuid4
 import pytest
 from httpx import AsyncClient
 
-from support import AuthHeaders, CustomerFactory, ProjectFactory, UserFactory
+from support import (
+    ADMIN,
+    EMPLOYEE,
+    MANAGER,
+    AuthHeaders,
+    CustomerFactory,
+    ProjectFactory,
+    UserFactory,
+)
 from time_reporting.modules.users.contracts import UserRole
 
 
-@pytest.mark.parametrize("role", [UserRole.ADMIN, UserRole.PROJECT_MANAGER])
+@pytest.mark.parametrize("roles", [ADMIN, MANAGER])
 async def test_manager_full_project_lifecycle(
     client: AsyncClient,
     make_user: UserFactory,
     make_customer: CustomerFactory,
     auth_headers: AuthHeaders,
-    role: UserRole,
+    roles: frozenset[UserRole],
 ) -> None:
-    headers = auth_headers(await make_user(role=role))
+    headers = auth_headers(await make_user(roles=roles))
     customer = await make_customer()
     member = await make_user()
 
@@ -73,7 +81,7 @@ async def test_worker_can_read_but_not_write(
     make_project: ProjectFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.WORKER))
+    headers = auth_headers(await make_user(roles=EMPLOYEE))
     project = await make_project()
     url = f"/api/v1/projects/{project.id}"
 
@@ -109,7 +117,7 @@ async def test_projects_require_authentication(client: AsyncClient) -> None:
 async def test_unknown_project_returns_404(
     client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    headers = auth_headers(await make_user(roles=ADMIN))
     url = f"/api/v1/projects/{uuid4()}"
 
     assert (await client.get(url, headers=headers)).status_code == 404
@@ -127,7 +135,7 @@ async def test_create_for_unknown_or_archived_customer_returns_400(
     make_customer: CustomerFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    headers = auth_headers(await make_user(roles=ADMIN))
 
     unknown = await client.post(
         "/api/v1/projects",
@@ -154,7 +162,7 @@ async def test_duplicate_name_per_customer_returns_409(
     make_customer: CustomerFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    headers = auth_headers(await make_user(roles=ADMIN))
     customer = await make_customer()
     payload: dict[str, Any] = {"customer_id": str(customer.id), "name": "Duplicate"}
 
@@ -171,7 +179,7 @@ async def test_update_rejects_null_for_name_and_is_active(
     make_project: ProjectFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    headers = auth_headers(await make_user(roles=ADMIN))
     project = await make_project()
 
     for field in ("name", "is_active", "normal_working_hours"):
@@ -189,7 +197,7 @@ async def test_normal_working_hours_out_of_range_returns_422(
     auth_headers: AuthHeaders,
     normal_working_hours: str,
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    headers = auth_headers(await make_user(roles=ADMIN))
     customer = await make_customer()
 
     response = await client.post(
@@ -211,7 +219,7 @@ async def test_add_member_with_inactive_user_returns_400_and_duplicate_returns_4
     make_project: ProjectFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    headers = auth_headers(await make_user(roles=ADMIN))
     project = await make_project()
     inactive_user = await make_user()
     await client.patch(
@@ -246,7 +254,7 @@ async def test_member_id_filter_returns_only_that_members_projects(
     make_project: ProjectFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    headers = auth_headers(await make_user(roles=ADMIN))
     member = await make_user()
     project_with_member = await make_project()
     await make_project()
@@ -274,9 +282,9 @@ async def test_create_and_update_project_manager(
     make_customer: CustomerFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    headers = auth_headers(await make_user(roles=ADMIN))
     customer = await make_customer()
-    manager = await make_user(role=UserRole.PROJECT_MANAGER, name="Mark Manager")
+    manager = await make_user(roles=MANAGER, name="Mark Manager")
 
     created = await client.post(
         "/api/v1/projects",
@@ -302,9 +310,9 @@ async def test_create_project_with_worker_as_manager_returns_400(
     make_customer: CustomerFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    headers = auth_headers(await make_user(roles=ADMIN))
     customer = await make_customer()
-    worker = await make_user(role=UserRole.WORKER)
+    worker = await make_user(roles=EMPLOYEE)
 
     response = await client.post(
         "/api/v1/projects",
@@ -321,8 +329,8 @@ async def test_manager_id_filter_returns_only_that_managers_projects(
     make_project: ProjectFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.ADMIN))
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    headers = auth_headers(await make_user(roles=ADMIN))
+    manager = await make_user(roles=MANAGER)
     managed = await make_project(manager_id=manager.id)
     await make_project()
 
@@ -344,7 +352,7 @@ async def test_list_billing_items_returns_the_six_defaults(
     make_project: ProjectFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.WORKER))
+    headers = auth_headers(await make_user(roles=EMPLOYEE))
     project = await make_project()
 
     response = await client.get(f"/api/v1/projects/{project.id}/billing-items", headers=headers)
@@ -359,15 +367,15 @@ async def test_list_billing_items_returns_the_six_defaults(
     assert body[0]["is_active"] is True
 
 
-@pytest.mark.parametrize("role", [UserRole.ADMIN, UserRole.PROJECT_MANAGER])
+@pytest.mark.parametrize("roles", [ADMIN, MANAGER])
 async def test_manager_can_add_and_update_a_billing_item(
     client: AsyncClient,
     make_user: UserFactory,
     make_project: ProjectFactory,
     auth_headers: AuthHeaders,
-    role: UserRole,
+    roles: frozenset[UserRole],
 ) -> None:
-    headers = auth_headers(await make_user(role=role))
+    headers = auth_headers(await make_user(roles=roles))
     project = await make_project()
 
     created = await client.post(
@@ -406,7 +414,7 @@ async def test_worker_can_read_but_not_write_billing_items(
     make_project: ProjectFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.WORKER))
+    headers = auth_headers(await make_user(roles=EMPLOYEE))
     project = await make_project()
     url = f"/api/v1/projects/{project.id}/billing-items"
 
@@ -427,8 +435,8 @@ async def test_project_manager_cannot_permanently_delete_a_billing_item(
     make_project: ProjectFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    manager_headers = auth_headers(await make_user(role=UserRole.PROJECT_MANAGER))
-    admin_headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    manager_headers = auth_headers(await make_user(roles=MANAGER))
+    admin_headers = auth_headers(await make_user(roles=ADMIN))
     project = await make_project()
     created = await client.post(
         f"/api/v1/projects/{project.id}/billing-items",
@@ -451,8 +459,8 @@ async def test_admin_cannot_permanently_delete_a_billing_item_in_use(
     make_project: ProjectFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    admin_headers = auth_headers(await make_user(role=UserRole.ADMIN))
-    worker = await make_user(role=UserRole.WORKER)
+    admin_headers = auth_headers(await make_user(roles=ADMIN))
+    worker = await make_user(roles=EMPLOYEE)
     worker_headers = auth_headers(worker)
     project = await make_project()
     await client.post(
@@ -490,7 +498,7 @@ async def test_billing_items_require_authentication(
 async def test_unknown_project_returns_404_for_billing_item_routes(
     client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    headers = auth_headers(await make_user(roles=ADMIN))
     url = f"/api/v1/projects/{uuid4()}/billing-items"
 
     assert (await client.get(url, headers=headers)).status_code == 404
@@ -509,7 +517,7 @@ async def test_unknown_billing_item_for_a_real_project_returns_404(
     make_project: ProjectFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    headers = auth_headers(await make_user(roles=ADMIN))
     project = await make_project()
     url = f"/api/v1/projects/{project.id}/billing-items/{uuid4()}"
 
@@ -531,7 +539,7 @@ async def test_add_billing_item_with_pricing_for_the_wrong_unit_returns_400(
     auth_headers: AuthHeaders,
     payload: dict[str, Any],
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    headers = auth_headers(await make_user(roles=ADMIN))
     project = await make_project()
 
     response = await client.post(
@@ -547,7 +555,7 @@ async def test_add_billing_item_to_archived_project_returns_400(
     make_project: ProjectFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    headers = auth_headers(await make_user(roles=ADMIN))
     project = await make_project()
     await client.patch(f"/api/v1/projects/{project.id}", headers=headers, json={"is_active": False})
 
@@ -566,7 +574,7 @@ async def test_duplicate_billing_item_name_returns_409(
     make_project: ProjectFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    headers = auth_headers(await make_user(roles=ADMIN))
     project = await make_project()
     payload = {"name": "Normal working hours", "unit": "hour"}
 
@@ -583,7 +591,7 @@ async def test_update_billing_item_rejects_null_for_name_and_is_active(
     make_project: ProjectFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    headers = auth_headers(await make_user(roles=ADMIN))
     project = await make_project()
     created = await client.post(
         f"/api/v1/projects/{project.id}/billing-items",
@@ -607,7 +615,7 @@ async def test_update_rejects_unit_and_preset(
     make_project: ProjectFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    headers = auth_headers(await make_user(roles=ADMIN))
     project = await make_project()
     created = await client.post(
         f"/api/v1/projects/{project.id}/billing-items",
@@ -631,7 +639,7 @@ async def test_update_clears_description_and_unit_rate(
     make_project: ProjectFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    headers = auth_headers(await make_user(roles=ADMIN))
     project = await make_project()
     created = await client.post(
         f"/api/v1/projects/{project.id}/billing-items",
@@ -657,7 +665,7 @@ async def test_include_inactive_query_param(
     make_project: ProjectFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.ADMIN))
+    headers = auth_headers(await make_user(roles=ADMIN))
     project = await make_project()
     created = await client.post(
         f"/api/v1/projects/{project.id}/billing-items",
@@ -690,7 +698,7 @@ async def test_project_customer_response_includes_currency(
     make_project: ProjectFactory,
     auth_headers: AuthHeaders,
 ) -> None:
-    headers = auth_headers(await make_user(role=UserRole.WORKER))
+    headers = auth_headers(await make_user(roles=EMPLOYEE))
     project = await make_project()
 
     response = await client.get(f"/api/v1/projects/{project.id}", headers=headers)

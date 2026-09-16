@@ -4,7 +4,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from support import ProjectFactory, UserFactory
+from support import ADMIN, MANAGER, ProjectFactory, UserFactory
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.projects.contracts import (
     AddProjectMember,
@@ -19,7 +19,6 @@ from time_reporting.modules.timesheets.contracts import (
     BillingPeriodNotReadyError,
     BillingPeriodStatus,
     GetTimesheetWeek,
-    NotProjectManagerError,
     ReopenProjectBillingPeriod,
     ReturnTimesheetWeek,
     RowCommentChange,
@@ -29,7 +28,7 @@ from time_reporting.modules.timesheets.contracts import (
     TimeEntryChange,
     TimesheetProjectNotFoundError,
 )
-from time_reporting.modules.users.contracts import UserNotFoundError, UserRole
+from time_reporting.modules.users.contracts import UserNotFoundError
 
 WEEK_1 = date(2026, 9, 7)
 # Still draft: dates in this week fall in September (the same month as WEEK_1) but the week itself
@@ -65,8 +64,8 @@ async def _book_and_approve(
 async def test_send_to_billing_happy_path(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
-    admin = await make_user(role=UserRole.ADMIN)
+    manager = await make_user(roles=MANAGER)
+    admin = await make_user(roles=ADMIN)
     worker = await make_user()
     project = await make_project(manager_id=manager.id)
     await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
@@ -95,8 +94,8 @@ async def test_send_to_billing_happy_path(
 async def test_send_is_allowed_before_the_month_ends(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
-    admin = await make_user(role=UserRole.ADMIN)
+    manager = await make_user(roles=MANAGER)
+    admin = await make_user(roles=ADMIN)
     worker = await make_user()
     project = await make_project(manager_id=manager.id)
     await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
@@ -133,7 +132,7 @@ async def test_send_is_allowed_before_the_month_ends(
 async def test_send_with_no_time_booked_is_not_ready(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    manager = await make_user(roles=MANAGER)
     project = await make_project(manager_id=manager.id)
 
     with pytest.raises(BillingPeriodNotReadyError):
@@ -147,7 +146,7 @@ async def test_send_with_no_time_booked_is_not_ready(
 async def test_send_with_an_unapproved_week_is_not_ready(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
+    manager = await make_user(roles=MANAGER)
     worker = await make_user()
     project = await make_project(manager_id=manager.id)
     await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
@@ -172,8 +171,8 @@ async def test_send_with_an_unapproved_week_is_not_ready(
 async def test_send_twice_is_rejected(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
-    admin = await make_user(role=UserRole.ADMIN)
+    manager = await make_user(roles=MANAGER)
+    admin = await make_user(roles=ADMIN)
     worker = await make_user()
     project = await make_project(manager_id=manager.id)
     await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
@@ -198,26 +197,11 @@ async def test_send_twice_is_rejected(
         )
 
 
-async def test_send_by_a_project_manager_who_is_not_this_projects_manager_is_rejected(
+async def test_send_by_a_manager_who_is_not_this_projects_manager_is_allowed(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
-    other_manager = await make_user(role=UserRole.PROJECT_MANAGER)
-    project = await make_project(manager_id=manager.id)
-
-    with pytest.raises(NotProjectManagerError):
-        await bus.execute(
-            SendProjectMonthToBilling(
-                project_id=project.id, year=2026, month=9, sent_by_id=other_manager.id
-            )
-        )
-
-
-async def test_admin_can_send_any_project(
-    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
-) -> None:
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
-    admin = await make_user(role=UserRole.ADMIN)
+    manager = await make_user(roles=MANAGER)
+    other_manager = await make_user(roles=MANAGER)
     worker = await make_user()
     project = await make_project(manager_id=manager.id)
     await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
@@ -225,20 +209,22 @@ async def test_admin_can_send_any_project(
     await _book_and_approve(
         bus,
         worker_id=worker.id,
-        admin_id=admin.id,
+        admin_id=other_manager.id,
         item_id=item_id,
         entry_date=WEEK_1,
         week_start=WEEK_1,
     )
 
     period = await bus.execute(
-        SendProjectMonthToBilling(project_id=project.id, year=2026, month=9, sent_by_id=admin.id)
+        SendProjectMonthToBilling(
+            project_id=project.id, year=2026, month=9, sent_by_id=other_manager.id
+        )
     )
     assert period.status is BillingPeriodStatus.SENT
 
 
 async def test_send_for_unknown_project_raises(bus: Bus, make_user: UserFactory) -> None:
-    admin = await make_user(role=UserRole.ADMIN)
+    admin = await make_user(roles=ADMIN)
     with pytest.raises(TimesheetProjectNotFoundError):
         await bus.execute(
             SendProjectMonthToBilling(project_id=uuid4(), year=2026, month=9, sent_by_id=admin.id)
@@ -256,8 +242,8 @@ async def test_send_by_unknown_user_raises(bus: Bus, make_project: ProjectFactor
 async def test_save_a_cell_in_a_locked_period_is_rejected(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
-    admin = await make_user(role=UserRole.ADMIN)
+    manager = await make_user(roles=MANAGER)
+    admin = await make_user(roles=ADMIN)
     worker = await make_user()
     project = await make_project(manager_id=manager.id)
     await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
@@ -289,8 +275,8 @@ async def test_save_a_cell_in_a_locked_period_is_rejected(
 async def test_save_a_row_comment_in_a_locked_period_is_rejected(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
-    admin = await make_user(role=UserRole.ADMIN)
+    manager = await make_user(roles=MANAGER)
+    admin = await make_user(roles=ADMIN)
     worker = await make_user()
     project = await make_project(manager_id=manager.id)
     await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
@@ -325,8 +311,8 @@ async def test_locked_dates_are_clipped_to_the_sent_period_for_a_straddling_week
     send August (an accepted trade-off of week-level approval — see the implementation plan), but
     ``locked_dates``/``can_review`` still reflect only the actually-sent (August) days, not the
     week's September days."""
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
-    admin = await make_user(role=UserRole.ADMIN)
+    manager = await make_user(roles=MANAGER)
+    admin = await make_user(roles=ADMIN)
     worker = await make_user()
     project = await make_project(manager_id=manager.id)
     await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
@@ -355,8 +341,8 @@ async def test_locked_dates_are_clipped_to_the_sent_period_for_a_straddling_week
 async def test_return_a_week_locked_by_billing_is_rejected(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
-    admin = await make_user(role=UserRole.ADMIN)
+    manager = await make_user(roles=MANAGER)
+    admin = await make_user(roles=ADMIN)
     worker = await make_user()
     project = await make_project(manager_id=manager.id)
     await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
@@ -387,8 +373,8 @@ async def test_return_a_week_locked_by_billing_is_rejected(
 async def test_reopen_unlocks_the_period(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
-    manager = await make_user(role=UserRole.PROJECT_MANAGER)
-    admin = await make_user(role=UserRole.ADMIN)
+    manager = await make_user(roles=MANAGER)
+    admin = await make_user(roles=ADMIN)
     worker = await make_user()
     project = await make_project(manager_id=manager.id)
     await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))

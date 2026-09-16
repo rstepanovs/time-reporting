@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import pytest
 
-from support import UserFactory
+from support import EMPLOYEE, UserFactory
 from time_reporting.cli import main
 from time_reporting.core.cqrs import Bus
 from time_reporting.core.passwords import verify_password
@@ -28,7 +28,6 @@ from time_reporting.seed import (
     DEMO_CUSTOMERS,
     DEMO_PROJECTS,
     DEMO_PURCHASING_MARKUP,
-    DEMO_TIME_ENTRY_ROLES,
     DEMO_USERS,
     DemoCustomer,
     DemoProject,
@@ -69,8 +68,9 @@ def _unique_projects(suffix: str) -> tuple[DemoProject, ...]:
     )
 
 
-def test_demo_data_covers_every_role_and_an_archived_customer() -> None:
-    assert {user.role for user in DEMO_USERS} == set(UserRole)
+def test_demo_data_covers_every_access_level_and_an_archived_customer() -> None:
+    assert {role for user in DEMO_USERS for role in user.roles} == set(UserRole)
+    assert any(not user.roles for user in DEMO_USERS)
     assert {customer.archived for customer in DEMO_CUSTOMERS} == {True, False}
     assert {project.archived for project in DEMO_PROJECTS} == {True, False}
 
@@ -106,7 +106,7 @@ async def test_seed_creates_users_customers_and_projects(bus: Bus) -> None:
         assert (await verify_password(DEFAULT_DEMO_PASSWORD, credentials.password_hash))[0]
         stored = await bus.query(GetUserById(user_id=credentials.id))
         assert stored is not None
-        assert stored.role is user.role
+        assert stored.roles == user.roles
 
     customer_page = await bus.query(ListCustomers(limit=1000, offset=0, include_inactive=True))
     active_by_name = {customer.name: customer.is_active for customer in customer_page.items}
@@ -157,12 +157,14 @@ async def test_seed_creates_users_customers_and_projects(bus: Bus) -> None:
     non_working_days = await bus.query(ListNonWorkingDays(year=SEED_TODAY.year))
     assert any(day.kind is NonWorkingDayKind.BRIDGE_DAY for day in non_working_days)
 
-    # Time entries: only workers/PMs get demo hours booked, not admins. Normal hours are booked on
-    # every working day from Jul 1 through SEED_TODAY (2026-09-14) — 54 working days, no DE public
-    # holidays fall in that window — plus one overtime and one travel entry per month (the first
-    # and last working day booked that month); SEED_TODAY is itself the last working day booked
-    # for September, so this week also carries a travel entry alongside the normal hours.
-    time_entry_users = {user for user in users if user.role in DEMO_TIME_ENTRY_ROLES}
+    # Time entries: only demo project members get demo hours booked (admin@ isn't a member of any
+    # demo project). Normal hours are booked on every working day from Jul 1 through SEED_TODAY
+    # (2026-09-14) — 54 working days, no DE public holidays fall in that window — plus one overtime
+    # and one travel entry per month (the first and last working day booked that month); SEED_TODAY
+    # is itself the last working day booked for September, so this week also carries a travel entry
+    # alongside the normal hours.
+    member_emails = {email for project in projects for email in project.member_emails}
+    time_entry_users = {user for user in users if user.email in member_emails}
     assert set(report.seeded_time_entries_for) == {user.email for user in time_entry_users}
     for user in time_entry_users:
         credentials = await bus.query(GetUserCredentialsByEmail(email=user.email))
@@ -181,7 +183,7 @@ async def test_seed_creates_users_customers_and_projects(bus: Bus) -> None:
         assert entries_by_preset[BillingItemPreset.NORMAL_HOURS].quantity == Decimal("8.00")
         assert entries_by_preset[BillingItemPreset.TRAVEL_TIME].quantity == Decimal("3.00")
     for user in users:
-        if user.role not in DEMO_TIME_ENTRY_ROLES:
+        if user not in time_entry_users:
             credentials = await bus.query(GetUserCredentialsByEmail(email=user.email))
             assert credentials is not None
             assert await bus.query(CountTimeEntries(user_id=credentials.id)) == 0
@@ -209,15 +211,15 @@ async def test_seed_is_idempotent(bus: Bus) -> None:
 
 async def test_seed_leaves_an_existing_user_untouched(bus: Bus, make_user: UserFactory) -> None:
     users = _unique_users(uuid4().hex[:8])
-    admin_seat = next(user for user in users if user.role is UserRole.ADMIN)
-    existing = await make_user(email=admin_seat.email, role=UserRole.WORKER, name="Someone Else")
+    admin_seat = next(user for user in users if UserRole.ADMIN in user.roles)
+    existing = await make_user(email=admin_seat.email, roles=EMPLOYEE, name="Someone Else")
 
     report = await seed_demo_data(bus, users=users, customers=(), projects=())
 
     assert report.existing_users == [admin_seat.email]
     stored = await bus.query(GetUserById(user_id=existing.id))
     assert stored is not None
-    assert (stored.role, stored.name) == (UserRole.WORKER, "Someone Else")
+    assert (stored.roles, stored.name) == (EMPLOYEE, "Someone Else")
 
 
 # --- main(): output and input validation, without touching the database ---

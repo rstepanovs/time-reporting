@@ -11,8 +11,8 @@ Depends on: `customers.contracts` (`GetCustomersByIds`, active check), `users.co
 
 - `Project.normal_working_hours` (default 8, `0 < x ≤ 24`) is how many hours the timesheets module's
   weekly grid prefills per working day when it seeds a fresh draft week.
-- `Project.manager_id` is the one responsible manager (nullable; an active `admin` or
-  `project_manager`, checked on set — `ProjectManagerNotFoundError` /
+- `Project.manager_id` is the one responsible manager (nullable; an active user holding the
+  `manager` access level, checked on set — `ProjectManagerNotFoundError` /
   `ProjectManagerNotEligibleError` otherwise), settable on `CreateProject`/`UpdateProject`
   (`null`/naming it in `clear_fields` clears it) and responsible for that project's timesheets team
   overview and billing handoff. `RemoveUserFromAllProjects` also clears it wherever the removed user

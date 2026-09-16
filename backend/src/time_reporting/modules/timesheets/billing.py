@@ -22,7 +22,6 @@ from time_reporting.modules.timesheets.contracts import (
     BillingPeriodNotFoundError,
     BillingPeriodNotReadyError,
     BillingPeriodStatus,
-    NotProjectManagerError,
     ProjectBillingPeriodDTO,
     ReopenProjectBillingPeriod,
     SendProjectMonthToBilling,
@@ -42,7 +41,7 @@ from time_reporting.modules.timesheets.summary import (
     _start_of_iso_week,
 )
 from time_reporting.modules.timesheets.team import billing_readiness
-from time_reporting.modules.users.contracts import GetUserById, UserDTO, UserNotFoundError, UserRole
+from time_reporting.modules.users.contracts import GetUserById, UserDTO, UserNotFoundError
 
 
 class BillingService:
@@ -59,10 +58,6 @@ class BillingService:
         sender = await self._bus.query(GetUserById(user_id=command.sent_by_id))
         if sender is None:
             raise UserNotFoundError(command.sent_by_id)
-        if sender.role != UserRole.ADMIN and (
-            project.manager is None or project.manager.id != sender.id
-        ):
-            raise NotProjectManagerError(command.project_id)
 
         month_first, month_last = _month_bounds(command.year, command.month)
         if (
