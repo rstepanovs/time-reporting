@@ -83,6 +83,9 @@ docker compose up --build
 # Frontend: http://localhost:8080, API: http://localhost:8000/api/docs
 ```
 
+For a real deployment (upgrading, rolling back, backups/restore, pgAdmin), see
+[`docs/operations.md`](docs/operations.md).
+
 ## Common commands
 
 Backend (repository root):

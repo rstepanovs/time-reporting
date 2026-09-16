@@ -63,6 +63,10 @@ every `BACKUP_INTERVAL_HOURS`; all three backend-image services share the `backu
 `docker compose --profile tools up pgadmin`) pre-registers the `db` server from
 `deploy/pgadmin/servers.json`.
 
+`scripts/upgrade.sh [ref]` upgrades a running deployment (rebuild → migrate, which backs up first →
+restart); `docs/operations.md` is the full runbook (install, upgrade, rollback via `time-reporting
+restore`, backups, pgAdmin over an SSH tunnel) — read it before touching either.
+
 ## Architecture
 
 ### Backend (`backend/src/time_reporting/`)
