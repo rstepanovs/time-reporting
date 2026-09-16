@@ -822,10 +822,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/audit-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Audit Events */
+        get: operations["list_audit_events_api_v1_admin_audit_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AuditAction
+         * @description What happened. New members are expected to be added regularly as more of the app grows
+         *     audit coverage, so this is a plain Python enum, not a Postgres one — no migration is needed to
+         *     add a value (see ``AuditEvent.action`` in ``models.py``).
+         * @enum {string}
+         */
+        AuditAction: "user.created" | "user.roles_changed" | "user.activated" | "user.deactivated" | "user.password_reset" | "user.deleted" | "customer.archived" | "customer.deleted" | "project.archived" | "project.deleted" | "billing_period.sent" | "billing_period.reopened" | "calendar.public_holidays_imported" | "backup.created";
+        /** AuditEventPageResponse */
+        AuditEventPageResponse: {
+            /** Items */
+            items: components["schemas"]["AuditEventResponse"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
+        /** AuditEventResponse */
+        AuditEventResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Actor Name */
+            actor_name: string | null;
+            action: components["schemas"]["AuditAction"];
+            /** Entity Type */
+            entity_type: string;
+            /** Entity Id */
+            entity_id: string;
+            /** Summary */
+            summary: string;
+            /** Details */
+            details: {
+                [key: string]: unknown;
+            } | null;
+        };
         /** BackupListResponse */
         BackupListResponse: {
             /** Backups */
@@ -4428,6 +4492,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_audit_events_api_v1_admin_audit_events_get: {
+        parameters: {
+            query?: {
+                action?: components["schemas"]["AuditAction"] | null;
+                entity_type?: string | null;
+                entity_id?: string | null;
+                actor_id?: string | null;
+                occurred_from?: string | null;
+                occurred_to?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditEventPageResponse"];
                 };
             };
             /** @description Validation Error */

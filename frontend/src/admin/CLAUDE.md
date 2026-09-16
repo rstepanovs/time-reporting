@@ -4,8 +4,8 @@ The shared archive-or-delete UI for users, customers and projects, plus the dash
 Administration section. Backend: `modules/admin`.
 
 - `AdminShortcutsCard.tsx` — the dashboard's Administration section for `admin` users: a single
-  `DashboardCard` with link-only shortcuts to Users/Customers/Projects/Calendar/Billing/Backups/
-  System status, no data calls.
+  `DashboardCard` with link-only shortcuts to Users/Customers/Projects/Calendar/Billing/Audit log/
+  Backups/System status, no data calls.
 
 - `api.ts` — `getRemovalImpact`/`removeEntity` against `/api/v1/admin/...`, plus
   `RemovalBlockedError` (409, carries `blockers`), `RemovalRuleError` (400) and
@@ -29,6 +29,9 @@ Administration section. Backend: `modules/admin`.
   filters, paginated), a per-row "Reopen…" confirm modal reusing `timesheets/hooks.ts`'s
   `useReopenProjectBillingPeriod` (same mutation and modal shape as `pages/TeamPage.tsx`'s). Backed
   by `timesheets/`, not an area of its own.
+- `AdminAuditPage` (`/admin/audit`) — the administrative audit log: action/entity type/actor/date
+  range filters, a paginated table (time, actor, action, summary) with each row expandable to show
+  its raw `details` JSON. Backed by `audit/`.
 - `AdminBackupsPage` (`/admin/backups`) and `AdminSystemStatusPage` (`/admin/status`, health badges
   polled directly, no area of their own, plus Versions/Database/Tables/Uptime/Backups/Configuration
   cards) — both backed by `system/`; see `system/CLAUDE.md`.

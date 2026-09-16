@@ -3,6 +3,7 @@ import { createBrowserRouter, Navigate, type RouteObject } from "react-router";
 import { RequireAuth } from "@/auth/RequireAuth";
 import { RequireRole } from "@/auth/RequireRole";
 import { AppLayout } from "@/components/AppLayout";
+import { AdminAuditPage } from "@/pages/admin/AdminAuditPage";
 import { AdminBackupsPage } from "@/pages/admin/AdminBackupsPage";
 import { AdminBillingPage } from "@/pages/admin/AdminBillingPage";
 import { AdminCalendarPage } from "@/pages/admin/AdminCalendarPage";
@@ -56,6 +57,7 @@ export const routes: RouteObject[] = [
               { path: "projects", element: <AdminProjectsPage /> },
               { path: "calendar", element: <AdminCalendarPage /> },
               { path: "billing", element: <AdminBillingPage /> },
+              { path: "audit", element: <AdminAuditPage /> },
               { path: "backups", element: <AdminBackupsPage /> },
               { path: "status", element: <AdminSystemStatusPage /> },
             ],

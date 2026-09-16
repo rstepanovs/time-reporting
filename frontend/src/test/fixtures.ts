@@ -1,3 +1,4 @@
+import type { AuditEvent, AuditEventPage } from "@/audit/api";
 import type { CurrentUser } from "@/auth/api";
 import type { CalendarDay, NonWorkingDay } from "@/calendar/api";
 import type { Customer } from "@/customers/api";
@@ -679,6 +680,25 @@ export const testBillingPeriodListItem: BillingPeriodListItem = {
 
 export const testBillingPeriodPage: BillingPeriodPage = {
   items: [testBillingPeriodListItem],
+  total: 1,
+  limit: 20,
+  offset: 0,
+};
+
+export const testAuditEvent: AuditEvent = {
+  id: "9c1e2f3a-4b5c-6d7e-8f90-1a2b3c4d5e6f",
+  occurred_at: "2026-09-16T10:00:00Z",
+  actor_id: testAdmin.id,
+  actor_name: testAdmin.name,
+  action: "billing_period.reopened",
+  entity_type: "billing_period",
+  entity_id: `${testReadyBillingPeriod.project_id}:${testReadyBillingPeriod.period_start}`,
+  summary: "Reopened Platform Migration's September 2026 billing period",
+  details: { project_name: "Platform Migration", period_start: testReadyBillingPeriod.period_start },
+};
+
+export const testAuditEventPage: AuditEventPage = {
+  items: [testAuditEvent],
   total: 1,
   limit: 20,
   offset: 0,
