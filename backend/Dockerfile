@@ -25,6 +25,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 FROM python:3.13-slim-bookworm
 
+ARG GIT_SHA
+
 RUN groupadd --system app && useradd --system --gid app --home-dir /app app
 
 WORKDIR /app
@@ -34,7 +36,8 @@ COPY --chown=app:app backend/alembic.ini backend/alembic.ini
 COPY --chown=app:app backend/migrations backend/migrations
 
 ENV PATH="/app/.venv/bin:$PATH" \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    APP_GIT_SHA=$GIT_SHA
 
 USER app
 

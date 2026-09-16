@@ -122,6 +122,8 @@ Modules (each documented in its own `CLAUDE.md`):
 - **`timesheets`** — `TimeEntry`, the weekly submit/approve workflow, dashboards, team overview,
   billing handoff and locking.
 - **`admin`** — no tables; orchestrates archiving/permanent deletion of users, customers, projects.
+- **`system`** — no tables; backend/database version and status, non-secret configuration view, read
+  from PostgreSQL catalogs and application settings, under `/admin/system/*`.
 
 Permanently deleting any entity is admin-only and goes through the `admin` module; archiving uses the
 owning module's `PATCH` endpoint (`ManagerDep`).

@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -41,6 +42,9 @@ def create_app() -> FastAPI:
     # Built once per app instance; api/deps.get_bus hands out a Bus scoped to each
     # request's session.
     app.state.handlers = build_registry()
+    # Read by the system module's GetSystemStatus query to report uptime. Set here rather than in
+    # lifespan, which the test client's transport never runs.
+    app.state.started_at = datetime.now(UTC)
     return app
 
 
