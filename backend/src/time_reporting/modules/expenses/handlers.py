@@ -5,16 +5,22 @@ Handlers translate between bus messages and the service/repository and never ret
 
 from collections.abc import Sequence
 from decimal import Decimal
+from pathlib import Path
 
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.expenses.contracts import (
+    AddExpenseAttachment,
     ApproveExpenseReport,
     CreateExpenseReport,
+    DeleteExpenseAttachment,
     DeleteExpenseReport,
+    ExpenseAttachmentDTO,
     ExpenseReportDTO,
     ExpenseReportStatus,
     ExpenseReportSummaryDTO,
+    GetAttachmentPath,
     GetExpenseReport,
+    ListAttachmentStorageKeys,
     ListProjectMonthExpenseReports,
     ListSubmittedExpenseReports,
     LockProjectMonthExpenseReports,
@@ -25,6 +31,7 @@ from time_reporting.modules.expenses.contracts import (
 )
 from time_reporting.modules.expenses.models import ExpenseReport
 from time_reporting.modules.expenses.repository import (
+    ExpenseAttachmentRepository,
     ExpenseReportLineRepository,
     ExpenseReportRepository,
 )
@@ -106,6 +113,38 @@ class UnlockProjectMonthExpenseReportsHandler:
 
     async def handle(self, command: UnlockProjectMonthExpenseReports) -> None:
         await self._service.unlock_project_month(command)
+
+
+class AddExpenseAttachmentHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._service = ExpenseService(bus)
+
+    async def handle(self, command: AddExpenseAttachment) -> ExpenseAttachmentDTO:
+        return await self._service.add_attachment(command)
+
+
+class DeleteExpenseAttachmentHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._service = ExpenseService(bus)
+
+    async def handle(self, command: DeleteExpenseAttachment) -> None:
+        await self._service.delete_attachment(command)
+
+
+class GetAttachmentPathHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._service = ExpenseService(bus)
+
+    async def handle(self, query: GetAttachmentPath) -> Path:
+        return await self._service.get_attachment_path(query)
+
+
+class ListAttachmentStorageKeysHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._attachments = ExpenseAttachmentRepository(bus.session)
+
+    async def handle(self, query: ListAttachmentStorageKeys) -> frozenset[str]:
+        return await self._attachments.list_all_storage_keys()
 
 
 class ListSubmittedExpenseReportsHandler:

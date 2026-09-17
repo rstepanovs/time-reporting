@@ -69,4 +69,6 @@ def _config_dto(settings: Settings) -> SystemConfigDTO:
         backup_dir=settings.backup_dir,
         backup_retention_count=settings.backup_retention_count,
         backup_timeout_seconds=settings.backup_timeout_seconds,
+        attachment_dir=settings.attachment_dir,
+        attachment_max_bytes=settings.attachment_max_bytes,
     )

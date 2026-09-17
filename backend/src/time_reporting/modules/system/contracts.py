@@ -59,6 +59,8 @@ class SystemConfigDTO:
     backup_dir: str
     backup_retention_count: int
     backup_timeout_seconds: int
+    attachment_dir: str
+    attachment_max_bytes: int
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

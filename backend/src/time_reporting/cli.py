@@ -13,6 +13,8 @@ from time_reporting.core.config import get_settings
 from time_reporting.core.cqrs import Bus
 from time_reporting.core.passwords import PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH
 from time_reporting.db.session import SessionFactory, engine
+from time_reporting.modules.expenses.contracts import ListAttachmentStorageKeys
+from time_reporting.modules.expenses.storage import ExpenseAttachmentStorage
 from time_reporting.modules.registry import build_registry
 from time_reporting.modules.system.backup_service import BackupService, parse_backup_filename
 from time_reporting.modules.system.contracts import (
@@ -57,6 +59,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _backup_command(args)
     if args.command == "restore":
         return _restore_command(args)
+    if args.command == "prune-attachments":
+        return _prune_attachments_command(args)
     return _create_admin_command(args)
 
 
@@ -107,6 +111,17 @@ def _build_parser() -> argparse.ArgumentParser:
     restore_parser.add_argument("file", help="path to a .dump file, e.g. one from `backup`")
     restore_parser.add_argument(
         "--yes", action="store_true", help="confirm the restore; refused without this"
+    )
+
+    prune_attachments_parser = commands.add_parser(
+        "prune-attachments",
+        help="delete expense-attachment files on disk that no database row references "
+        "(orphaned by a write whose file was saved but whose row never committed)",
+    )
+    prune_attachments_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="list what would be deleted without deleting anything",
     )
     return parser
 
@@ -210,6 +225,18 @@ def _restore_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def _prune_attachments_command(args: argparse.Namespace) -> int:
+    orphans = asyncio.run(_prune_attachments_in_database(dry_run=args.dry_run))
+    if not orphans:
+        print("No orphaned attachment files found")
+        return 0
+    verb = "Would delete" if args.dry_run else "Deleted"
+    for key in orphans:
+        print(f"{verb} {key}")
+    print(f"{verb} {len(orphans)} orphaned attachment file(s)")
+    return 0
+
+
 async def _create_admin_in_database(*, name: str, email: str, password: str) -> UserDTO:
     return await _with_bus(lambda bus: create_admin(bus, name=name, email=email, password=password))
 
@@ -233,6 +260,12 @@ async def _restore_in_database(path: Path) -> None:
     # `pg_restore` subprocess), independent of the app's session/engine — there is nothing for a
     # `Bus` to do here.
     await BackupService(get_settings()).restore(path)
+
+
+async def _prune_attachments_in_database(*, dry_run: bool) -> tuple[str, ...]:
+    referenced_keys = await _with_bus(lambda bus: bus.query(ListAttachmentStorageKeys()))
+    storage = ExpenseAttachmentStorage(get_settings())
+    return storage.prune_orphans(referenced_keys=referenced_keys, dry_run=dry_run)
 
 
 async def _with_bus[T](action: Callable[[Bus], Awaitable[T]]) -> T:

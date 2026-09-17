@@ -48,10 +48,11 @@ COPY --from=builder --chown=app:app /app/.venv /app/.venv
 COPY --chown=app:app backend/alembic.ini backend/alembic.ini
 COPY --chown=app:app backend/migrations backend/migrations
 
-# `compose.yaml` mounts the `backups` named volume here; a directory owned by `app` must already
-# exist in the image, otherwise Docker initializes the empty volume as root-owned and `app` can't
-# write to it.
-RUN mkdir -p /var/backups/time-reporting && chown app:app /var/backups/time-reporting
+# `compose.yaml` mounts the `backups`/`attachments` named volumes here; a directory owned by `app`
+# must already exist in the image, otherwise Docker initializes the empty volume as root-owned and
+# `app` can't write to it.
+RUN mkdir -p /var/backups/time-reporting /var/lib/time-reporting/attachments \
+    && chown -R app:app /var/backups/time-reporting /var/lib/time-reporting
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \

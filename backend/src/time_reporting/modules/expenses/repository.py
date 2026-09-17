@@ -13,7 +13,11 @@ from time_reporting.modules.expenses.contracts import (
     ExpenseReportAlreadyExistsError,
     ExpenseReportStatus,
 )
-from time_reporting.modules.expenses.models import ExpenseReport, ExpenseReportLine
+from time_reporting.modules.expenses.models import (
+    ExpenseAttachment,
+    ExpenseReport,
+    ExpenseReportLine,
+)
 
 _REPORT_UNIQUE_CONSTRAINT = "uq_expense_reports_user_id_project_id_period_start"
 
@@ -131,4 +135,36 @@ class ExpenseReportLineRepository:
 
     async def delete(self, line: ExpenseReportLine) -> None:
         await self._session.delete(line)
+        await self._session.flush()
+
+
+class ExpenseAttachmentRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get(self, attachment_id: UUID) -> ExpenseAttachment | None:
+        result = await self._session.scalars(
+            select(ExpenseAttachment).where(ExpenseAttachment.id == attachment_id)
+        )
+        return result.one_or_none()
+
+    async def list_for_report(self, report_id: UUID) -> Sequence[ExpenseAttachment]:
+        result = await self._session.scalars(
+            select(ExpenseAttachment)
+            .where(ExpenseAttachment.report_id == report_id)
+            .order_by(ExpenseAttachment.created_at)
+        )
+        return result.all()
+
+    async def list_all_storage_keys(self) -> frozenset[str]:
+        result = await self._session.scalars(select(ExpenseAttachment.storage_key))
+        return frozenset(result.all())
+
+    async def save(self, attachment: ExpenseAttachment) -> None:
+        """Add ``attachment`` to the session (if new) and flush pending changes."""
+        self._session.add(attachment)
+        await self._session.flush()
+
+    async def delete(self, attachment: ExpenseAttachment) -> None:
+        await self._session.delete(attachment)
         await self._session.flush()

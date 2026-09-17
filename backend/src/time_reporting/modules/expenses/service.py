@@ -4,18 +4,25 @@ Changes are flushed through the repository; the bus commits. Reads projects and 
 their modules' ``contracts.py`` messages, dispatched on the shared ``Bus``.
 """
 
+import hashlib
 from calendar import monthrange
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 from uuid import UUID
 
+from time_reporting.core.config import get_settings
 from time_reporting.core.cqrs import Bus
 from time_reporting.db.mixins import utc_now
 from time_reporting.modules.audit.contracts import AuditAction, RecordAuditEvent
 from time_reporting.modules.expenses.contracts import (
+    AddExpenseAttachment,
     ApproveExpenseReport,
+    AttachmentNotFoundError,
     CreateExpenseReport,
+    DeleteExpenseAttachment,
     DeleteExpenseReport,
+    ExpenseAttachmentDTO,
     ExpenseBillingItemNotFoundError,
     ExpenseDateOutsidePeriodError,
     ExpenseLineChange,
@@ -29,6 +36,7 @@ from time_reporting.modules.expenses.contracts import (
     ExpenseReportStatus,
     ExpenseReturnCommentRequiredError,
     ExpenseSelfReviewError,
+    GetAttachmentPath,
     InvalidExpenseStatusTransitionError,
     LockProjectMonthExpenseReports,
     ReturnExpenseReport,
@@ -36,11 +44,17 @@ from time_reporting.modules.expenses.contracts import (
     SubmitExpenseReport,
     UnlockProjectMonthExpenseReports,
 )
-from time_reporting.modules.expenses.models import ExpenseReport, ExpenseReportLine
+from time_reporting.modules.expenses.models import (
+    ExpenseAttachment,
+    ExpenseReport,
+    ExpenseReportLine,
+)
 from time_reporting.modules.expenses.repository import (
+    ExpenseAttachmentRepository,
     ExpenseReportLineRepository,
     ExpenseReportRepository,
 )
+from time_reporting.modules.expenses.storage import ExpenseAttachmentStorage
 from time_reporting.modules.projects.contracts import (
     BillingUnit,
     GetProjectBillingItemsByIds,
@@ -49,7 +63,7 @@ from time_reporting.modules.projects.contracts import (
     ProjectBillingItemDTO,
     ProjectOptionDTO,
 )
-from time_reporting.modules.users.contracts import GetUserById, UserRole
+from time_reporting.modules.users.contracts import GetUserById, GetUsersByIds, UserRole
 
 _EDITABLE_STATUSES = frozenset({ExpenseReportStatus.DRAFT, ExpenseReportStatus.RETURNED})
 _REVIEWABLE_STATUSES = frozenset({ExpenseReportStatus.SUBMITTED, ExpenseReportStatus.APPROVED})
@@ -60,6 +74,8 @@ class ExpenseService:
         self._bus = bus
         self._reports = ExpenseReportRepository(bus.session)
         self._lines = ExpenseReportLineRepository(bus.session)
+        self._attachments = ExpenseAttachmentRepository(bus.session)
+        self._storage = ExpenseAttachmentStorage(get_settings())
 
     async def create_report(self, command: CreateExpenseReport) -> ExpenseReportDTO:
         period_start, period_end = _month_bounds(command.year, command.month)
@@ -116,6 +132,35 @@ class ExpenseService:
         )
         total = sum((line.amount for line in line_dtos), start=Decimal("0"))
 
+        attachments = await self._attachments.list_for_report(report_id)
+        uploaders_by_id = {
+            uploader.id: uploader
+            for uploader in await self._bus.query(
+                GetUsersByIds(
+                    user_ids=frozenset(
+                        attachment.uploaded_by_id
+                        for attachment in attachments
+                        if attachment.uploaded_by_id is not None
+                    )
+                )
+            )
+        }
+        attachment_dtos = tuple(
+            ExpenseAttachmentDTO(
+                id=attachment.id,
+                file_name=attachment.file_name,
+                content_type=attachment.content_type,
+                size_bytes=attachment.size_bytes,
+                uploaded_by_name=(
+                    uploaders_by_id[attachment.uploaded_by_id].name
+                    if attachment.uploaded_by_id in uploaders_by_id
+                    else None
+                ),
+                created_at=attachment.created_at,
+            )
+            for attachment in attachments
+        )
+
         reviewed_by_name = await self._reviewer_name(report_row)
         is_locked = report_row.locked_at is not None
         is_owner_editable = (
@@ -149,6 +194,7 @@ class ExpenseService:
             is_locked=is_locked,
             total=total,
             lines=line_dtos,
+            attachments=attachment_dtos,
         )
 
     async def save_lines(self, command: SaveExpenseReportLines) -> ExpenseReportDTO:
@@ -313,6 +359,63 @@ class ExpenseService:
         for report_row in reports:
             report_row.locked_at = None
             await self._reports.save(report_row)
+
+    async def add_attachment(self, command: AddExpenseAttachment) -> ExpenseAttachmentDTO:
+        report_row = await self._reports.get(command.report_id)
+        if report_row is None:
+            raise ExpenseReportNotFoundError(command.report_id)
+        self._ensure_editable(report_row)
+
+        # Raised here too (not just inside `storage.save`) so a rejected upload never computes a
+        # hash or touches the filesystem at all.
+        self._storage.ensure_allowed(
+            content_type=command.content_type, size_bytes=len(command.content)
+        )
+        sha256 = hashlib.sha256(command.content).hexdigest()
+        storage_key = self._storage.save(content=command.content, content_type=command.content_type)
+
+        attachment = ExpenseAttachment(
+            report_id=report_row.id,
+            file_name=command.file_name,
+            content_type=command.content_type,
+            size_bytes=len(command.content),
+            sha256=sha256,
+            storage_key=storage_key,
+            uploaded_by_id=command.actor_id,
+        )
+        await self._attachments.save(attachment)
+
+        uploader = await self._bus.query(GetUserById(user_id=command.actor_id))
+        return ExpenseAttachmentDTO(
+            id=attachment.id,
+            file_name=attachment.file_name,
+            content_type=attachment.content_type,
+            size_bytes=attachment.size_bytes,
+            uploaded_by_name=uploader.name if uploader is not None else None,
+            created_at=attachment.created_at,
+        )
+
+    async def delete_attachment(self, command: DeleteExpenseAttachment) -> None:
+        attachment = await self._attachments.get(command.attachment_id)
+        if attachment is None:
+            raise AttachmentNotFoundError(command.attachment_id)
+        report_row = await self._reports.get(attachment.report_id)
+        # `expense_attachments.report_id` is `ON DELETE CASCADE`, so the report row can only be
+        # missing if this attachment row is also gone by the time we get here.
+        assert report_row is not None
+        self._ensure_editable(report_row)
+
+        self._storage.delete(attachment.storage_key)
+        await self._attachments.delete(attachment)
+
+    async def get_attachment_path(self, query: GetAttachmentPath) -> Path:
+        attachment = await self._attachments.get(query.attachment_id)
+        if attachment is None:
+            raise AttachmentNotFoundError(query.attachment_id)
+        path = self._storage.path_for(attachment.storage_key)
+        if path is None:
+            raise AttachmentNotFoundError(query.attachment_id)
+        return path
 
     @staticmethod
     def _ensure_not_self_review(user_id: UUID, reviewer_id: UUID) -> None:

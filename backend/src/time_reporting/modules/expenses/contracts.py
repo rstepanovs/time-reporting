@@ -16,11 +16,18 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
+from pathlib import Path
 from uuid import UUID
 
 from time_reporting.core.cqrs import Command, Query
 from time_reporting.modules.projects.contracts import ProjectBillingItemDTO, ProjectDTO
 from time_reporting.modules.users.contracts import UserDTO
+
+# What an uploaded receipt/invoice scan may be. A frozenset constant, not a setting, since it's a
+# format decision, not something an operator would tune per deployment.
+ALLOWED_ATTACHMENT_CONTENT_TYPES: frozenset[str] = frozenset(
+    {"application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic"}
+)
 
 
 class ExpenseReportStatus(StrEnum):
@@ -52,6 +59,16 @@ class ExpenseReportLineDTO:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class ExpenseAttachmentDTO:
+    id: UUID
+    file_name: str
+    content_type: str
+    size_bytes: int
+    uploaded_by_name: str | None
+    created_at: datetime
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class ExpenseReportDTO:
     """One employee's expense claim for one project and one calendar month.
 
@@ -78,6 +95,7 @@ class ExpenseReportDTO:
     is_locked: bool
     total: Decimal
     lines: tuple[ExpenseReportLineDTO, ...]
+    attachments: tuple[ExpenseAttachmentDTO, ...]
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -125,6 +143,22 @@ class ListProjectMonthExpenseReports(Query[tuple[ExpenseReportSummaryDTO, ...]])
 
     project_id: UUID
     period_start: date
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetAttachmentPath(Query[Path]):
+    """The on-disk path of one attachment, for the router to stream back as a ``FileResponse`` —
+    the same shape as ``system.contracts.GetBackupPath``. Raises ``AttachmentNotFoundError`` if
+    ``attachment_id`` doesn't exist or its file is missing from disk."""
+
+    attachment_id: UUID
+    viewer_id: UUID
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ListAttachmentStorageKeys(Query[frozenset[str]]):
+    """Every attachment's ``storage_key``, for ``time-reporting prune-attachments`` to tell which
+    files on disk are still referenced by a row."""
 
 
 # --- Commands ---
@@ -239,6 +273,30 @@ class UnlockProjectMonthExpenseReports(Command[None]):
 
     project_id: UUID
     period_start: date
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class AddExpenseAttachment(Command[ExpenseAttachmentDTO]):
+    """Store one uploaded file against ``report_id``. ``content`` is the already-read request
+    body — the router is responsible for enforcing ``attachment_max_bytes`` while reading it, so a
+    huge upload is rejected without ever being buffered here in full. Raises
+    ``ExpenseReportNotFoundError``, ``ExpenseReportNotEditableError``, ``ExpenseReportLockedError``,
+    ``AttachmentTypeNotAllowedError`` or ``AttachmentTooLargeError``."""
+
+    report_id: UUID
+    actor_id: UUID
+    file_name: str
+    content_type: str
+    content: bytes
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class DeleteExpenseAttachment(Command[None]):
+    """Remove one attachment (its row and its file). Raises ``AttachmentNotFoundError``,
+    ``ExpenseReportNotEditableError`` or ``ExpenseReportLockedError``."""
+
+    attachment_id: UUID
+    actor_id: UUID
 
 
 # --- Exceptions ---

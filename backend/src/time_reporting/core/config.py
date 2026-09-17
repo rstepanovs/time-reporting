@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     backup_retention_count: int = Field(default=14, gt=0)
     backup_timeout_seconds: int = Field(default=300, gt=0)
 
+    # Where expense-report attachments are written; `/var/lib/time-reporting/attachments` (a named
+    # volume) in compose. A relative path resolves against the process's working directory.
+    attachment_dir: str = "attachments"
+    attachment_max_bytes: int = Field(default=10_485_760, gt=0)
+
     cors_origins: list[str] = ["http://localhost:5173"]
 
     # Signs and verifies JWT access tokens; generate with `openssl rand -hex 32`.

@@ -50,6 +50,8 @@ class SystemConfigResponse(BaseModel):
     backup_dir: str
     backup_retention_count: int
     backup_timeout_seconds: int
+    attachment_dir: str
+    attachment_max_bytes: int
 
 
 class BackupResponse(BaseModel):

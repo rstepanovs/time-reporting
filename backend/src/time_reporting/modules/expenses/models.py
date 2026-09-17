@@ -14,11 +14,12 @@ from sqlalchemy import (
     Numeric,
     String,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
 from time_reporting.db.base import Base
-from time_reporting.db.mixins import TimestampMixin
+from time_reporting.db.mixins import TimestampMixin, utc_now
 from time_reporting.modules.expenses.contracts import ExpenseReportStatus
 
 
@@ -85,3 +86,31 @@ class ExpenseReportLine(TimestampMixin, Base):
     document_no: Mapped[str | None] = mapped_column(String(100))
     # Display order within the report; new lines get max(position) + 1.
     position: Mapped[int] = mapped_column(default=1, server_default="1")
+
+
+class ExpenseAttachment(Base):
+    """Metadata for one uploaded receipt/invoice scan, hanging off the report as a whole (not a
+    specific line). The file itself lives on disk under ``storage_key``
+    (``ExpenseAttachmentStorage``, in ``storage.py``); this row is the source of truth for which
+    files are still referenced — ``time-reporting prune-attachments`` deletes orphaned files whose
+    row a rolled-back write never committed. No ``updated_at``: a row is written once and only ever
+    deleted, never modified.
+    """
+
+    __tablename__ = "expense_attachments"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    report_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("expense_reports.id", ondelete="CASCADE"), index=True
+    )
+    file_name: Mapped[str] = mapped_column(String(255))
+    content_type: Mapped[str] = mapped_column(String(100))
+    size_bytes: Mapped[int] = mapped_column()
+    sha256: Mapped[str] = mapped_column(String(64))
+    storage_key: Mapped[str] = mapped_column(String(255), unique=True)
+    uploaded_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, server_default=func.now()
+    )

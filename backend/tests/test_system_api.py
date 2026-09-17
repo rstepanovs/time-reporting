@@ -75,4 +75,6 @@ async def test_admin_can_get_system_config_without_secrets(
         "backup_dir",
         "backup_retention_count",
         "backup_timeout_seconds",
+        "attachment_dir",
+        "attachment_max_bytes",
     }

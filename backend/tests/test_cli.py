@@ -288,3 +288,52 @@ def test_restore_reports_a_failure(
 
     assert exit_code == 1
     assert "Backup failed" in capsys.readouterr().err
+
+
+# --- prune-attachments ---
+
+
+def _stub_prune_attachments(monkeypatch: pytest.MonkeyPatch, orphans: tuple[str, ...]) -> None:
+    async def fake_prune_attachments_in_database(*, dry_run: bool) -> tuple[str, ...]:
+        return orphans
+
+    monkeypatch.setattr(
+        "time_reporting.cli._prune_attachments_in_database", fake_prune_attachments_in_database
+    )
+
+
+def test_prune_attachments_reports_nothing_found(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _stub_prune_attachments(monkeypatch, ())
+
+    exit_code = main(["prune-attachments"])
+
+    assert exit_code == 0
+    assert "No orphaned attachment files found" in capsys.readouterr().out
+
+
+def test_prune_attachments_lists_deleted_files(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _stub_prune_attachments(monkeypatch, ("ab/" + "0" * 32 + ".pdf",))
+
+    exit_code = main(["prune-attachments"])
+
+    out = capsys.readouterr().out
+    assert exit_code == 0
+    assert "Deleted ab/" in out
+    assert "Deleted 1 orphaned attachment file(s)" in out
+
+
+def test_prune_attachments_dry_run_says_would_delete(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _stub_prune_attachments(monkeypatch, ("ab/" + "0" * 32 + ".pdf",))
+
+    exit_code = main(["prune-attachments", "--dry-run"])
+
+    out = capsys.readouterr().out
+    assert exit_code == 0
+    assert "Would delete ab/" in out
+    assert "Would delete 1 orphaned attachment file(s)" in out

@@ -17,8 +17,10 @@ configuration, for `/admin/system/*` and `/admin/backups/*` (both `AdminDep` onl
   query rather than read from settings or the database), and `last_backup_at` (from
   `BackupService.last_backup_at()`, the same value `ListBackups` reports).
 - `GetSystemConfig` → `SystemConfigDTO`: a deliberate whitelist of settings safe to show an admin,
-  including the backup settings below. Never add `jwt_secret_key` or anything derived from
-  `database_url` to it.
+  including the backup settings below and the `expenses` module's `attachment_dir`/
+  `attachment_max_bytes` (read from the same `Settings`, since this module owns the whitelist, not
+  the individual settings). Never add `jwt_secret_key` or anything derived from `database_url` to
+  it.
 - `SystemRepository` runs raw SQL against PostgreSQL catalogs (`pg_database_size`,
   `pg_stat_activity`, `pg_stat_user_tables`, `alembic_version`) — no ORM models, since this module
   owns no tables of its own.
