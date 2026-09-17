@@ -8,7 +8,6 @@ import hashlib
 from calendar import monthrange
 from datetime import date
 from decimal import Decimal
-from pathlib import Path
 from uuid import UUID
 
 from time_reporting.core.config import get_settings
@@ -18,6 +17,7 @@ from time_reporting.modules.audit.contracts import AuditAction, RecordAuditEvent
 from time_reporting.modules.expenses.contracts import (
     AddExpenseAttachment,
     ApproveExpenseReport,
+    AttachmentFileDTO,
     AttachmentNotFoundError,
     CreateExpenseReport,
     DeleteExpenseAttachment,
@@ -63,7 +63,7 @@ from time_reporting.modules.projects.contracts import (
     ProjectBillingItemDTO,
     ProjectOptionDTO,
 )
-from time_reporting.modules.users.contracts import GetUserById, GetUsersByIds, UserRole
+from time_reporting.modules.users.contracts import GetUserById, GetUsersByIds, UserDTO, UserRole
 
 _EDITABLE_STATUSES = frozenset({ExpenseReportStatus.DRAFT, ExpenseReportStatus.RETURNED})
 _REVIEWABLE_STATUSES = frozenset({ExpenseReportStatus.SUBMITTED, ExpenseReportStatus.APPROVED})
@@ -105,6 +105,12 @@ class ExpenseService:
             if viewer_id == report_row.user_id
             else await self._bus.query(GetUserById(user_id=viewer_id))
         )
+        # Read access is broader than write: the owner, any manager, or an accountant (who will
+        # eventually consume sent-to-billing reports). Anyone else gets the same
+        # ``ExpenseReportNotFoundError`` a truly unknown id would — information-hiding, like
+        # ``RequireRole`` rendering ``NotFoundPage`` rather than revealing a route exists.
+        if viewer_id != report_row.user_id and not _has_read_access(viewer):
+            raise ExpenseReportNotFoundError(report_id)
         project = await self._bus.query(GetProjectById(project_id=report_row.project_id))
         # `projects.id` is referenced `ON DELETE RESTRICT`, so the project always still exists.
         assert project is not None
@@ -198,9 +204,7 @@ class ExpenseService:
         )
 
     async def save_lines(self, command: SaveExpenseReportLines) -> ExpenseReportDTO:
-        report_row = await self._reports.get(command.report_id)
-        if report_row is None:
-            raise ExpenseReportNotFoundError(command.report_id)
+        report_row = await self._get_own_report(command.report_id, command.actor_id)
         self._ensure_editable(report_row)
 
         open_items = await self._open_items(report_row.user_id, report_row.project_id)
@@ -252,17 +256,13 @@ class ExpenseService:
         return await self.get_report(report_id=report_row.id, viewer_id=command.actor_id)
 
     async def delete_report(self, command: DeleteExpenseReport) -> None:
-        report_row = await self._reports.get(command.report_id)
-        if report_row is None:
-            raise ExpenseReportNotFoundError(command.report_id)
+        report_row = await self._get_own_report(command.report_id, command.actor_id)
         if report_row.status is not ExpenseReportStatus.DRAFT:
             raise ExpenseReportNotEditableError(report_row.id, report_row.status)
         await self._reports.delete(report_row)
 
     async def submit_report(self, command: SubmitExpenseReport) -> ExpenseReportDTO:
-        report_row = await self._reports.get(command.report_id)
-        if report_row is None:
-            raise ExpenseReportNotFoundError(command.report_id)
+        report_row = await self._get_own_report(command.report_id, command.actor_id)
         if report_row.status not in _EDITABLE_STATUSES:
             raise InvalidExpenseStatusTransitionError(report_row.id, report_row.status, "submit")
 
@@ -361,9 +361,7 @@ class ExpenseService:
             await self._reports.save(report_row)
 
     async def add_attachment(self, command: AddExpenseAttachment) -> ExpenseAttachmentDTO:
-        report_row = await self._reports.get(command.report_id)
-        if report_row is None:
-            raise ExpenseReportNotFoundError(command.report_id)
+        report_row = await self._get_own_report(command.report_id, command.actor_id)
         self._ensure_editable(report_row)
 
         # Raised here too (not just inside `storage.save`) so a rejected upload never computes a
@@ -403,24 +401,49 @@ class ExpenseService:
         # `expense_attachments.report_id` is `ON DELETE CASCADE`, so the report row can only be
         # missing if this attachment row is also gone by the time we get here.
         assert report_row is not None
+        if report_row.user_id != command.actor_id:
+            raise AttachmentNotFoundError(command.attachment_id)
         self._ensure_editable(report_row)
 
         self._storage.delete(attachment.storage_key)
         await self._attachments.delete(attachment)
 
-    async def get_attachment_path(self, query: GetAttachmentPath) -> Path:
+    async def get_attachment_path(self, query: GetAttachmentPath) -> AttachmentFileDTO:
+        """Raises ``AttachmentNotFoundError`` for an unknown id, a file missing from disk, *or* a
+        viewer who is neither the report's owner nor a manager/accountant — the attachment has no
+        HTTP route of its own to check that in the router, so the read-access check that
+        ``get_report`` does lives here too, via ``_has_read_access``."""
         attachment = await self._attachments.get(query.attachment_id)
         if attachment is None:
             raise AttachmentNotFoundError(query.attachment_id)
+        report_row = await self._reports.get(attachment.report_id)
+        assert report_row is not None
+        if report_row.user_id != query.viewer_id:
+            viewer = await self._bus.query(GetUserById(user_id=query.viewer_id))
+            if not _has_read_access(viewer):
+                raise AttachmentNotFoundError(query.attachment_id)
         path = self._storage.path_for(attachment.storage_key)
         if path is None:
             raise AttachmentNotFoundError(query.attachment_id)
-        return path
+        return AttachmentFileDTO(
+            path=path, file_name=attachment.file_name, content_type=attachment.content_type
+        )
 
     @staticmethod
     def _ensure_not_self_review(user_id: UUID, reviewer_id: UUID) -> None:
         if reviewer_id == user_id:
             raise ExpenseSelfReviewError()
+
+    async def _get_own_report(self, report_id: UUID, actor_id: UUID) -> ExpenseReport:
+        """Fetch a report the caller must own. A report belonging to someone else raises the same
+        ``ExpenseReportNotFoundError`` a truly unknown id would — this module's writes are
+        addressed by an opaque ``report_id`` rather than a key that already includes the owner
+        (contrast ``timesheets``, keyed by ``(user_id, week_start)``), so this check has to live
+        here rather than in the router, which has no other way to learn the owner first."""
+        report_row = await self._reports.get(report_id)
+        if report_row is None or report_row.user_id != actor_id:
+            raise ExpenseReportNotFoundError(report_id)
+        return report_row
 
     def _ensure_editable(self, report_row: ExpenseReport) -> None:
         if report_row.status not in _EDITABLE_STATUSES:
@@ -462,3 +485,9 @@ def _month_bounds(year: int, month: int) -> tuple[date, date]:
     first = date(year, month, 1)
     last_day = monthrange(year, month)[1]
     return first, date(year, month, last_day)
+
+
+def _has_read_access(viewer: UserDTO | None) -> bool:
+    """Whether ``viewer`` may read a report/attachment they don't own: a manager (to approve/
+    return it) or an accountant (who will eventually consume sent-to-billing reports)."""
+    return viewer is not None and bool(viewer.roles & {UserRole.MANAGER, UserRole.ACCOUNTANT})

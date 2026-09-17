@@ -95,3 +95,34 @@ project-month's reports back for its billing readiness rule and totals — the o
 dependency direction between the two modules is `timesheets` → `expenses`, never the reverse.
 `ListSubmittedExpenseReports(manager_id)` backs a manager's approvals list, scoped through
 `projects.ListManagedProjectsWithMembers` exactly like `timesheets.ListSubmittedTimesheetWeeks`.
+
+## HTTP API (`router.py`, `schemas.py`)
+
+All routes live under `/expenses`, `CurrentUserDep` unless noted. `GET/POST /reports`,
+`GET/PUT/DELETE /reports/{id}(/lines)`, `POST /reports/{id}/{submit,attachments}`,
+`GET/DELETE /attachments/{id}`, `GET /options` — own data (or, for reads, a manager's/accountant's,
+enforced in the service per "Attachments"/read-access above, not the router: an opaque `report_id`
+carries no owner in its URL the way `timesheets`' `(user_id, week_start)` does, so there's nowhere
+for the router to check ownership *before* asking the service). `POST/GET /reports/{id}/approve`,
+`/return` and `GET /submissions` are `ManagerDep`.
+
+- A write against someone else's report — not just an unknown id — surfaces as the *same* 404
+  (`ExpenseReportNotFoundError`/`AttachmentNotFoundError`) a router-level `_not_found` renders, even
+  for a manager who could legitimately `GET` that same report a moment earlier. This is deliberate
+  information-hiding, not a bug: see `ExpenseService._get_own_report`.
+- `POST /reports/{id}/attachments` is the one `multipart/form-data` route in the API (`UploadFile`
+  via `File()`, an optional `file_name` via `Form()`); its content type is checked against
+  `ALLOWED_ATTACHMENT_CONTENT_TYPES` **before** `await file.read()`, so a disallowed upload never
+  gets buffered. Oversize (`AttachmentTooLargeError`) → 413, disallowed type
+  (`AttachmentTypeNotAllowedError`) → 415.
+- `GET /attachments/{id}` returns a `FileResponse` built from `AttachmentFileDTO` (path + the
+  original `file_name`/`content_type` — `GetAttachmentPath` returns this small DTO rather than a
+  bare `Path`, unlike `system.contracts.GetBackupPath`, because a backup's generated file name
+  already doubles as its own display name and content type and an attachment's `storage_key`
+  carries neither).
+- Response models (`Expense*Response`) re-declare `projects.contracts` DTOs field-for-field rather
+  than importing `projects.schemas` — a module may only reach another module's `contracts.py` — the
+  same convention `timesheets/schemas.py` documents.
+- `frontend/nginx.conf`'s `location /api/` sets `client_max_body_size 12m` — nginx's 1 MB default
+  would reject every attachment upload in production before it ever reaches
+  `attachment_max_bytes`.

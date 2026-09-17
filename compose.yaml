@@ -6,6 +6,8 @@ x-backend-env: &backend-env
   JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set JWT_SECRET_KEY in .env}
   BACKUP_DIR: /var/backups/time-reporting
   BACKUP_RETENTION_COUNT: ${BACKUP_RETENTION_COUNT:-14}
+  ATTACHMENT_DIR: /var/lib/time-reporting/attachments
+  ATTACHMENT_MAX_BYTES: ${ATTACHMENT_MAX_BYTES:-10485760}
 
 services:
   db:
@@ -52,6 +54,7 @@ services:
     environment: *backend-env
     volumes:
       - backups:/var/backups/time-reporting
+      - attachments:/var/lib/time-reporting/attachments
     ports:
       - "8000:8000"
     depends_on:
@@ -73,6 +76,7 @@ services:
       BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS:-24}
     volumes:
       - backups:/var/backups/time-reporting
+      - attachments:/var/lib/time-reporting/attachments
     restart: unless-stopped
     depends_on:
       migrate:
@@ -108,4 +112,5 @@ services:
 volumes:
   db-data:
   backups:
+  attachments:
   pgadmin-data:

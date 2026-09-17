@@ -20,7 +20,11 @@ from pathlib import Path
 from uuid import UUID
 
 from time_reporting.core.cqrs import Command, Query
-from time_reporting.modules.projects.contracts import ProjectBillingItemDTO, ProjectDTO
+from time_reporting.modules.projects.contracts import (
+    ProjectBillingItemDTO,
+    ProjectDTO,
+    ProjectOptionDTO,
+)
 from time_reporting.modules.users.contracts import UserDTO
 
 # What an uploaded receipt/invoice scan may be. A frozenset constant, not a setting, since it's a
@@ -126,6 +130,26 @@ class GetExpenseReport(Query[ExpenseReportDTO]):
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class ListMyExpenseReports(Query[tuple[ExpenseReportSummaryDTO, ...]]):
+    """``user_id``'s reports whose ``period_start`` falls in ``year``/``month`` (there can be more
+    than one — one per project)."""
+
+    user_id: UUID
+    year: int
+    month: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ListExpenseOptions(Query[tuple[ProjectOptionDTO, ...]]):
+    """The projects/``amount`` billing items ``user_id`` may currently claim expenses against;
+    used to build the "new report" project picker. Same shape as
+    ``projects.contracts.ListMemberProjectsWithBillingItems``, exposed here so the HTTP layer only
+    ever dispatches messages owned by this module — mirrors ``timesheets.ListTimesheetOptions``."""
+
+    user_id: UUID
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class ListSubmittedExpenseReports(Query[tuple[ExpenseReportSummaryDTO, ...]]):
     """Reports awaiting review, oldest submission first, for a manager's approvals list.
     ``manager_id=None`` covers every project; otherwise only reports on a project that manager
@@ -146,10 +170,21 @@ class ListProjectMonthExpenseReports(Query[tuple[ExpenseReportSummaryDTO, ...]])
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class GetAttachmentPath(Query[Path]):
-    """The on-disk path of one attachment, for the router to stream back as a ``FileResponse`` —
-    the same shape as ``system.contracts.GetBackupPath``. Raises ``AttachmentNotFoundError`` if
-    ``attachment_id`` doesn't exist or its file is missing from disk."""
+class AttachmentFileDTO:
+    """Enough for the router to stream an attachment back as a ``FileResponse``. Unlike
+    ``system.contracts.GetBackupPath`` (whose generated file name already doubles as its own
+    display name and content type), an attachment's ``storage_key`` carries neither, so this DTO
+    wraps the path with the original upload's metadata."""
+
+    path: Path
+    file_name: str
+    content_type: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetAttachmentPath(Query[AttachmentFileDTO]):
+    """Raises ``AttachmentNotFoundError`` if ``attachment_id`` doesn't exist, its file is missing
+    from disk, or ``viewer_id`` may not read it (see ``ExpenseService.get_attachment_path``)."""
 
     attachment_id: UUID
     viewer_id: UUID

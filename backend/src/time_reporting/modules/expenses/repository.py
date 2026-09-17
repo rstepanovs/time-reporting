@@ -44,6 +44,18 @@ class ExpenseReportRepository:
         )
         return result.one_or_none()
 
+    async def list_for_user_period(
+        self, *, user_id: UUID, period_start: date
+    ) -> Sequence[ExpenseReport]:
+        """Every report ``user_id`` has for ``period_start`` (one per project)."""
+        result = await self._session.scalars(
+            select(ExpenseReport).where(
+                ExpenseReport.user_id == user_id,
+                ExpenseReport.period_start == period_start,
+            )
+        )
+        return result.all()
+
     async def list_for_project_period(
         self, *, project_id: UUID, period_start: date
     ) -> Sequence[ExpenseReport]:

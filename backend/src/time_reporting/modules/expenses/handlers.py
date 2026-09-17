@@ -5,12 +5,12 @@ Handlers translate between bus messages and the service/repository and never ret
 
 from collections.abc import Sequence
 from decimal import Decimal
-from pathlib import Path
 
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.expenses.contracts import (
     AddExpenseAttachment,
     ApproveExpenseReport,
+    AttachmentFileDTO,
     CreateExpenseReport,
     DeleteExpenseAttachment,
     DeleteExpenseReport,
@@ -21,6 +21,8 @@ from time_reporting.modules.expenses.contracts import (
     GetAttachmentPath,
     GetExpenseReport,
     ListAttachmentStorageKeys,
+    ListExpenseOptions,
+    ListMyExpenseReports,
     ListProjectMonthExpenseReports,
     ListSubmittedExpenseReports,
     LockProjectMonthExpenseReports,
@@ -35,10 +37,13 @@ from time_reporting.modules.expenses.repository import (
     ExpenseReportLineRepository,
     ExpenseReportRepository,
 )
-from time_reporting.modules.expenses.service import ExpenseService
+from time_reporting.modules.expenses.service import ExpenseService, _month_bounds
 from time_reporting.modules.projects.contracts import (
+    BillingUnit,
     GetProjectsByIds,
     ListManagedProjectsWithMembers,
+    ListMemberProjectsWithBillingItems,
+    ProjectOptionDTO,
 )
 from time_reporting.modules.users.contracts import GetUsersByIds
 
@@ -135,8 +140,34 @@ class GetAttachmentPathHandler:
     def __init__(self, bus: Bus) -> None:
         self._service = ExpenseService(bus)
 
-    async def handle(self, query: GetAttachmentPath) -> Path:
+    async def handle(self, query: GetAttachmentPath) -> AttachmentFileDTO:
         return await self._service.get_attachment_path(query)
+
+
+class ListMyExpenseReportsHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._bus = bus
+        self._reports = ExpenseReportRepository(bus.session)
+        self._lines = ExpenseReportLineRepository(bus.session)
+
+    async def handle(self, query: ListMyExpenseReports) -> tuple[ExpenseReportSummaryDTO, ...]:
+        period_start, _period_end = _month_bounds(query.year, query.month)
+        report_rows = await self._reports.list_for_user_period(
+            user_id=query.user_id, period_start=period_start
+        )
+        return await _summaries(self._bus, self._lines, report_rows)
+
+
+class ListExpenseOptionsHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._bus = bus
+
+    async def handle(self, query: ListExpenseOptions) -> tuple[ProjectOptionDTO, ...]:
+        return await self._bus.query(
+            ListMemberProjectsWithBillingItems(
+                user_id=query.user_id, units=frozenset({BillingUnit.AMOUNT})
+            )
+        )
 
 
 class ListAttachmentStorageKeysHandler:

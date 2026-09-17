@@ -4,7 +4,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from support import ProjectFactory, UserFactory
+from support import MANAGER, ProjectFactory, UserFactory
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.expenses.contracts import (
     CreateExpenseReport,
@@ -29,7 +29,7 @@ from time_reporting.modules.projects.contracts import (
     UpdateProject,
     UpdateProjectBillingItem,
 )
-from time_reporting.modules.users.contracts import UserDTO
+from time_reporting.modules.users.contracts import UserDTO, UserRole
 
 # 2026-09 is the month under test throughout.
 YEAR = 2026
@@ -475,3 +475,76 @@ async def test_report_stays_readable_after_membership_removed(
                 ),
             )
         )
+
+
+# --- Access control: an opaque report_id needs its own ownership/read checks ---
+
+
+async def test_a_stranger_cannot_read_another_users_report(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    user, project = await _member_project(bus, make_project, make_user)
+    report = await bus.execute(
+        CreateExpenseReport(user_id=user.id, project_id=project.id, year=YEAR, month=MONTH)
+    )
+    stranger = await make_user()
+
+    with pytest.raises(ExpenseReportNotFoundError):
+        await bus.query(GetExpenseReport(report_id=report.id, viewer_id=stranger.id))
+
+
+async def test_a_manager_can_read_another_users_report(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    user, project = await _member_project(bus, make_project, make_user)
+    report = await bus.execute(
+        CreateExpenseReport(user_id=user.id, project_id=project.id, year=YEAR, month=MONTH)
+    )
+    manager = await make_user(roles=MANAGER)
+
+    reread = await bus.query(GetExpenseReport(report_id=report.id, viewer_id=manager.id))
+
+    assert reread.id == report.id
+    assert reread.can_edit is False
+
+
+async def test_an_accountant_can_read_another_users_report(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    user, project = await _member_project(bus, make_project, make_user)
+    report = await bus.execute(
+        CreateExpenseReport(user_id=user.id, project_id=project.id, year=YEAR, month=MONTH)
+    )
+    accountant = await make_user(roles=frozenset({UserRole.ACCOUNTANT}))
+
+    reread = await bus.query(GetExpenseReport(report_id=report.id, viewer_id=accountant.id))
+
+    assert reread.id == report.id
+
+
+async def test_a_stranger_cannot_save_lines_on_another_users_report(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    user, project = await _member_project(bus, make_project, make_user)
+    report = await bus.execute(
+        CreateExpenseReport(user_id=user.id, project_id=project.id, year=YEAR, month=MONTH)
+    )
+    stranger = await make_user()
+
+    with pytest.raises(ExpenseReportNotFoundError):
+        await bus.execute(
+            SaveExpenseReportLines(report_id=report.id, actor_id=stranger.id, lines=())
+        )
+
+
+async def test_a_stranger_cannot_delete_another_users_draft_report(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    user, project = await _member_project(bus, make_project, make_user)
+    report = await bus.execute(
+        CreateExpenseReport(user_id=user.id, project_id=project.id, year=YEAR, month=MONTH)
+    )
+    stranger = await make_user()
+
+    with pytest.raises(ExpenseReportNotFoundError):
+        await bus.execute(DeleteExpenseReport(report_id=report.id, actor_id=stranger.id))
