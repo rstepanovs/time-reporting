@@ -1,13 +1,14 @@
 # expenses module
 
 Owns `ExpenseReport` and `ExpenseReportLine`: an employee's claim for money spent on a project in
-one calendar month, with lines instead of the days a timesheet week has.
+one calendar month, with lines instead of the days a timesheet week has, submitted and approved the
+same way a timesheet week is.
 
 Depends on `projects.contracts` (`ListMemberProjectsWithBillingItems` with
-`units={BillingUnit.AMOUNT}`, `GetProjectById`, `GetProjectBillingItemsByIds`) and `users.contracts`
-(`GetUserById`). Must never depend on `timesheets.contracts` — the billing handoff (once it exists)
-will run the dependency the other way, `timesheets` reaching into `expenses`, so the lock this
-module's `locked_at` column exists for can be written from there without a contract cycle.
+`units={BillingUnit.AMOUNT}`, `GetProjectById`, `GetProjectsByIds`, `GetProjectBillingItemsByIds`,
+`ListManagedProjectsWithMembers`), `users.contracts` (`GetUserById`, `GetUsersByIds`) and
+`audit.contracts` (`RecordAuditEvent`). Must never depend on `timesheets.contracts` — the billing
+handoff runs the dependency the other way (see "Billing handoff and locking" below).
 
 ## Reports and lines
 
@@ -35,12 +36,35 @@ module's `locked_at` column exists for can be written from there without a contr
 - `DeleteExpenseReport` only works on a `draft` report (stricter than editing, which also allows
   `returned`); it cascades to the report's lines by `ON DELETE CASCADE`.
 - Editability: `ExpenseReportNotEditableError` when the status isn't `draft`/`returned`;
-  `ExpenseReportLockedError` when `locked_at` is set. `locked_at` has no writer yet — the column
-  and the check exist ahead of the billing handoff that will set it.
+  `ExpenseReportLockedError` when `locked_at` is set. Both are checked on every write
+  (`SaveExpenseReportLines`, and `ReturnExpenseReport`'s own lock check).
 
-## Status and review flags
+## Workflow
 
-`ExpenseReportStatus`: `draft`, `submitted`, `approved`, `returned` — the transition commands
-(submit/approve/return) don't exist yet; `get_report` already computes `can_edit`/`can_submit`/
-`can_review`/`is_locked` for the viewer the same way `TimesheetService.get_week` does (advisory
-only, the router owns authorization), ready for those commands to use once added.
+`ExpenseReportStatus`: `draft` → `submitted` → `approved`/`returned`, the same shape and rules as
+`timesheets.TimesheetWeekStatus`: any manager may approve/return any report, never their own
+(`ExpenseSelfReviewError`); `ReturnExpenseReport` works from either `submitted` or `approved` and
+requires a non-empty `comment`, but is refused once the report is locked
+(`ExpenseReportLockedError` — un-approving hours already sent to billing isn't allowed). Only
+`ApproveExpenseReport` and `ReturnExpenseReport` are audited (`expense_report.approved` /
+`expense_report.returned`, `entity_id` the report's own id) — creating, saving lines and submitting
+are not, mirroring `timesheets`, which only audits the billing handoff itself.
+
+`get_report` computes `can_edit`/`can_submit`/`can_review`/`is_locked` for the **viewer** passed in
+— note that after `ReturnExpenseReport`/`ApproveExpenseReport` return their DTO, the viewer is the
+reviewer, so that DTO's `can_edit` reflects the reviewer's own (lack of) editing rights, not the
+report owner's; re-query with `viewer_id=<owner>` to see the owner's view. Advisory only, as with
+`TimesheetService.get_week` — the router owns authorization.
+
+## Billing handoff and locking
+
+A report has no notion of "sent to billing" of its own; `LockProjectMonthExpenseReports`/
+`UnlockProjectMonthExpenseReports` are **nested-only** commands (no HTTP route) that set/clear
+`locked_at` on every report of a project's month, meant to be executed from `timesheets`' own
+`SendProjectMonthToBilling`/`ReopenProjectBillingPeriod` handlers so the lock commits in the same
+transaction as the handoff — `expenses` never reads `ProjectBillingPeriod` to know this itself.
+`ListProjectMonthExpenseReports(project_id, period_start)` is how `timesheets` reads a
+project-month's reports back for its billing readiness rule and totals — the one place the
+dependency direction between the two modules is `timesheets` → `expenses`, never the reverse.
+`ListSubmittedExpenseReports(manager_id)` backs a manager's approvals list, scoped through
+`projects.ListManagedProjectsWithMembers` exactly like `timesheets.ListSubmittedTimesheetWeeks`.

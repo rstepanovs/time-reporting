@@ -1,17 +1,39 @@
 """Command and query handlers of the expenses module (registered in ``expenses.module``).
 
-Handlers translate between bus messages and the service and never return ORM entities.
+Handlers translate between bus messages and the service/repository and never return ORM entities.
 """
+
+from collections.abc import Sequence
+from decimal import Decimal
 
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.expenses.contracts import (
+    ApproveExpenseReport,
     CreateExpenseReport,
     DeleteExpenseReport,
     ExpenseReportDTO,
+    ExpenseReportStatus,
+    ExpenseReportSummaryDTO,
     GetExpenseReport,
+    ListProjectMonthExpenseReports,
+    ListSubmittedExpenseReports,
+    LockProjectMonthExpenseReports,
+    ReturnExpenseReport,
     SaveExpenseReportLines,
+    SubmitExpenseReport,
+    UnlockProjectMonthExpenseReports,
+)
+from time_reporting.modules.expenses.models import ExpenseReport
+from time_reporting.modules.expenses.repository import (
+    ExpenseReportLineRepository,
+    ExpenseReportRepository,
 )
 from time_reporting.modules.expenses.service import ExpenseService
+from time_reporting.modules.projects.contracts import (
+    GetProjectsByIds,
+    ListManagedProjectsWithMembers,
+)
+from time_reporting.modules.users.contracts import GetUsersByIds
 
 
 class CreateExpenseReportHandler:
@@ -44,3 +66,112 @@ class DeleteExpenseReportHandler:
 
     async def handle(self, command: DeleteExpenseReport) -> None:
         await self._service.delete_report(command)
+
+
+class SubmitExpenseReportHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._service = ExpenseService(bus)
+
+    async def handle(self, command: SubmitExpenseReport) -> ExpenseReportDTO:
+        return await self._service.submit_report(command)
+
+
+class ApproveExpenseReportHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._service = ExpenseService(bus)
+
+    async def handle(self, command: ApproveExpenseReport) -> ExpenseReportDTO:
+        return await self._service.approve_report(command)
+
+
+class ReturnExpenseReportHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._service = ExpenseService(bus)
+
+    async def handle(self, command: ReturnExpenseReport) -> ExpenseReportDTO:
+        return await self._service.return_report(command)
+
+
+class LockProjectMonthExpenseReportsHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._service = ExpenseService(bus)
+
+    async def handle(self, command: LockProjectMonthExpenseReports) -> None:
+        await self._service.lock_project_month(command)
+
+
+class UnlockProjectMonthExpenseReportsHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._service = ExpenseService(bus)
+
+    async def handle(self, command: UnlockProjectMonthExpenseReports) -> None:
+        await self._service.unlock_project_month(command)
+
+
+class ListSubmittedExpenseReportsHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._bus = bus
+        self._reports = ExpenseReportRepository(bus.session)
+        self._lines = ExpenseReportLineRepository(bus.session)
+
+    async def handle(
+        self, query: ListSubmittedExpenseReports
+    ) -> tuple[ExpenseReportSummaryDTO, ...]:
+        report_rows = await self._reports.list_by_status(ExpenseReportStatus.SUBMITTED)
+        if query.manager_id is not None:
+            managed = await self._bus.query(
+                ListManagedProjectsWithMembers(manager_id=query.manager_id)
+            )
+            managed_project_ids = frozenset(entry.project.id for entry in managed)
+            report_rows = [row for row in report_rows if row.project_id in managed_project_ids]
+        return await _summaries(self._bus, self._lines, report_rows)
+
+
+class ListProjectMonthExpenseReportsHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._bus = bus
+        self._reports = ExpenseReportRepository(bus.session)
+        self._lines = ExpenseReportLineRepository(bus.session)
+
+    async def handle(
+        self, query: ListProjectMonthExpenseReports
+    ) -> tuple[ExpenseReportSummaryDTO, ...]:
+        report_rows = await self._reports.list_for_project_period(
+            project_id=query.project_id, period_start=query.period_start
+        )
+        return await _summaries(self._bus, self._lines, report_rows)
+
+
+async def _summaries(
+    bus: Bus, lines: ExpenseReportLineRepository, report_rows: Sequence[ExpenseReport]
+) -> tuple[ExpenseReportSummaryDTO, ...]:
+    if not report_rows:
+        return ()
+    project_ids = frozenset(row.project_id for row in report_rows)
+    user_ids = frozenset(row.user_id for row in report_rows)
+    projects = await bus.query(GetProjectsByIds(project_ids=project_ids))
+    projects_by_id = {project.id: project for project in projects}
+    users_by_id = {user.id: user for user in await bus.query(GetUsersByIds(user_ids=user_ids))}
+    totals = await lines.sum_and_count_by_report(frozenset(row.id for row in report_rows))
+
+    summaries: list[ExpenseReportSummaryDTO] = []
+    for row in report_rows:
+        project = projects_by_id.get(row.project_id)
+        user = users_by_id.get(row.user_id)
+        if project is None or user is None:
+            continue
+        total, line_count = totals.get(row.id, (Decimal("0"), 0))
+        summaries.append(
+            ExpenseReportSummaryDTO(
+                id=row.id,
+                project=project,
+                user=user,
+                period_start=row.period_start,
+                period_end=row.period_end,
+                status=row.status,
+                submitted_at=row.submitted_at,
+                total=total,
+                line_count=line_count,
+            )
+        )
+    return tuple(summaries)

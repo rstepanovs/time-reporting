@@ -24,10 +24,12 @@ from time_reporting.modules.projects.contracts import (
     AddProjectMember,
     BillingItemPreset,
     ListProjectBillingItems,
+    ProjectDTO,
     RemoveProjectMember,
     UpdateProject,
     UpdateProjectBillingItem,
 )
+from time_reporting.modules.users.contracts import UserDTO
 
 # 2026-09 is the month under test throughout.
 YEAR = 2026
@@ -46,7 +48,9 @@ async def _other_expenses_item_id(bus: Bus, project_id: UUID) -> UUID:
     return next(item.id for item in items if item.preset == BillingItemPreset.OTHER_EXPENSES)
 
 
-async def _member_project(bus: Bus, make_project: ProjectFactory, make_user: UserFactory) -> tuple:
+async def _member_project(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> tuple[UserDTO, ProjectDTO]:
     user = await make_user()
     project = await make_project()
     await bus.execute(AddProjectMember(project_id=project.id, user_id=user.id))

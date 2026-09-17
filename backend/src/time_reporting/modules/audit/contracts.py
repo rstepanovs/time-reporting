@@ -35,6 +35,8 @@ class AuditAction(StrEnum):
     BILLING_PERIOD_REOPENED = "billing_period.reopened"
     PUBLIC_HOLIDAYS_IMPORTED = "calendar.public_holidays_imported"
     BACKUP_CREATED = "backup.created"
+    EXPENSE_REPORT_APPROVED = "expense_report.approved"
+    EXPENSE_REPORT_RETURNED = "expense_report.returned"
 
 
 # --- DTOs ---

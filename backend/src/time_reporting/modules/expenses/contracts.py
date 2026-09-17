@@ -80,6 +80,22 @@ class ExpenseReportDTO:
     lines: tuple[ExpenseReportLineDTO, ...]
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ExpenseReportSummaryDTO:
+    """A report's row in a list view (``ListSubmittedExpenseReports``,
+    ``ListProjectMonthExpenseReports``) — without its lines, for a lighter payload."""
+
+    id: UUID
+    project: ProjectDTO
+    user: UserDTO
+    period_start: date
+    period_end: date
+    status: ExpenseReportStatus
+    submitted_at: datetime | None
+    total: Decimal
+    line_count: int
+
+
 # --- Queries ---
 
 
@@ -89,6 +105,26 @@ class GetExpenseReport(Query[ExpenseReportDTO]):
 
     report_id: UUID
     viewer_id: UUID
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ListSubmittedExpenseReports(Query[tuple[ExpenseReportSummaryDTO, ...]]):
+    """Reports awaiting review, oldest submission first, for a manager's approvals list.
+    ``manager_id=None`` covers every project; otherwise only reports on a project that manager
+    manages — mirrors ``timesheets.ListSubmittedTimesheetWeeks``."""
+
+    manager_id: UUID | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ListProjectMonthExpenseReports(Query[tuple[ExpenseReportSummaryDTO, ...]]):
+    """Every report (any status, any user) for ``project_id``'s ``period_start``. Used by
+    ``LockProjectMonthExpenseReports``/``UnlockProjectMonthExpenseReports`` and, from
+    ``timesheets``, for billing readiness and totals — the one place the dependency between the two
+    modules runs ``timesheets`` → ``expenses``."""
+
+    project_id: UUID
+    period_start: date
 
 
 # --- Commands ---
@@ -152,6 +188,57 @@ class DeleteExpenseReport(Command[None]):
 
     report_id: UUID
     actor_id: UUID
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class SubmitExpenseReport(Command[ExpenseReportDTO]):
+    """Move the report from draft/returned to submitted. Raises ``ExpenseReportNotFoundError`` or
+    ``InvalidExpenseStatusTransitionError``."""
+
+    report_id: UUID
+    actor_id: UUID
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ApproveExpenseReport(Command[ExpenseReportDTO]):
+    """Move the report from submitted to approved. Raises ``ExpenseReportNotFoundError``,
+    ``InvalidExpenseStatusTransitionError`` or ``ExpenseSelfReviewError`` (nobody, not even an
+    admin, reviews their own report)."""
+
+    report_id: UUID
+    reviewer_id: UUID
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ReturnExpenseReport(Command[ExpenseReportDTO]):
+    """Move the report from submitted/approved back to returned, with an explanatory ``comment``.
+    Raises ``ExpenseReportNotFoundError``, ``InvalidExpenseStatusTransitionError``,
+    ``ExpenseSelfReviewError``, ``ExpenseReturnCommentRequiredError`` or
+    ``ExpenseReportLockedError`` (its project-month was already sent to billing — un-approving
+    hours already handed off is refused, mirroring ``timesheets.ReturnTimesheetWeek``)."""
+
+    report_id: UUID
+    reviewer_id: UUID
+    comment: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class LockProjectMonthExpenseReports(Command[None]):
+    """Set ``locked_at`` on every report of ``project_id``'s ``period_start``. Nested-only: executed
+    from ``timesheets.SendProjectMonthToBilling``, never called directly from a router — this
+    module has no HTTP route for it."""
+
+    project_id: UUID
+    period_start: date
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class UnlockProjectMonthExpenseReports(Command[None]):
+    """Clear ``locked_at`` on every report of ``project_id``'s ``period_start``. Nested-only:
+    executed from ``timesheets.ReopenProjectBillingPeriod``."""
+
+    project_id: UUID
+    period_start: date
 
 
 # --- Exceptions ---

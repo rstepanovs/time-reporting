@@ -2,13 +2,17 @@
 
 from collections.abc import Sequence
 from datetime import date
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from time_reporting.modules.expenses.contracts import ExpenseReportAlreadyExistsError
+from time_reporting.modules.expenses.contracts import (
+    ExpenseReportAlreadyExistsError,
+    ExpenseReportStatus,
+)
 from time_reporting.modules.expenses.models import ExpenseReport, ExpenseReportLine
 
 _REPORT_UNIQUE_CONSTRAINT = "uq_expense_reports_user_id_project_id_period_start"
@@ -46,6 +50,14 @@ class ExpenseReportRepository:
                 ExpenseReport.project_id == project_id,
                 ExpenseReport.period_start == period_start,
             )
+        )
+        return result.all()
+
+    async def list_by_status(self, status: ExpenseReportStatus) -> Sequence[ExpenseReport]:
+        result = await self._session.scalars(
+            select(ExpenseReport)
+            .where(ExpenseReport.status == status)
+            .order_by(ExpenseReport.submitted_at)
         )
         return result.all()
 
@@ -92,6 +104,25 @@ class ExpenseReportLineRepository:
             )
         )
         return result.scalar_one()
+
+    async def sum_and_count_by_report(
+        self, report_ids: frozenset[UUID]
+    ) -> dict[UUID, tuple[Decimal, int]]:
+        """Each report's ``(total amount, line count)``, in one query — for list views that show a
+        report's total without loading every line. A report with no lines is absent from the
+        result (callers default to ``(Decimal("0"), 0)``)."""
+        if not report_ids:
+            return {}
+        result = await self._session.execute(
+            select(
+                ExpenseReportLine.report_id,
+                func.sum(ExpenseReportLine.amount),
+                func.count(),
+            )
+            .where(ExpenseReportLine.report_id.in_(report_ids))
+            .group_by(ExpenseReportLine.report_id)
+        )
+        return {report_id: (total, count) for report_id, total, count in result.all()}
 
     async def save(self, line: ExpenseReportLine) -> None:
         """Add ``line`` to the session (if new) and flush pending changes."""

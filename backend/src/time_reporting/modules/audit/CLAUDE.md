@@ -48,3 +48,8 @@ the whole transaction — including any `AuditEvent` row already flushed — rol
   "create backup now" API call — never for the CLI (`time-reporting backup`, run by hand or on the
   `backup`/`migrate` compose services' schedule), since logging every automatic scheduled backup
   would drown out real admin actions in the log. See `system/CLAUDE.md`.
+- `expenses.ApproveExpenseReport` → `expense_report.approved`, `expenses.ReturnExpenseReport` →
+  `expense_report.returned`, both recorded by `expenses.service.ExpenseService`, `entity_id` is
+  the report's own id — see `expenses/CLAUDE.md`. Saving lines, submitting and creating a report
+  are not audited (mirrors `timesheets`, which only audits the billing handoff, not day-to-day
+  entry edits or submission).

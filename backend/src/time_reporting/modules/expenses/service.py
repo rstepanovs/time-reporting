@@ -10,7 +10,10 @@ from decimal import Decimal
 from uuid import UUID
 
 from time_reporting.core.cqrs import Bus
+from time_reporting.db.mixins import utc_now
+from time_reporting.modules.audit.contracts import AuditAction, RecordAuditEvent
 from time_reporting.modules.expenses.contracts import (
+    ApproveExpenseReport,
     CreateExpenseReport,
     DeleteExpenseReport,
     ExpenseBillingItemNotFoundError,
@@ -24,7 +27,14 @@ from time_reporting.modules.expenses.contracts import (
     ExpenseReportNotEditableError,
     ExpenseReportNotFoundError,
     ExpenseReportStatus,
+    ExpenseReturnCommentRequiredError,
+    ExpenseSelfReviewError,
+    InvalidExpenseStatusTransitionError,
+    LockProjectMonthExpenseReports,
+    ReturnExpenseReport,
     SaveExpenseReportLines,
+    SubmitExpenseReport,
+    UnlockProjectMonthExpenseReports,
 )
 from time_reporting.modules.expenses.models import ExpenseReport, ExpenseReportLine
 from time_reporting.modules.expenses.repository import (
@@ -202,6 +212,112 @@ class ExpenseService:
         if report_row.status is not ExpenseReportStatus.DRAFT:
             raise ExpenseReportNotEditableError(report_row.id, report_row.status)
         await self._reports.delete(report_row)
+
+    async def submit_report(self, command: SubmitExpenseReport) -> ExpenseReportDTO:
+        report_row = await self._reports.get(command.report_id)
+        if report_row is None:
+            raise ExpenseReportNotFoundError(command.report_id)
+        if report_row.status not in _EDITABLE_STATUSES:
+            raise InvalidExpenseStatusTransitionError(report_row.id, report_row.status, "submit")
+
+        report_row.status = ExpenseReportStatus.SUBMITTED
+        report_row.submitted_at = utc_now()
+        report_row.reviewed_at = None
+        report_row.reviewed_by_id = None
+        report_row.return_comment = None
+        await self._reports.save(report_row)
+
+        return await self.get_report(report_id=report_row.id, viewer_id=command.actor_id)
+
+    async def approve_report(self, command: ApproveExpenseReport) -> ExpenseReportDTO:
+        report_row = await self._reports.get(command.report_id)
+        if report_row is None:
+            raise ExpenseReportNotFoundError(command.report_id)
+        self._ensure_not_self_review(report_row.user_id, command.reviewer_id)
+        if report_row.status is not ExpenseReportStatus.SUBMITTED:
+            raise InvalidExpenseStatusTransitionError(report_row.id, report_row.status, "approve")
+
+        report_row.status = ExpenseReportStatus.APPROVED
+        report_row.reviewed_at = utc_now()
+        report_row.reviewed_by_id = command.reviewer_id
+        report_row.return_comment = None
+        await self._reports.save(report_row)
+
+        project = await self._bus.query(GetProjectById(project_id=report_row.project_id))
+        assert project is not None
+        await self._bus.execute(
+            RecordAuditEvent(
+                actor_id=command.reviewer_id,
+                action=AuditAction.EXPENSE_REPORT_APPROVED,
+                entity_type="expense_report",
+                entity_id=str(report_row.id),
+                summary=(
+                    f"Approved {project.customer.name} · {project.name} expense report "
+                    f"({report_row.period_start:%Y-%m})"
+                ),
+            )
+        )
+
+        return await self.get_report(report_id=report_row.id, viewer_id=command.reviewer_id)
+
+    async def return_report(self, command: ReturnExpenseReport) -> ExpenseReportDTO:
+        report_row = await self._reports.get(command.report_id)
+        if report_row is None:
+            raise ExpenseReportNotFoundError(command.report_id)
+        comment = command.comment.strip()
+        if not comment:
+            raise ExpenseReturnCommentRequiredError()
+        self._ensure_not_self_review(report_row.user_id, command.reviewer_id)
+        if report_row.status not in _REVIEWABLE_STATUSES:
+            raise InvalidExpenseStatusTransitionError(report_row.id, report_row.status, "return")
+        if report_row.locked_at is not None:
+            raise ExpenseReportLockedError(report_row.id)
+
+        report_row.status = ExpenseReportStatus.RETURNED
+        report_row.reviewed_at = utc_now()
+        report_row.reviewed_by_id = command.reviewer_id
+        report_row.return_comment = comment
+        await self._reports.save(report_row)
+
+        project = await self._bus.query(GetProjectById(project_id=report_row.project_id))
+        assert project is not None
+        await self._bus.execute(
+            RecordAuditEvent(
+                actor_id=command.reviewer_id,
+                action=AuditAction.EXPENSE_REPORT_RETURNED,
+                entity_type="expense_report",
+                entity_id=str(report_row.id),
+                summary=(
+                    f"Returned {project.customer.name} · {project.name} expense report "
+                    f"({report_row.period_start:%Y-%m})"
+                ),
+                details={"comment": comment},
+            )
+        )
+
+        return await self.get_report(report_id=report_row.id, viewer_id=command.reviewer_id)
+
+    async def lock_project_month(self, command: LockProjectMonthExpenseReports) -> None:
+        reports = await self._reports.list_for_project_period(
+            project_id=command.project_id, period_start=command.period_start
+        )
+        now = utc_now()
+        for report_row in reports:
+            report_row.locked_at = now
+            await self._reports.save(report_row)
+
+    async def unlock_project_month(self, command: UnlockProjectMonthExpenseReports) -> None:
+        reports = await self._reports.list_for_project_period(
+            project_id=command.project_id, period_start=command.period_start
+        )
+        for report_row in reports:
+            report_row.locked_at = None
+            await self._reports.save(report_row)
+
+    @staticmethod
+    def _ensure_not_self_review(user_id: UUID, reviewer_id: UUID) -> None:
+        if reviewer_id == user_id:
+            raise ExpenseSelfReviewError()
 
     def _ensure_editable(self, report_row: ExpenseReport) -> None:
         if report_row.status not in _EDITABLE_STATUSES:
