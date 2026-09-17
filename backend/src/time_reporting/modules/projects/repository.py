@@ -15,6 +15,7 @@ from time_reporting.db.queries import escape_like
 from time_reporting.modules.projects.contracts import (
     BillingItemInUseError,
     BillingItemNameAlreadyExistsError,
+    BillingUnit,
     ProjectInUseError,
     ProjectMemberAlreadyExistsError,
     ProjectNameAlreadyExistsError,
@@ -256,15 +257,21 @@ class ProjectBillingItemRepository:
         return result.all()
 
     async def list_for_projects(
-        self, project_ids: frozenset[UUID], *, include_inactive: bool
+        self,
+        project_ids: frozenset[UUID],
+        *,
+        include_inactive: bool,
+        units: frozenset[BillingUnit] | None = None,
     ) -> Sequence[ProjectBillingItem]:
         """Billing items of several projects in one query, ordered by project then position then
-        name."""
+        name. ``units=None`` returns every unit."""
         if not project_ids:
             return ()
         statement = select(ProjectBillingItem).where(ProjectBillingItem.project_id.in_(project_ids))
         if not include_inactive:
             statement = statement.where(ProjectBillingItem.is_active.is_(True))
+        if units is not None:
+            statement = statement.where(ProjectBillingItem.unit.in_(units))
         statement = statement.order_by(
             ProjectBillingItem.project_id, ProjectBillingItem.position, ProjectBillingItem.name
         )

@@ -936,3 +936,40 @@ async def test_list_member_projects_with_billing_items_excludes_archived_billing
     item_ids = {i.id for i in options[0].billing_items}
     assert item.id not in item_ids
     assert len(item_ids) == len(DEFAULT_BILLING_ITEMS)
+
+
+async def test_list_member_projects_with_billing_items_filters_by_unit(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    user = await make_user()
+    project = await make_project()
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=user.id))
+
+    options = await bus.query(
+        ListMemberProjectsWithBillingItems(user_id=user.id, units=frozenset({BillingUnit.AMOUNT}))
+    )
+
+    assert len(options) == 1
+    assert {item.unit for item in options[0].billing_items} == {BillingUnit.AMOUNT}
+    assert len(options[0].billing_items) == 2  # purchasing_expenses, other_expenses
+
+
+async def test_list_member_projects_with_billing_items_unit_filter_drops_empty_project(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    user = await make_user()
+    project = await make_project()
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=user.id))
+    for item in await bus.query(
+        ListProjectBillingItems(project_id=project.id, include_inactive=False)
+    ):
+        if item.unit is BillingUnit.AMOUNT:
+            await bus.execute(
+                UpdateProjectBillingItem(project_id=project.id, item_id=item.id, is_active=False)
+            )
+
+    options = await bus.query(
+        ListMemberProjectsWithBillingItems(user_id=user.id, units=frozenset({BillingUnit.AMOUNT}))
+    )
+
+    assert options == ()

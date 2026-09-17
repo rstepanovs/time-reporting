@@ -186,7 +186,7 @@ class ListMemberProjectsWithBillingItemsHandler(_BaseHandler):
         items_by_project: dict[UUID, list[ProjectBillingItemDTO]] = defaultdict(list)
         project_ids = frozenset(project.id for project in projects)
         for item in await self._billing_items.list_for_projects(
-            project_ids, include_inactive=False
+            project_ids, include_inactive=False, units=query.units
         ):
             items_by_project[item.project_id].append(_billing_item_dto(item))
 
@@ -200,6 +200,9 @@ class ListMemberProjectsWithBillingItemsHandler(_BaseHandler):
                 billing_items=tuple(items_by_project[project.id]),
             )
             for project in projects
+            # With a units filter, a project none of whose active items match drops out
+            # entirely rather than appearing with an empty row picker.
+            if query.units is None or items_by_project[project.id]
         )
 
 

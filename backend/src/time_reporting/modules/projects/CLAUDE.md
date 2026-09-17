@@ -47,6 +47,7 @@ currency.
 Exist so `timesheets` never joins into these tables directly:
 - `GetProjectsByIds` / `GetProjectBillingItemsByIds` — batch lookups.
 - `ListMemberProjectsWithBillingItems` — a user's active projects with their active billing items,
-  one round trip.
+  one round trip; an optional `units` filter (e.g. `{AMOUNT}`) narrows the items to one unit, and
+  drops a project entirely once none of its items match.
 - `ListManagedProjectsWithMembers` — active projects (one manager's, or every one when
   `manager_id=None`), each with its members, one round trip.
