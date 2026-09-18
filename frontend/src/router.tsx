@@ -14,6 +14,8 @@ import { AdminUsersPage } from "@/pages/admin/AdminUsersPage";
 import { ApprovalsPage } from "@/pages/ApprovalsPage";
 import { ChangePasswordPage } from "@/pages/ChangePasswordPage";
 import { DashboardPage } from "@/pages/DashboardPage";
+import { ExpenseReportPage } from "@/pages/ExpenseReportPage";
+import { ExpensesPage } from "@/pages/ExpensesPage";
 import { HoursPage } from "@/pages/HoursPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
@@ -34,6 +36,8 @@ export const routes: RouteObject[] = [
           { index: true, element: <DashboardPage /> },
           { path: "timesheet", element: <TimesheetPage /> },
           { path: "hours", element: <HoursPage /> },
+          { path: "expenses", element: <ExpensesPage /> },
+          { path: "expenses/:reportId", element: <ExpenseReportPage /> },
           {
             path: "approvals",
             element: <RequireRole roles={["manager"]} />,

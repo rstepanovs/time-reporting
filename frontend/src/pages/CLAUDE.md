@@ -9,6 +9,7 @@ area's `CLAUDE.md` before changing a page:
 | `DashboardPage` | `/` | `timesheets/CLAUDE.md` (sections by access level: My time/My team/Billing), `admin/CLAUDE.md` (Administration section) |
 | `TimesheetPage` | `/timesheet?week=&user=` | `timesheets/CLAUDE.md` (weekly grid) |
 | `HoursPage` | `/hours?month=` | `timesheets/CLAUDE.md` (hours views) |
+| `ExpensesPage`, `ExpenseReportPage` | `/expenses?month=`, `/expenses/:reportId` | `expenses/CLAUDE.md` |
 | `ApprovalsPage` | `/approvals?scope=` | `timesheets/CLAUDE.md` (manager views) |
 | `TeamPage` | `/team?scope=&month=` | `timesheets/CLAUDE.md` (manager views) |
 | `ProjectsPage`, `ProjectDetailsPage` | `/projects`, `/projects/:projectId` | `projects/CLAUDE.md` |

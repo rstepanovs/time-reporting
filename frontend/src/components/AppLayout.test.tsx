@@ -68,6 +68,20 @@ describe("navigation", () => {
     expect(links.indexOf("Team")).toBe(links.indexOf("Approvals") + 1);
   });
 
+  it("shows Expenses right after My hours, for both an employee and a manager", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
+    renderApp("/");
+    await screen.findByRole("heading", { name: "Time Reporting" });
+    let links = screen.getAllByRole("link").map((link) => link.textContent);
+    expect(links.indexOf("Expenses")).toBe(links.indexOf("My hours") + 1);
+
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
+    renderApp("/");
+    await screen.findByRole("heading", { name: "Time Reporting" });
+    links = screen.getAllByRole("link").map((link) => link.textContent);
+    expect(links.indexOf("Expenses")).toBe(links.indexOf("My hours") + 1);
+  });
+
   it("hides Team from a plain employee", async () => {
     vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
     renderApp("/");

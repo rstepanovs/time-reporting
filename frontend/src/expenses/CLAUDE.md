@@ -39,10 +39,18 @@ there).
 - `/expenses?month=YYYY-MM` — month navigation (the `HoursPage`/`TeamPage` pattern), a table of the
   month's reports (project, line count, total, status badge) linking to `/expenses/:reportId`, and
   a "New report" modal picking a project from `useExpenseOptions`.
-- `/expenses/:reportId` — header with status, period and (when `returned`) the return comment;
-  `ExpenseLinesTable.tsx` holds a local draft with an explicit Save (the `TimesheetGrid` dirty-state
-  pattern: discard-confirmation on navigating away with unsaved changes); `AttachmentsCard.tsx` is a
-  Mantine `FileInput multiple` upload plus a list with size, a download link and per-row delete.
-  Submit/Approve/"Return…" gate on the server's `can_submit`/`can_review` (Submit auto-saves first,
-  as `TimesheetGrid`'s does), never on a client-side role check; every editable control also checks
-  `is_locked` since a report can be locked without changing status (sent-to-billing).
+- `/expenses/:reportId` — header with status, period, an "Approve"/"Return…" pair gated on
+  `can_review` (never a client-side role check — a manager viewing their own report never sees
+  them, `ExpenseSelfReviewError`'s frontend counterpart), a "Delete" button for the owner's own
+  `draft` report, and the return comment when `returned`; a "Sent to billing" alert when
+  `is_locked`. `ExpenseLinesTable.tsx` holds a local draft (edits keyed by line id, plus a
+  temp-id-keyed list for not-yet-saved rows) with an explicit Save/Discard and Submit (behind a
+  confirming modal that auto-saves first, as `TimesheetGrid`'s does) — all gated on `can_edit`/
+  `can_submit`, which the backend already reflects `is_locked` into, so the frontend never checks
+  it separately when deciding whether a control is editable. `AttachmentsCard.tsx` is a Mantine
+  `FileInput multiple` upload (each file uploaded immediately, one request per file) plus a list
+  with size, a download link and per-row delete, all gated on `can_edit` too.
+- The "← Back to expenses" link on `/expenses/:reportId` guards against `ExpenseLinesTable`'s dirty
+  state the same way `TimesheetPage` guards its own in-page navigation: a confirming modal instead
+  of navigating away, offered by `ExpenseLinesTable`'s `onDirtyChange` callback bubbling up to the
+  page. Browser/sidebar navigation away from the page is not guarded, matching `TimesheetPage`.
