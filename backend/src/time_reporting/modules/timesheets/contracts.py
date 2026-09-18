@@ -307,7 +307,9 @@ class ProjectBillingPeriodDTO:
 
     ``weeks_in_scope`` is the number of distinct (user, ISO week) pairs with at least one entry on
     this project dated inside the month; ``blocking_weeks`` is how many of those aren't
-    ``approved`` yet. ``READY`` requires at least one week in scope and none blocking.
+    ``approved`` yet. ``blocking_reports`` is, likewise, how many of the project's expense reports
+    for the month aren't ``approved`` yet (see ``expenses.contracts.ExpenseReportStatus``).
+    ``READY`` requires at least one week or report in scope and none blocking.
     """
 
     project_id: UUID
@@ -317,6 +319,7 @@ class ProjectBillingPeriodDTO:
     sent_at: datetime | None
     sent_by: UserDTO | None
     blocking_weeks: int
+    blocking_reports: int
     weeks_in_scope: int
     hours: HoursTotalsDTO
     per_diem_days: Decimal
@@ -715,13 +718,19 @@ class TimesheetProjectNotFoundError(TimesheetError):
 
 
 class BillingPeriodNotReadyError(TimesheetError):
-    def __init__(self, blocking_weeks: int) -> None:
+    def __init__(self, blocking_weeks: int, blocking_reports: int = 0) -> None:
+        blockers = []
+        if blocking_weeks:
+            blockers.append(f"{blocking_weeks} week(s)")
+        if blocking_reports:
+            blockers.append(f"{blocking_reports} expense report(s)")
         super().__init__(
-            f"This period is not ready to send: {blocking_weeks} week(s) still need approval"
-            if blocking_weeks
-            else "This period has no time booked yet"
+            f"This period is not ready to send: {' and '.join(blockers)} still need approval"
+            if blockers
+            else "This period has no time or expenses booked yet"
         )
         self.blocking_weeks = blocking_weeks
+        self.blocking_reports = blocking_reports
 
 
 class BillingPeriodAlreadySentError(TimesheetError):

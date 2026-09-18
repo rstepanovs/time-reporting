@@ -109,17 +109,22 @@ project `manager_id` manages (`manager_id=None` covers every active project — 
 
 - A project's billing readiness for a calendar month is computed by `billing_readiness()`
   (`team.py`, a pure function shared with the send command so the rule lives once): its **scope** is
-  every (user, ISO week) with at least one entry on the project dated inside the month; it is
-  **ready** when that scope is non-empty and every week in it is `approved` — **not ready** otherwise
-  (no entries yet, or some week still needs approval/re-approval).
+  every (user, ISO week) with at least one entry on the project dated inside the month, *plus* every
+  one of the project's expense reports for the month (from `expenses.ListProjectMonthExpenseReports`
+  — see `expenses/CLAUDE.md`); it is **ready** when that scope is non-empty and every week and
+  report in it is `approved` — **not ready** otherwise (nothing booked yet, or some week/report
+  still needs approval/re-approval).
 - Sending is a stub — invoicing doesn't exist yet. `SendProjectMonthToBilling(project_id, year,
   month, sent_by_id)` inserts a `ProjectBillingPeriod` row (`project_id`, `period_start`/`period_end`
   = the calendar month, `sent_at`, `sent_by_id`; unique per `(project_id, period_start)`) once ready,
-  raising `BillingPeriodNotReadyError` (carries `blocking_weeks`) or
+  raising `BillingPeriodNotReadyError` (carries `blocking_weeks` *and* `blocking_reports`) or
   `BillingPeriodAlreadySentError` otherwise; allowed on any day, not only after the month ends, since
   a project's work can finish early. Any manager may send any project, regardless of its
-  `manager_id` — the router's `ManagerDep` is the only check, same as approvals.
-- `ReopenProjectBillingPeriod(project_id, period_start)` (admin only) deletes the row, unlocking it.
+  `manager_id` — the router's `ManagerDep` is the only check, same as approvals. Sending also
+  executes a nested `expenses.LockProjectMonthExpenseReports`, so every report of the month locks in
+  the same transaction as the handoff.
+- `ReopenProjectBillingPeriod(project_id, period_start)` (admin only) deletes the row and executes a
+  nested `expenses.UnlockProjectMonthExpenseReports`, unlocking both the weeks and the reports.
 - Once sent, a period **locks** its dates: `SaveTimesheetWeek` rejects a cell change dated inside a
   sent period, or any row-comment change on a billing item whose project has any sent period
   overlapping the week (`BillingPeriodLockedError`), and `ReturnTimesheetWeek` rejects returning a

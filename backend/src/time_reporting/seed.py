@@ -21,6 +21,15 @@ from time_reporting.modules.customers.contracts import (
     ListCustomers,
     UpdateCustomer,
 )
+from time_reporting.modules.expenses.contracts import (
+    ApproveExpenseReport,
+    CreateExpenseReport,
+    ExpenseLineChange,
+    ListExpenseOptions,
+    ListMyExpenseReports,
+    SaveExpenseReportLines,
+    SubmitExpenseReport,
+)
 from time_reporting.modules.projects.contracts import (
     AddProjectBillingItem,
     AddProjectMember,
@@ -251,6 +260,10 @@ class SeedReport:
     # submit/approve workflow, so a fresh checkout also has an example of that on the Timesheet
     # page.
     submitted_weeks_for: list[str] = field(default_factory=list)
+    # Demo users who got one approved and one submitted expense report this month (a member of at
+    # least two projects with an active `amount` item), so a fresh checkout has an example on the
+    # Expenses page and a real blocker on the manager's approvals/team pages.
+    seeded_expense_reports_for: list[str] = field(default_factory=list)
 
 
 async def _find_customer_id_by_name(bus: Bus, name: str) -> UUID:
@@ -480,6 +493,99 @@ async def _seed_time_entries(
             )
 
 
+async def _seed_expense_reports(
+    bus: Bus,
+    report: SeedReport,
+    users: tuple[DemoUser, ...],
+    user_ids_by_email: dict[str, UUID],
+    *,
+    today: date,
+) -> None:
+    """One approved and one submitted expense report this month, for every demo user who is a
+    member of at least two active projects with an active ``amount`` item (today,
+    ``manager@example.com`` and ``employee@example.com``) and doesn't already have any reports
+    this month — so a fresh checkout has an example on the Expenses page, and the manager's
+    approvals/team pages have a real expense-report blocker to show, not just the
+    always-submitted last timesheet week."""
+    for user in users:
+        user_id = user_ids_by_email.get(user.email)
+        if user_id is None:
+            continue
+        if await bus.query(
+            ListMyExpenseReports(user_id=user_id, year=today.year, month=today.month)
+        ):
+            continue
+        options = [
+            option
+            for option in await bus.query(ListExpenseOptions(user_id=user_id))
+            if option.billing_items
+        ]
+        if len(options) < 2:
+            continue
+        reviewer_id = _reviewer_id(users, user_ids_by_email, owner_email=user.email)
+        if reviewer_id is None:
+            continue
+
+        approved_option, submitted_option = options[0], options[1]
+        first_of_month = today.replace(day=1)
+
+        approved_report = await bus.execute(
+            CreateExpenseReport(
+                user_id=user_id,
+                project_id=approved_option.project.id,
+                year=today.year,
+                month=today.month,
+            )
+        )
+        await bus.execute(
+            SaveExpenseReportLines(
+                report_id=approved_report.id,
+                actor_id=user_id,
+                lines=(
+                    ExpenseLineChange(
+                        line_id=None,
+                        billing_item_id=approved_option.billing_items[0].id,
+                        expense_date=first_of_month,
+                        amount=Decimal("42.50"),
+                        description="Client dinner",
+                        vendor="Bella Italia",
+                    ),
+                ),
+            )
+        )
+        await bus.execute(SubmitExpenseReport(report_id=approved_report.id, actor_id=user_id))
+        await bus.execute(
+            ApproveExpenseReport(report_id=approved_report.id, reviewer_id=reviewer_id)
+        )
+
+        submitted_report = await bus.execute(
+            CreateExpenseReport(
+                user_id=user_id,
+                project_id=submitted_option.project.id,
+                year=today.year,
+                month=today.month,
+            )
+        )
+        await bus.execute(
+            SaveExpenseReportLines(
+                report_id=submitted_report.id,
+                actor_id=user_id,
+                lines=(
+                    ExpenseLineChange(
+                        line_id=None,
+                        billing_item_id=submitted_option.billing_items[0].id,
+                        expense_date=first_of_month,
+                        amount=Decimal("18.90"),
+                        description="Taxi to client site",
+                    ),
+                ),
+            )
+        )
+        await bus.execute(SubmitExpenseReport(report_id=submitted_report.id, actor_id=user_id))
+
+        report.seeded_expense_reports_for.append(user.email)
+
+
 async def _project_exists(bus: Bus, customer_id: UUID, name: str) -> bool:
     page = await bus.query(
         ListProjects(limit=1, offset=0, customer_id=customer_id, search=name, include_inactive=True)
@@ -587,5 +693,6 @@ async def seed_demo_data(
             )
 
     await _seed_time_entries(bus, report, users, user_ids_by_email, today=today)
+    await _seed_expense_reports(bus, report, users, user_ids_by_email, today=today)
 
     return report

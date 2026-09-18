@@ -351,7 +351,9 @@ async def test_list_project_month_expense_reports_returns_totals(
     )
 
     summaries = await bus.query(
-        ListProjectMonthExpenseReports(project_id=project.id, period_start=PERIOD_START)
+        ListProjectMonthExpenseReports(
+            project_ids=frozenset({project.id}), period_start=PERIOD_START
+        )
     )
 
     assert len(summaries) == 1
@@ -366,7 +368,9 @@ async def test_list_project_month_expense_reports_empty_for_unknown_month(
     _, project = await _member_project(bus, make_project, make_user)
 
     summaries = await bus.query(
-        ListProjectMonthExpenseReports(project_id=project.id, period_start=date(2020, 1, 1))
+        ListProjectMonthExpenseReports(
+            project_ids=frozenset({project.id}), period_start=date(2020, 1, 1)
+        )
     )
 
     assert summaries == ()

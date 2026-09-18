@@ -4,6 +4,12 @@ from uuid import UUID
 
 from support import ADMIN, MANAGER, ProjectFactory, UserFactory
 from time_reporting.core.cqrs import Bus
+from time_reporting.modules.expenses.contracts import (
+    CreateExpenseReport,
+    ExpenseLineChange,
+    SaveExpenseReportLines,
+    SubmitExpenseReport,
+)
 from time_reporting.modules.projects.contracts import (
     AddProjectMember,
     BillingItemPreset,
@@ -289,6 +295,47 @@ async def test_billing_readiness_ready_once_every_week_in_scope_is_approved(
     assert billing.weeks_in_scope == 1
     assert billing.blocking_weeks == 0
     assert billing.hours.normal_hours == Decimal("4")
+
+
+async def test_billing_readiness_blocked_by_a_submitted_expense_report(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    manager = await make_user(roles=MANAGER)
+    worker = await make_user()
+    project = await make_project(manager_id=manager.id)
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
+    items = await bus.query(ListProjectBillingItems(project_id=project.id))
+    purchasing_id = next(
+        item.id for item in items if item.preset == BillingItemPreset.PURCHASING_EXPENSES
+    )
+    report = await bus.execute(
+        CreateExpenseReport(user_id=worker.id, project_id=project.id, year=2026, month=9)
+    )
+    await bus.execute(
+        SaveExpenseReportLines(
+            report_id=report.id,
+            actor_id=worker.id,
+            lines=(
+                ExpenseLineChange(
+                    line_id=None,
+                    billing_item_id=purchasing_id,
+                    expense_date=date(2026, 9, 5),
+                    amount=Decimal("10"),
+                    description="Snacks",
+                ),
+            ),
+        )
+    )
+    await bus.execute(SubmitExpenseReport(report_id=report.id, actor_id=worker.id))
+
+    overview = await bus.query(
+        GetTeamMonthOverview(manager_id=manager.id, year=2026, month=9, today=date(2026, 9, 16))
+    )
+
+    billing = overview.projects[0].billing
+    assert billing.status is BillingPeriodStatus.NOT_READY
+    assert billing.blocking_reports == 1
+    assert billing.blocking_weeks == 0
 
 
 async def test_billing_status_is_sent_once_a_period_has_been_sent(

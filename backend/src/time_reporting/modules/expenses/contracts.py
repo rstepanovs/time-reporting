@@ -160,12 +160,14 @@ class ListSubmittedExpenseReports(Query[tuple[ExpenseReportSummaryDTO, ...]]):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ListProjectMonthExpenseReports(Query[tuple[ExpenseReportSummaryDTO, ...]]):
-    """Every report (any status, any user) for ``project_id``'s ``period_start``. Used by
+    """Every report (any status, any user) for any of ``project_ids`` at ``period_start`` — a
+    batch query so ``timesheets``' team overview (many managed projects at once) doesn't do one
+    round trip per project; ``billing.py`` calls it with a single-project frozenset. Also backs
     ``LockProjectMonthExpenseReports``/``UnlockProjectMonthExpenseReports`` and, from
-    ``timesheets``, for billing readiness and totals — the one place the dependency between the two
+    ``timesheets``, billing readiness and totals — the one place the dependency between the two
     modules runs ``timesheets`` → ``expenses``."""
 
-    project_id: UUID
+    project_ids: frozenset[UUID]
     period_start: date
 
 

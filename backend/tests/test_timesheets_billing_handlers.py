@@ -7,6 +7,16 @@ import pytest
 from support import ADMIN, MANAGER, CustomerFactory, ProjectFactory, UserFactory
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.audit.contracts import AuditAction, ListAuditEvents
+from time_reporting.modules.expenses.contracts import (
+    ApproveExpenseReport,
+    CreateExpenseReport,
+    ExpenseLineChange,
+    ExpenseReportLockedError,
+    GetExpenseReport,
+    ReturnExpenseReport,
+    SaveExpenseReportLines,
+    SubmitExpenseReport,
+)
 from time_reporting.modules.projects.contracts import (
     AddProjectMember,
     BillingItemPreset,
@@ -19,6 +29,7 @@ from time_reporting.modules.timesheets.contracts import (
     BillingPeriodNotFoundError,
     BillingPeriodNotReadyError,
     BillingPeriodStatus,
+    CurrencyAmountDTO,
     GetTimesheetWeek,
     ListBillingPeriods,
     ReopenProjectBillingPeriod,
@@ -764,3 +775,134 @@ async def test_list_billing_periods_includes_project_and_sender_names(
     assert item.customer_name == "Acme"
     assert item.sent_by_id == manager.id
     assert item.sent_by_name == "Manager One"
+
+
+# --- Expense reports feed into billing readiness and get locked ---
+
+
+async def _purchasing_item_id(bus: Bus, project_id: UUID) -> UUID:
+    items = await bus.query(ListProjectBillingItems(project_id=project_id))
+    return next(item.id for item in items if item.preset == BillingItemPreset.PURCHASING_EXPENSES)
+
+
+async def _claim_and_approve_expense(
+    bus: Bus, *, worker_id: UUID, project_id: UUID, reviewer_id: UUID
+) -> UUID:
+    """Create, submit and approve a September expense report for ``worker_id``/``project_id``,
+    returning the report id."""
+    purchasing_id = await _purchasing_item_id(bus, project_id)
+    report = await bus.execute(
+        CreateExpenseReport(user_id=worker_id, project_id=project_id, year=2026, month=9)
+    )
+    await bus.execute(
+        SaveExpenseReportLines(
+            report_id=report.id,
+            actor_id=worker_id,
+            lines=(
+                ExpenseLineChange(
+                    line_id=None,
+                    billing_item_id=purchasing_id,
+                    expense_date=date(2026, 9, 5),
+                    amount=Decimal("42.50"),
+                    description="Taxi",
+                ),
+            ),
+        )
+    )
+    await bus.execute(SubmitExpenseReport(report_id=report.id, actor_id=worker_id))
+    await bus.execute(ApproveExpenseReport(report_id=report.id, reviewer_id=reviewer_id))
+    return report.id
+
+
+async def test_send_to_billing_is_ready_with_only_an_approved_expense_report(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    manager = await make_user(roles=MANAGER)
+    worker = await make_user()
+    project = await make_project(manager_id=manager.id)
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
+    await _claim_and_approve_expense(
+        bus, worker_id=worker.id, project_id=project.id, reviewer_id=manager.id
+    )
+
+    period = await bus.execute(
+        SendProjectMonthToBilling(project_id=project.id, year=2026, month=9, sent_by_id=manager.id)
+    )
+
+    assert period.status is BillingPeriodStatus.SENT
+    assert period.expenses == (
+        CurrencyAmountDTO(currency=project.customer.currency, amount=Decimal("42.50")),
+    )
+
+
+async def test_send_to_billing_is_blocked_by_a_submitted_expense_report(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    manager = await make_user(roles=MANAGER)
+    worker = await make_user()
+    project = await make_project(manager_id=manager.id)
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
+    purchasing_id = await _purchasing_item_id(bus, project.id)
+    report = await bus.execute(
+        CreateExpenseReport(user_id=worker.id, project_id=project.id, year=2026, month=9)
+    )
+    await bus.execute(
+        SaveExpenseReportLines(
+            report_id=report.id,
+            actor_id=worker.id,
+            lines=(
+                ExpenseLineChange(
+                    line_id=None,
+                    billing_item_id=purchasing_id,
+                    expense_date=date(2026, 9, 5),
+                    amount=Decimal("10"),
+                    description="Snacks",
+                ),
+            ),
+        )
+    )
+    await bus.execute(SubmitExpenseReport(report_id=report.id, actor_id=worker.id))
+
+    with pytest.raises(BillingPeriodNotReadyError) as exc_info:
+        await bus.execute(
+            SendProjectMonthToBilling(
+                project_id=project.id, year=2026, month=9, sent_by_id=manager.id
+            )
+        )
+    assert exc_info.value.blocking_reports == 1
+
+
+async def test_send_to_billing_locks_expense_reports_and_reopen_unlocks_them(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    admin = await make_user(roles=ADMIN)
+    manager = await make_user(roles=MANAGER)
+    worker = await make_user()
+    project = await make_project(manager_id=manager.id)
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
+    report_id = await _claim_and_approve_expense(
+        bus, worker_id=worker.id, project_id=project.id, reviewer_id=manager.id
+    )
+
+    await bus.execute(
+        SendProjectMonthToBilling(project_id=project.id, year=2026, month=9, sent_by_id=manager.id)
+    )
+
+    locked = await bus.query(GetExpenseReport(report_id=report_id, viewer_id=worker.id))
+    assert locked.is_locked is True
+    assert locked.can_review is False
+    # `save_lines` on this report hits its status check first (`approved` isn't editable) — the
+    # lock is reachable through `return_report`, whose pre-lock statuses include `approved`.
+    with pytest.raises(ExpenseReportLockedError):
+        await bus.execute(
+            ReturnExpenseReport(report_id=report_id, reviewer_id=manager.id, comment="Too late")
+        )
+
+    await bus.execute(
+        ReopenProjectBillingPeriod(
+            project_id=project.id, period_start=date(2026, 9, 1), actor_id=admin.id
+        )
+    )
+
+    unlocked = await bus.query(GetExpenseReport(report_id=report_id, viewer_id=worker.id))
+    assert unlocked.is_locked is False

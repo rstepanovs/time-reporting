@@ -8,11 +8,18 @@ overview's own read of the same readiness rule, which this reuses via ``billing_
 
 from collections.abc import Sequence
 from datetime import date
+from decimal import Decimal
 from uuid import UUID
 
 from time_reporting.core.cqrs import Bus
 from time_reporting.db.mixins import utc_now
 from time_reporting.modules.audit.contracts import AuditAction, RecordAuditEvent
+from time_reporting.modules.expenses.contracts import (
+    ExpenseReportSummaryDTO,
+    ListProjectMonthExpenseReports,
+    LockProjectMonthExpenseReports,
+    UnlockProjectMonthExpenseReports,
+)
 from time_reporting.modules.projects.contracts import (
     BillingUnit,
     GetProjectBillingItemsByIds,
@@ -83,11 +90,16 @@ class BillingService:
             else ()
         )
         status_by_user_week = {(row.user_id, row.week_start): row.status for row in week_rows}
-        status, blocking_weeks, _weeks_in_scope = billing_readiness(
-            scope_pairs, status_by_user_week
+        reports = await self._bus.query(
+            ListProjectMonthExpenseReports(
+                project_ids=frozenset({command.project_id}), period_start=month_first
+            )
+        )
+        status, blocking_weeks, blocking_reports, _weeks_in_scope = billing_readiness(
+            scope_pairs, status_by_user_week, [report.status for report in reports]
         )
         if status is not BillingPeriodStatus.READY:
-            raise BillingPeriodNotReadyError(blocking_weeks)
+            raise BillingPeriodNotReadyError(blocking_weeks, blocking_reports)
 
         period = ProjectBillingPeriod(
             project_id=command.project_id,
@@ -97,6 +109,9 @@ class BillingService:
             sent_by_id=command.sent_by_id,
         )
         await self._periods.save(period)
+        await self._bus.execute(
+            LockProjectMonthExpenseReports(project_id=command.project_id, period_start=month_first)
+        )
         await self._bus.execute(
             RecordAuditEvent(
                 actor_id=command.sent_by_id,
@@ -115,7 +130,7 @@ class BillingService:
             )
         )
 
-        return await self._period_dto(period, entries, project.customer.currency, sender)
+        return await self._period_dto(period, entries, reports, project.customer.currency, sender)
 
     async def reopen_period(self, command: ReopenProjectBillingPeriod) -> None:
         period = await self._periods.get(
@@ -128,6 +143,11 @@ class BillingService:
         project = await self._bus.query(GetProjectById(project_id=command.project_id))
         assert project is not None
         await self._periods.delete(period)
+        await self._bus.execute(
+            UnlockProjectMonthExpenseReports(
+                project_id=command.project_id, period_start=command.period_start
+            )
+        )
         await self._bus.execute(
             RecordAuditEvent(
                 actor_id=command.actor_id,
@@ -145,6 +165,7 @@ class BillingService:
         self,
         period: ProjectBillingPeriod,
         entries: Sequence[TimeEntry],
+        reports: Sequence[ExpenseReportSummaryDTO],
         currency: str,
         sent_by: UserDTO,
     ) -> ProjectBillingPeriodDTO:
@@ -166,8 +187,11 @@ class BillingService:
                 )
             elif time_entry.unit is BillingUnit.DAY:
                 accumulator.add_days(time_entry.quantity)
-            elif time_entry.unit is BillingUnit.AMOUNT:
-                accumulator.add_amount(currency=currency, quantity=time_entry.quantity)
+        # `amount`-unit entries no longer exist in `time_entries` — every report here is already
+        # confirmed `approved` (readiness required it), so their totals are this period's expenses.
+        expense_total = sum((report.total for report in reports), start=Decimal("0"))
+        if expense_total:
+            accumulator.add_amount(currency=currency, quantity=expense_total)
 
         return ProjectBillingPeriodDTO(
             project_id=period.project_id,
@@ -177,6 +201,7 @@ class BillingService:
             sent_at=period.sent_at,
             sent_by=sent_by,
             blocking_weeks=0,
+            blocking_reports=0,
             weeks_in_scope=len(scope_pairs),
             hours=accumulator.freeze_hours(),
             per_diem_days=accumulator.days,

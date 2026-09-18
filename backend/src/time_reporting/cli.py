@@ -178,6 +178,8 @@ def _seed_demo_command(args: argparse.Namespace) -> int:
         print(f"Booked demo time entries for {email}")
     for email in report.submitted_weeks_for:
         print(f"Submitted/approved demo timesheet weeks for {email}")
+    for email in report.seeded_expense_reports_for:
+        print(f"Created demo expense reports for {email}")
     if report.created_users:
         shown = "the one read from stdin" if args.password_stdin else DEFAULT_DEMO_PASSWORD
         print(f"New demo users sign in with password: {shown}")

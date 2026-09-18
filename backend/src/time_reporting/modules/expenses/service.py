@@ -344,8 +344,8 @@ class ExpenseService:
         return await self.get_report(report_id=report_row.id, viewer_id=command.reviewer_id)
 
     async def lock_project_month(self, command: LockProjectMonthExpenseReports) -> None:
-        reports = await self._reports.list_for_project_period(
-            project_id=command.project_id, period_start=command.period_start
+        reports = await self._reports.list_for_projects_period(
+            project_ids=frozenset({command.project_id}), period_start=command.period_start
         )
         now = utc_now()
         for report_row in reports:
@@ -353,8 +353,8 @@ class ExpenseService:
             await self._reports.save(report_row)
 
     async def unlock_project_month(self, command: UnlockProjectMonthExpenseReports) -> None:
-        reports = await self._reports.list_for_project_period(
-            project_id=command.project_id, period_start=command.period_start
+        reports = await self._reports.list_for_projects_period(
+            project_ids=frozenset({command.project_id}), period_start=command.period_start
         )
         for report_row in reports:
             report_row.locked_at = None

@@ -1,6 +1,7 @@
 """Tests for the demo data seed and the ``time-reporting seed-demo`` command."""
 
 import io
+from collections import defaultdict
 from dataclasses import replace
 from datetime import date
 from decimal import Decimal
@@ -13,6 +14,7 @@ from time_reporting.cli import main
 from time_reporting.core.cqrs import Bus
 from time_reporting.core.passwords import verify_password
 from time_reporting.modules.customers.contracts import ListCustomers
+from time_reporting.modules.expenses.contracts import ExpenseReportStatus, ListMyExpenseReports
 from time_reporting.modules.projects.contracts import (
     BillingItemPreset,
     ListProjectBillingItems,
@@ -187,6 +189,32 @@ async def test_seed_creates_users_customers_and_projects(bus: Bus) -> None:
             credentials = await bus.query(GetUserCredentialsByEmail(email=user.email))
             assert credentials is not None
             assert await bus.query(CountTimeEntries(user_id=credentials.id)) == 0
+
+    # Expense reports: a demo user who is a member of at least two active projects with an
+    # amount item gets one approved and one submitted report this month.
+    membership_counts: dict[str, int] = defaultdict(int)
+    for project in projects:
+        if project.archived:
+            continue
+        for email in project.member_emails:
+            membership_counts[email] += 1
+    expense_report_emails = {email for email, count in membership_counts.items() if count >= 2}
+    assert set(report.seeded_expense_reports_for) == expense_report_emails
+    for user in users:
+        credentials = await bus.query(GetUserCredentialsByEmail(email=user.email))
+        assert credentials is not None
+        reports = await bus.query(
+            ListMyExpenseReports(
+                user_id=credentials.id, year=SEED_TODAY.year, month=SEED_TODAY.month
+            )
+        )
+        if user.email in expense_report_emails:
+            assert {r.status for r in reports} == {
+                ExpenseReportStatus.APPROVED,
+                ExpenseReportStatus.SUBMITTED,
+            }
+        else:
+            assert reports == ()
 
 
 async def test_seed_is_idempotent(bus: Bus) -> None:

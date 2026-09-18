@@ -240,8 +240,8 @@ class ListProjectMonthExpenseReportsHandler:
     async def handle(
         self, query: ListProjectMonthExpenseReports
     ) -> tuple[ExpenseReportSummaryDTO, ...]:
-        report_rows = await self._reports.list_for_project_period(
-            project_id=query.project_id, period_start=query.period_start
+        report_rows = await self._reports.list_for_projects_period(
+            project_ids=query.project_ids, period_start=query.period_start
         )
         return await _summaries(self._bus, self._lines, report_rows)
 

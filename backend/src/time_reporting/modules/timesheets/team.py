@@ -6,12 +6,18 @@ and ``service.py`` (week read/write), but reuses their pure helpers.
 """
 
 from collections import defaultdict
+from collections.abc import Sequence
 from datetime import date, timedelta
 from decimal import Decimal
 from uuid import UUID
 
 from time_reporting.core.config import get_settings
 from time_reporting.core.cqrs import Bus
+from time_reporting.modules.expenses.contracts import (
+    ExpenseReportStatus,
+    ExpenseReportSummaryDTO,
+    ListProjectMonthExpenseReports,
+)
 from time_reporting.modules.projects.contracts import (
     BillingUnit,
     GetProjectBillingItemsByIds,
@@ -53,23 +59,32 @@ _WEEK_LENGTH_DAYS = 7
 def billing_readiness(
     scope_pairs: set[tuple[UUID, date]],
     status_by_user_week: dict[tuple[UUID, date], TimesheetWeekStatus],
-) -> tuple[BillingPeriodStatus, int, int]:
-    """``(status, blocking_weeks, weeks_in_scope)`` for a project's month: ``scope_pairs`` are the
-    (user, ISO week) pairs with at least one entry on the project in that month; a pair not
-    ``approved`` blocks. Shared by the team overview and ``SendProjectMonthToBilling``'s own
-    readiness check."""
+    expense_report_statuses: Sequence[ExpenseReportStatus] = (),
+) -> tuple[BillingPeriodStatus, int, int, int]:
+    """``(status, blocking_weeks, blocking_reports, weeks_in_scope)`` for a project's month:
+    ``scope_pairs`` are the (user, ISO week) pairs with at least one entry on the project in that
+    month, a pair not ``approved`` blocks; every one of ``expense_report_statuses`` (the project's
+    expense reports for the month) not ``approved`` blocks too. ``READY`` requires at least one
+    week or report in scope and none blocking. Shared by the team overview and
+    ``SendProjectMonthToBilling``'s own readiness check."""
     blocking_weeks = sum(
         1
         for pair in scope_pairs
         if status_by_user_week.get(pair, TimesheetWeekStatus.DRAFT) != TimesheetWeekStatus.APPROVED
     )
+    blocking_reports = sum(
+        1 for status in expense_report_statuses if status is not ExpenseReportStatus.APPROVED
+    )
     weeks_in_scope = len(scope_pairs)
+    reports_in_scope = len(expense_report_statuses)
     status = (
         BillingPeriodStatus.READY
-        if weeks_in_scope > 0 and blocking_weeks == 0
+        if (weeks_in_scope > 0 or reports_in_scope > 0)
+        and blocking_weeks == 0
+        and blocking_reports == 0
         else BillingPeriodStatus.NOT_READY
     )
-    return status, blocking_weeks, weeks_in_scope
+    return status, blocking_weeks, blocking_reports, weeks_in_scope
 
 
 class TeamOverviewService:
@@ -137,6 +152,13 @@ class TeamOverviewService:
             )
         }
 
+        month_reports = await self._bus.query(
+            ListProjectMonthExpenseReports(project_ids=project_ids, period_start=month_first)
+        )
+        reports_by_project: dict[UUID, list[ExpenseReportSummaryDTO]] = defaultdict(list)
+        for report in month_reports:
+            reports_by_project[report.project.id].append(report)
+
         team_projects = [
             await self._team_project(
                 entry=entry,
@@ -153,6 +175,7 @@ class TeamOverviewService:
                 expected_hours_to_date=expected_hours_to_date,
                 sent_period=sent_period_by_project.get(entry.project.id),
                 senders_by_id=senders_by_id,
+                reports_for_project=reports_by_project.get(entry.project.id, []),
             )
             for entry in managed
         ]
@@ -184,6 +207,7 @@ class TeamOverviewService:
         expected_hours_to_date: Decimal,
         sent_period: ProjectBillingPeriod | None,
         senders_by_id: dict[UUID, UserDTO],
+        reports_for_project: list[ExpenseReportSummaryDTO],
     ) -> TeamProjectDTO:
         project = entry.project
         current_member_ids = frozenset(member.user_id for member in entry.members)
@@ -249,6 +273,7 @@ class TeamOverviewService:
             status_by_user_week=status_by_user_week,
             sent_period=sent_period,
             sent_by=senders_by_id.get(sent_period.sent_by_id) if sent_period else None,
+            reports_for_project=reports_for_project,
         )
 
         return TeamProjectDTO(project=project, members=tuple(members), billing=billing)
@@ -264,18 +289,21 @@ class TeamOverviewService:
         status_by_user_week: dict[tuple[UUID, date], TimesheetWeekStatus],
         sent_period: ProjectBillingPeriod | None,
         sent_by: UserDTO | None,
+        reports_for_project: list[ExpenseReportSummaryDTO],
     ) -> ProjectBillingPeriodDTO:
         scope_pairs = {
             (time_entry.user_id, _start_of_iso_week(time_entry.entry_date))
             for time_entry in entries_for_project
         }
+        report_statuses = [report.status for report in reports_for_project]
         if sent_period is not None:
             status = BillingPeriodStatus.SENT
             blocking_weeks = 0
+            blocking_reports = 0
             weeks_in_scope = len(scope_pairs)
         else:
-            status, blocking_weeks, weeks_in_scope = billing_readiness(
-                scope_pairs, status_by_user_week
+            status, blocking_weeks, blocking_reports, weeks_in_scope = billing_readiness(
+                scope_pairs, status_by_user_week, report_statuses
             )
 
         billing_item_ids = frozenset(
@@ -296,8 +324,11 @@ class TeamOverviewService:
                 )
             elif time_entry.unit is BillingUnit.DAY:
                 accumulator.add_days(time_entry.quantity)
-            elif time_entry.unit is BillingUnit.AMOUNT:
-                accumulator.add_amount(currency=currency, quantity=time_entry.quantity)
+        # `amount`-unit entries no longer exist in `time_entries` — this project's claimed
+        # expenses, any status, come from its reports for the month instead.
+        expense_total = sum((report.total for report in reports_for_project), start=Decimal("0"))
+        if expense_total:
+            accumulator.add_amount(currency=currency, quantity=expense_total)
 
         return ProjectBillingPeriodDTO(
             project_id=project_id,
@@ -307,6 +338,7 @@ class TeamOverviewService:
             sent_at=sent_period.sent_at if sent_period is not None else None,
             sent_by=sent_by,
             blocking_weeks=blocking_weeks,
+            blocking_reports=blocking_reports,
             weeks_in_scope=weeks_in_scope,
             hours=accumulator.freeze_hours(),
             per_diem_days=accumulator.days,

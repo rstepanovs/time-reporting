@@ -330,6 +330,7 @@ class ProjectBillingPeriodResponse(BaseModel):
     sent_at: datetime | None
     sent_by: TimesheetUserResponse | None
     blocking_weeks: int
+    blocking_reports: int
     weeks_in_scope: int
     hours: HoursTotalsResponse
     per_diem_days: Decimal

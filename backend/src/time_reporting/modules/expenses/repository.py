@@ -56,14 +56,17 @@ class ExpenseReportRepository:
         )
         return result.all()
 
-    async def list_for_project_period(
-        self, *, project_id: UUID, period_start: date
+    async def list_for_projects_period(
+        self, *, project_ids: frozenset[UUID], period_start: date
     ) -> Sequence[ExpenseReport]:
-        """Every report for ``project_id``'s ``period_start`` (any user) — used by the timesheets
-        module's billing readiness check and lock/unlock, via ``ListProjectMonthExpenseReports``."""
+        """Every report for any of ``project_ids`` at ``period_start`` (any user) — used by the
+        timesheets module's billing readiness check and lock/unlock, via
+        ``ListProjectMonthExpenseReports``."""
+        if not project_ids:
+            return ()
         result = await self._session.scalars(
             select(ExpenseReport).where(
-                ExpenseReport.project_id == project_id,
+                ExpenseReport.project_id.in_(project_ids),
                 ExpenseReport.period_start == period_start,
             )
         )
