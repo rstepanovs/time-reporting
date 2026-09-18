@@ -2,6 +2,12 @@ import type { AuditEvent, AuditEventPage } from "@/audit/api";
 import type { CurrentUser } from "@/auth/api";
 import type { CalendarDay, NonWorkingDay } from "@/calendar/api";
 import type { Customer } from "@/customers/api";
+import type {
+  ExpenseAttachment,
+  ExpenseOption,
+  ExpenseReport,
+  ExpenseReportSummary,
+} from "@/expenses/api";
 import type { BillingItem, Project, ProjectMember } from "@/projects/api";
 import type { Backup, BackupList, SystemConfig, SystemStatus } from "@/system/api";
 import type {
@@ -179,6 +185,8 @@ export const testSystemConfig: SystemConfig = {
   backup_dir: "/var/backups/time-reporting",
   backup_retention_count: 14,
   backup_timeout_seconds: 300,
+  attachment_dir: "attachments",
+  attachment_max_bytes: 10_485_760,
 };
 
 export const testBackup: Backup = {
@@ -186,6 +194,7 @@ export const testBackup: Backup = {
   created_at: "2026-09-16T02:00:00Z",
   revision: "0010_add_audit_events",
   size_bytes: 52_428_800,
+  attachments_size_bytes: null,
 };
 
 export const testBackupList: BackupList = {
@@ -253,6 +262,85 @@ export const testTimesheetWeek: TimesheetWeek = {
   can_review: false,
   days: testCalendarDays,
   rows: [testTimesheetRow],
+};
+
+export const testExpenseBillingItem: ExpenseOption["billing_items"][number] = {
+  id: "b2a2a2a2-2222-2222-2222-222222222222",
+  project_id: testProject.id,
+  preset: null,
+  name: "On-call standby",
+  unit: "amount",
+  unit_rate: null,
+  markup_percent: "10.00",
+  position: 7,
+  is_active: true,
+};
+
+export const testExpenseOption: ExpenseOption = {
+  project: {
+    id: testProject.id,
+    customer: {
+      id: testCustomer.id,
+      name: testCustomer.name,
+      is_active: true,
+      currency: testCustomer.currency,
+    },
+    name: testProject.name,
+    is_active: true,
+  },
+  billing_items: [testExpenseBillingItem],
+};
+
+export const testExpenseAttachment: ExpenseAttachment = {
+  id: "e3a3a3a3-3333-3333-3333-333333333333",
+  file_name: "receipt.pdf",
+  content_type: "application/pdf",
+  size_bytes: 204_800,
+  uploaded_by_name: testEmployee.name,
+  created_at: "2026-09-14T09:00:00Z",
+};
+
+export const testExpenseReport: ExpenseReport = {
+  id: "e1a1a1a1-1111-1111-1111-111111111111",
+  project: testExpenseOption.project,
+  user: { id: testEmployee.id, name: testEmployee.name, email: testEmployee.email },
+  period_start: "2026-09-01",
+  period_end: "2026-09-30",
+  status: "draft",
+  submitted_at: null,
+  reviewed_at: null,
+  reviewed_by_name: null,
+  return_comment: null,
+  locked_at: null,
+  can_edit: true,
+  can_submit: true,
+  can_review: false,
+  is_locked: false,
+  total: "120.00",
+  lines: [
+    {
+      id: "e2a2a2a2-2222-2222-2222-222222222222",
+      expense_date: "2026-09-14",
+      billing_item: testExpenseBillingItem,
+      amount: "120.00",
+      description: "Client dinner",
+      vendor: "Trattoria Milano",
+      document_no: "INV-1042",
+    },
+  ],
+  attachments: [testExpenseAttachment],
+};
+
+export const testExpenseReportSummary: ExpenseReportSummary = {
+  id: testExpenseReport.id,
+  project: testExpenseReport.project,
+  user: testExpenseReport.user,
+  period_start: testExpenseReport.period_start,
+  period_end: testExpenseReport.period_end,
+  status: testExpenseReport.status,
+  submitted_at: testExpenseReport.submitted_at,
+  total: testExpenseReport.total,
+  line_count: testExpenseReport.lines.length,
 };
 
 // A two-week slice of September 2026 (real months span up to 6 weeks; the dashboard doesn't
@@ -647,6 +735,7 @@ export const testNotReadyBillingPeriod: ProjectBillingPeriod = {
   sent_at: null,
   sent_by: null,
   blocking_weeks: 1,
+  blocking_reports: 0,
   weeks_in_scope: 1,
   hours: { ...zeroHours, normal_hours: "19.00", total_hours: "19.00" },
   per_diem_days: "0",
@@ -661,6 +750,7 @@ export const testReadyBillingPeriod: ProjectBillingPeriod = {
   sent_at: null,
   sent_by: null,
   blocking_weeks: 0,
+  blocking_reports: 0,
   weeks_in_scope: 4,
   hours: { ...zeroHours, normal_hours: "160.00", total_hours: "160.00" },
   per_diem_days: "0",

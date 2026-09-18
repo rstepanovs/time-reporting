@@ -24,6 +24,8 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   "billing_period.reopened": "Billing period reopened",
   "calendar.public_holidays_imported": "Public holidays imported",
   "backup.created": "Backup created",
+  "expense_report.approved": "Expense report approved",
+  "expense_report.returned": "Expense report returned",
 };
 
 const ACTION_OPTIONS = (Object.keys(ACTION_LABELS) as AuditAction[]).map((value) => ({

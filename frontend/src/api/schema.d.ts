@@ -651,6 +651,179 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/expenses/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Expense Options */
+        get: operations["list_expense_options_api_v1_expenses_options_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/expenses/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List My Expense Reports */
+        get: operations["list_my_expense_reports_api_v1_expenses_reports_get"];
+        put?: never;
+        /** Create Expense Report */
+        post: operations["create_expense_report_api_v1_expenses_reports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/expenses/reports/{report_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Expense Report */
+        get: operations["get_expense_report_api_v1_expenses_reports__report_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Expense Report */
+        delete: operations["delete_expense_report_api_v1_expenses_reports__report_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/expenses/reports/{report_id}/lines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Save Expense Report Lines */
+        put: operations["save_expense_report_lines_api_v1_expenses_reports__report_id__lines_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/expenses/reports/{report_id}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit Expense Report */
+        post: operations["submit_expense_report_api_v1_expenses_reports__report_id__submit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/expenses/reports/{report_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve Expense Report */
+        post: operations["approve_expense_report_api_v1_expenses_reports__report_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/expenses/reports/{report_id}/return": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Return Expense Report */
+        post: operations["return_expense_report_api_v1_expenses_reports__report_id__return_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/expenses/submissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Submitted Expense Reports */
+        get: operations["list_submitted_expense_reports_api_v1_expenses_submissions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/expenses/reports/{report_id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Expense Attachment */
+        post: operations["add_expense_attachment_api_v1_expenses_reports__report_id__attachments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/expenses/attachments/{attachment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Expense Attachment */
+        get: operations["download_expense_attachment_api_v1_expenses_attachments__attachment_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Expense Attachment */
+        delete: operations["delete_expense_attachment_api_v1_expenses_attachments__attachment_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/users/{user_id}/removal-impact": {
         parameters: {
             query?: never;
@@ -850,7 +1023,7 @@ export interface components {
          *     add a value (see ``AuditEvent.action`` in ``models.py``).
          * @enum {string}
          */
-        AuditAction: "user.created" | "user.roles_changed" | "user.activated" | "user.deactivated" | "user.password_reset" | "user.deleted" | "customer.archived" | "customer.deleted" | "project.archived" | "project.deleted" | "billing_period.sent" | "billing_period.reopened" | "calendar.public_holidays_imported" | "backup.created";
+        AuditAction: "user.created" | "user.roles_changed" | "user.activated" | "user.deactivated" | "user.password_reset" | "user.deleted" | "customer.archived" | "customer.deleted" | "project.archived" | "project.deleted" | "billing_period.sent" | "billing_period.reopened" | "calendar.public_holidays_imported" | "backup.created" | "expense_report.approved" | "expense_report.returned";
         /** AuditEventPageResponse */
         AuditEventPageResponse: {
             /** Items */
@@ -910,6 +1083,8 @@ export interface components {
             revision: string | null;
             /** Size Bytes */
             size_bytes: number;
+            /** Attachments Size Bytes */
+            attachments_size_bytes: number | null;
         };
         /** BillingAddressRequest */
         BillingAddressRequest: {
@@ -1076,6 +1251,13 @@ export interface components {
          * @enum {string}
          */
         BillingUnit: "hour" | "day" | "amount";
+        /** Body_add_expense_attachment_api_v1_expenses_reports__report_id__attachments_post */
+        Body_add_expense_attachment_api_v1_expenses_reports__report_id__attachments_post: {
+            /** File */
+            file: string;
+            /** File Name */
+            file_name?: string | null;
+        };
         /** Body_login_api_v1_auth_login_post */
         Body_login_api_v1_auth_login_post: {
             /** Grant Type */
@@ -1138,6 +1320,18 @@ export interface components {
             expected_hours: string;
             /** Hours */
             hours: string;
+        };
+        /** CreateExpenseReportRequest */
+        CreateExpenseReportRequest: {
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Year */
+            year: number;
+            /** Month */
+            month: number;
         };
         /** CurrencyAmountResponse */
         CurrencyAmountResponse: {
@@ -1260,6 +1454,231 @@ export interface components {
             head_revision: string | null;
             /** Migrations Pending */
             migrations_pending: boolean;
+        };
+        /** ExpenseAttachmentResponse */
+        ExpenseAttachmentResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** File Name */
+            file_name: string;
+            /** Content Type */
+            content_type: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Uploaded By Name */
+            uploaded_by_name: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** ExpenseBillingItemResponse */
+        ExpenseBillingItemResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            preset: components["schemas"]["BillingItemPreset"] | null;
+            /** Name */
+            name: string;
+            unit: components["schemas"]["BillingUnit"];
+            /** Unit Rate */
+            unit_rate: string | null;
+            /** Markup Percent */
+            markup_percent: string | null;
+            /** Position */
+            position: number;
+            /** Is Active */
+            is_active: boolean;
+        };
+        /** ExpenseCustomerResponse */
+        ExpenseCustomerResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Currency */
+            currency: string;
+        };
+        /**
+         * ExpenseLineChangeRequest
+         * @description One line's new value. ``line_id`` given updates that line; omitted (or ``null``), it
+         *     creates a new one.
+         */
+        ExpenseLineChangeRequest: {
+            /** Line Id */
+            line_id?: string | null;
+            /**
+             * Billing Item Id
+             * Format: uuid
+             */
+            billing_item_id: string;
+            /**
+             * Expense Date
+             * Format: date
+             */
+            expense_date: string;
+            /** Amount */
+            amount: number | string;
+            /** Description */
+            description: string;
+            /** Vendor */
+            vendor?: string | null;
+            /** Document No */
+            document_no?: string | null;
+        };
+        /** ExpenseLineResponse */
+        ExpenseLineResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Expense Date
+             * Format: date
+             */
+            expense_date: string;
+            billing_item: components["schemas"]["ExpenseBillingItemResponse"];
+            /** Amount */
+            amount: string;
+            /** Description */
+            description: string;
+            /** Vendor */
+            vendor: string | null;
+            /** Document No */
+            document_no: string | null;
+        };
+        /** ExpenseOptionResponse */
+        ExpenseOptionResponse: {
+            project: components["schemas"]["ExpenseProjectResponse"];
+            /** Billing Items */
+            billing_items: components["schemas"]["ExpenseBillingItemResponse"][];
+        };
+        /** ExpenseProjectResponse */
+        ExpenseProjectResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            customer: components["schemas"]["ExpenseCustomerResponse"];
+            /** Name */
+            name: string;
+            /** Is Active */
+            is_active: boolean;
+        };
+        /** ExpenseReportResponse */
+        ExpenseReportResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            project: components["schemas"]["ExpenseProjectResponse"];
+            user: components["schemas"]["ExpenseUserResponse"];
+            /**
+             * Period Start
+             * Format: date
+             */
+            period_start: string;
+            /**
+             * Period End
+             * Format: date
+             */
+            period_end: string;
+            status: components["schemas"]["ExpenseReportStatus"];
+            /** Submitted At */
+            submitted_at: string | null;
+            /** Reviewed At */
+            reviewed_at: string | null;
+            /** Reviewed By Name */
+            reviewed_by_name: string | null;
+            /** Return Comment */
+            return_comment: string | null;
+            /** Locked At */
+            locked_at: string | null;
+            /** Can Edit */
+            can_edit: boolean;
+            /** Can Submit */
+            can_submit: boolean;
+            /** Can Review */
+            can_review: boolean;
+            /** Is Locked */
+            is_locked: boolean;
+            /** Total */
+            total: string;
+            /** Lines */
+            lines: components["schemas"]["ExpenseLineResponse"][];
+            /** Attachments */
+            attachments: components["schemas"]["ExpenseAttachmentResponse"][];
+        };
+        /**
+         * ExpenseReportStatus
+         * @description A report's place in the submit/review workflow.
+         *
+         *     Unlike ``timesheets.TimesheetWeekStatus``, ``DRAFT`` *is* persisted: the document (and its
+         *     lines and attachments) must exist before it has anything to submit, so there is no "no row
+         *     means draft" shortcut here.
+         * @enum {string}
+         */
+        ExpenseReportStatus: "draft" | "submitted" | "approved" | "returned";
+        /**
+         * ExpenseReportSummaryResponse
+         * @description One row of a list view (``GET /expenses/reports``, ``GET /expenses/submissions``).
+         */
+        ExpenseReportSummaryResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            project: components["schemas"]["ExpenseProjectResponse"];
+            user: components["schemas"]["ExpenseUserResponse"];
+            /**
+             * Period Start
+             * Format: date
+             */
+            period_start: string;
+            /**
+             * Period End
+             * Format: date
+             */
+            period_end: string;
+            status: components["schemas"]["ExpenseReportStatus"];
+            /** Submitted At */
+            submitted_at: string | null;
+            /** Total */
+            total: string;
+            /** Line Count */
+            line_count: number;
+        };
+        /** ExpenseUserResponse */
+        ExpenseUserResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Email */
+            email: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1466,6 +1885,8 @@ export interface components {
             sent_by: components["schemas"]["TimesheetUserResponse"] | null;
             /** Blocking Weeks */
             blocking_weeks: number;
+            /** Blocking Reports */
+            blocking_reports: number;
             /** Weeks In Scope */
             weeks_in_scope: number;
             hours: components["schemas"]["HoursTotalsResponse"];
@@ -1652,6 +2073,11 @@ export interface components {
         RemovalResponse: {
             outcome: components["schemas"]["RemovalOutcome"];
         };
+        /** ReturnExpenseReportRequest */
+        ReturnExpenseReportRequest: {
+            /** Comment */
+            comment: string;
+        };
         /** ReturnTimesheetWeekRequest */
         ReturnTimesheetWeekRequest: {
             /** Comment */
@@ -1670,6 +2096,19 @@ export interface components {
             billing_item_id: string;
             /** Comment */
             comment?: string | null;
+        };
+        /** SaveExpenseReportLinesRequest */
+        SaveExpenseReportLinesRequest: {
+            /**
+             * Lines
+             * @default []
+             */
+            lines: components["schemas"]["ExpenseLineChangeRequest"][];
+            /**
+             * Delete Line Ids
+             * @default []
+             */
+            delete_line_ids: string[];
         };
         /** SaveTimesheetWeekRequest */
         SaveTimesheetWeekRequest: {
@@ -1732,6 +2171,10 @@ export interface components {
             backup_retention_count: number;
             /** Backup Timeout Seconds */
             backup_timeout_seconds: number;
+            /** Attachment Dir */
+            attachment_dir: string;
+            /** Attachment Max Bytes */
+            attachment_max_bytes: number;
         };
         /** SystemStatusResponse */
         SystemStatusResponse: {
@@ -4116,6 +4559,557 @@ export interface operations {
             };
             /** @description User not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_expense_options_api_v1_expenses_options_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExpenseOptionResponse"][];
+                };
+            };
+        };
+    };
+    list_my_expense_reports_api_v1_expenses_reports_get: {
+        parameters: {
+            query: {
+                year: number;
+                month: number;
+                user_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExpenseReportSummaryResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_expense_report_api_v1_expenses_reports_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateExpenseReportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExpenseReportResponse"];
+                };
+            };
+            /** @description The report/lines violate an expenses rule */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_expense_report_api_v1_expenses_reports__report_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExpenseReportResponse"];
+                };
+            };
+            /** @description Report or attachment not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_expense_report_api_v1_expenses_reports__report_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Report or attachment not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The report's status does not allow this action */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_expense_report_lines_api_v1_expenses_reports__report_id__lines_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveExpenseReportLinesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExpenseReportResponse"];
+                };
+            };
+            /** @description The report/lines violate an expenses rule */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Report or attachment not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The report's status does not allow this action */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_expense_report_api_v1_expenses_reports__report_id__submit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExpenseReportResponse"];
+                };
+            };
+            /** @description Report or attachment not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The report's status does not allow this action */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_expense_report_api_v1_expenses_reports__report_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExpenseReportResponse"];
+                };
+            };
+            /** @description Report or attachment not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The report's status does not allow this action */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    return_expense_report_api_v1_expenses_reports__report_id__return_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReturnExpenseReportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExpenseReportResponse"];
+                };
+            };
+            /** @description The report/lines violate an expenses rule */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Report or attachment not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The report's status does not allow this action */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_submitted_expense_reports_api_v1_expenses_submissions_get: {
+        parameters: {
+            query?: {
+                scope?: "mine" | "all";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExpenseReportSummaryResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_expense_attachment_api_v1_expenses_reports__report_id__attachments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_add_expense_attachment_api_v1_expenses_reports__report_id__attachments_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExpenseAttachmentResponse"];
+                };
+            };
+            /** @description Report or attachment not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The report's status does not allow this action */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The file is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The file type isn't allowed */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_expense_attachment_api_v1_expenses_attachments__attachment_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Report or attachment not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_expense_attachment_api_v1_expenses_attachments__attachment_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Report or attachment not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The report's status does not allow this action */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
