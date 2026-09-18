@@ -31,7 +31,7 @@ Time tracking with subsequent billing. Monorepo containing a Python API and a Re
 │   │   ├── core/           # settings, CQRS bus, password hashing
 │   │   ├── db/             # declarative base, engine, sessions
 │   │   ├── api/            # root router and shared dependencies (all routes under /api/v1)
-│   │   └── modules/        # feature modules (users, auth, customers, projects, admin), via the CQRS bus
+│   │   └── modules/        # feature modules (users, auth, customers, projects, timesheets, expenses, admin), via the CQRS bus
 │   └── tests/
 └── frontend/
     ├── package.json

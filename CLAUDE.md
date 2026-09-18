@@ -6,8 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Time tracking with subsequent billing. Monorepo containing a Python API (`backend/`) and a React web
 client (`frontend/`). Infrastructure, a health-check endpoint, user accounts with JWT authentication,
-customers and their projects, a shared non-working-day calendar, and weekly timesheets all exist;
-the remaining domain model (invoices) does not yet.
+customers and their projects, a shared non-working-day calendar, weekly timesheets and expense
+reports (with receipt/invoice attachments) all exist; the remaining domain model (invoices) does not
+yet.
 
 Detailed notes live next to the code and load only when files in that directory are read:
 `backend/src/time_reporting/modules/<module>/CLAUDE.md` for each backend module and
@@ -59,9 +60,11 @@ docker compose up --build   # frontend :8080, backend :8000
 via `time-reporting backup --if-pending-migrations`, then `alembic upgrade head`) → `backend` →
 `frontend` (nginx, proxies `/api/` to `backend`). A `backup` service loops `time-reporting backup`
 every `BACKUP_INTERVAL_HOURS`; all three backend-image services share the `backups` named volume
-(`/var/backups/time-reporting`). An optional `pgadmin` service (profile `tools`, `127.0.0.1` only:
-`docker compose --profile tools up pgadmin`) pre-registers the `db` server from
-`deploy/pgadmin/servers.json`.
+(`/var/backups/time-reporting`) and the `attachments` named volume
+(`/var/lib/time-reporting/attachments`, the `expenses` module's uploaded receipt/invoice scans,
+archived alongside each backup — see `system/CLAUDE.md`). An optional `pgadmin` service (profile
+`tools`, `127.0.0.1` only: `docker compose --profile tools up pgadmin`) pre-registers the `db`
+server from `deploy/pgadmin/servers.json`.
 
 `scripts/upgrade.sh [ref]` upgrades a running deployment (rebuild → migrate, which backs up first →
 restart); `docs/operations.md` is the full runbook (install, upgrade, rollback via `time-reporting
@@ -131,10 +134,15 @@ Modules (each documented in its own `CLAUDE.md`):
 - **`work_calendar`** — `NonWorkingDay`: the company-wide holiday calendar.
 - **`timesheets`** — `TimeEntry`, the weekly submit/approve workflow, dashboards, team overview,
   billing handoff and locking.
+- **`expenses`** — `ExpenseReport`/`ExpenseReportLine`/`ExpenseAttachment`: an employee's claim for
+  money spent on a project in one calendar month, with receipt/invoice scans, submitted and
+  approved the same way a timesheet week is; locked in the same transaction as its project's
+  timesheets billing handoff.
 - **`admin`** — no tables; orchestrates archiving/permanent deletion of users, customers, projects.
 - **`system`** — no tables; backend/database version and status, non-secret configuration view, read
   from PostgreSQL catalogs and application settings, under `/admin/system/*`; `pg_dump`/`pg_restore`
-  backups (`BackupService`) under `/admin/backups/*` (restore is CLI-only, never over HTTP).
+  backups (`BackupService`) under `/admin/backups/*` (restore is CLI-only, never over HTTP), also
+  archiving the `expenses` module's attachment directory alongside each dump.
 - **`audit`** — `AuditEvent`: an immutable log of administrative actions, written by other modules'
   command handlers via a nested `RecordAuditEvent`; `GET /admin/audit-events` (`AdminDep`).
 
@@ -150,24 +158,24 @@ owning module's `PATCH` endpoint (`ManagerDep`).
   401, marks the app signed out (sets the `currentUserQueryKey` query data to `null`).
 - **`api/queryClient.ts`** — shared TanStack Query `QueryClient`.
 - **Feature areas** — `auth/`, `customers/`, `users/`, `projects/`, `calendar/`, `timesheets/`,
-  `admin/`, `system/`, `audit/`: each typically has `api.ts` (typed calls plus the area's own error
-  classes mapped from HTTP status codes, with the backend's `detail` as the message where it's
-  user-facing), `hooks.ts` (a `<area>Keys` query-key factory plus TanStack Query queries/mutations)
-  and its modals/components. Each area's `CLAUDE.md` has the details.
+  `expenses/`, `admin/`, `system/`, `audit/`: each typically has `api.ts` (typed calls plus the
+  area's own error classes mapped from HTTP status codes, with the backend's `detail` as the
+  message where it's user-facing), `hooks.ts` (a `<area>Keys` query-key factory plus TanStack Query
+  queries/mutations) and its modals/components. Each area's `CLAUDE.md` has the details.
 - **`router.tsx`** — route tree (`routes`, also used by tests): `/login` is public, everything else sits
   under `RequireAuth` → `AppLayout`. Page components live in `pages/` (see `pages/CLAUDE.md`), shared
   chrome in `components/`. `/` (`DashboardPage`) is the default landing page, a list of sections
   assembled from the viewer's access levels (My time for everyone, then My team/Billing/
   Administration per level — see `pages/CLAUDE.md`); `/timesheet` (query
-  params `week`/`user`), `/hours` (`month`), `/projects`, `/projects/:projectId`,
-  `/account/password`; `/approvals` and `/team`
+  params `week`/`user`), `/hours` (`month`), `/expenses` (`month`) and `/expenses/:reportId`,
+  `/projects`, `/projects/:projectId`, `/account/password`; `/approvals` and `/team`
   sit under `RequireRole roles={["manager"]}` (any-of, so an admin who is also a manager passes too);
   `/admin/{users,customers,projects,calendar,billing,audit,backups,status}` sit under `RequireRole
   roles={["admin"]}`, with `/admin` redirecting to `/admin/users`.
 - **`components/AppLayout.tsx`** — the signed-in shell: header with the account menu (shows a badge
   per access level the user holds, or "Employee" if none) and an `AppShell.Navbar` (collapsible on
-  mobile via a `Burger`) linking to the pages in `pages/` (Dashboard, Timesheet, My hours, Projects,
-  in that order — plus Approvals then Team, inserted right after My hours, shown only when
+  mobile via a `Burger`) linking to the pages in `pages/` (Dashboard, Timesheet, My hours, Expenses,
+  Projects, in that order — plus Approvals then Team, inserted right after Expenses, shown only when
   `canManage(user)`), plus an "Administration" nav group (Users/Customers/Projects/Calendar/Billing/
   Audit log/Backups/System status) shown only when `isAdmin(user)`.
   `components/DashboardCard.tsx` is the shared frame the dashboard's widget cards render inside
