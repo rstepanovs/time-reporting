@@ -8,8 +8,8 @@ Depends on: `projects.contracts` (`ListMemberProjectsWithBillingItems`,
 (`GetUserById`, `GetUsersByIds`, `UserRole`), `audit.contracts` (`RecordAuditEvent`),
 `expenses.contracts` (`GetMonthExpenseTotals`, and, from `billing.py`,
 `LockProjectMonthExpenseReports`/`UnlockProjectMonthExpenseReports`/
-`ListProjectMonthExpenseReports` — see "Billing handoff" below). Consumed by `admin` via
-`CountTimeEntries`.
+`ListProjectMonthExpenseReports`/`ListProjectMonthExpenseReportLines` — see "Billing handoff"
+below). Consumed by `admin` via `CountTimeEntries`.
 
 ## Entries and the weekly grid
 
@@ -152,3 +152,11 @@ project `manager_id` manages (`manager_id=None` covers every active project — 
   `sent_by_id`/`ReopenProjectBillingPeriod.actor_id` respectively; `entity_id` is
   `"{project_id}:{period_start}"` (no single-UUID key exists for a billing period), with the
   project/customer names and period only in `summary`/`details` — see `audit/CLAUDE.md`.
+- `GET /timesheets/billing-periods/{project_id}/{period_start}/export.csv` (`AdminDep`) streams a
+  sent period's handoff as a CSV — the smallest real thing to hand an accountant before invoicing
+  exists. `GetBillingPeriodExportRows` (`billing.py: BillingService.get_export_rows`, raising
+  `BillingPeriodNotFoundError` for an unsent period) builds one row per time entry in the period's
+  dates plus one row per approved expense line (via `expenses.ListProjectMonthExpenseReportLines`)
+  — `BillingPeriodExportRowDTO` shapes both sources identically (`unit=amount` and `currency` set
+  only for an expense row), sorted by date then user name. The router (`csv.writer` over an
+  `io.StringIO`, `StreamingResponse`) never touches the database beyond that one query.

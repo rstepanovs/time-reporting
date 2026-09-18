@@ -20,9 +20,11 @@ from time_reporting.modules.projects.contracts import (
 from time_reporting.modules.timesheets.billing import BillingService
 from time_reporting.modules.timesheets.contracts import (
     ApproveTimesheetWeek,
+    BillingPeriodExportRowDTO,
     BillingPeriodListItemDTO,
     BillingPeriodPageDTO,
     CountTimeEntries,
+    GetBillingPeriodExportRows,
     GetMonthCalendar,
     GetMonthTimeSummary,
     GetTeamMonthOverview,
@@ -192,6 +194,16 @@ class ReopenProjectBillingPeriodHandler:
 
     async def handle(self, command: ReopenProjectBillingPeriod) -> None:
         await self._service.reopen_period(command)
+
+
+class GetBillingPeriodExportRowsHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._service = BillingService(bus)
+
+    async def handle(
+        self, query: GetBillingPeriodExportRows
+    ) -> tuple[BillingPeriodExportRowDTO, ...]:
+        return await self._service.get_export_rows(query)
 
 
 class ListBillingPeriodsHandler:

@@ -1,4 +1,4 @@
-import { Alert, Button, Group, Loader, Modal, Pagination, Select, Stack, Table, Text, Title } from "@mantine/core";
+import { Alert, Anchor, Button, Group, Loader, Modal, Pagination, Select, Stack, Table, Text, Title } from "@mantine/core";
 import { MonthPickerInput } from "@mantine/dates";
 import { useDisclosure } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
@@ -7,6 +7,7 @@ import { useState } from "react";
 import { useCustomers } from "@/customers/hooks";
 import { useProjects } from "@/projects/hooks";
 import type { BillingPeriodListItem } from "@/timesheets/api";
+import { billingPeriodExportUrl } from "@/timesheets/api";
 import { useBillingPeriods, useReopenProjectBillingPeriod } from "@/timesheets/hooks";
 import { formatMonthLabel } from "@/timesheets/week";
 
@@ -171,7 +172,16 @@ export function AdminBillingPage() {
                     <Table.Td>{new Date(period.sent_at).toLocaleString()}</Table.Td>
                     <Table.Td>{period.sent_by_name}</Table.Td>
                     <Table.Td>
-                      <ReopenButton period={period} />
+                      <Group gap="xs" justify="flex-end" wrap="nowrap">
+                        <Anchor
+                          size="sm"
+                          href={billingPeriodExportUrl(period.project_id, period.period_start)}
+                          download
+                        >
+                          CSV
+                        </Anchor>
+                        <ReopenButton period={period} />
+                      </Group>
                     </Table.Td>
                   </Table.Tr>
                 ))}

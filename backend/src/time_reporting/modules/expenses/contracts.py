@@ -172,6 +172,31 @@ class ListProjectMonthExpenseReports(Query[tuple[ExpenseReportSummaryDTO, ...]])
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class ExpenseReportLineExportDTO:
+    """One line of an *approved* report plus its owner, for ``timesheets``' billing-period CSV
+    export — the one place outside this module that needs line-level detail rather than
+    ``ExpenseReportSummaryDTO``'s per-report total."""
+
+    user: UserDTO
+    expense_date: date
+    billing_item: ProjectBillingItemDTO
+    amount: Decimal
+    description: str
+    vendor: str | None
+    document_no: str | None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ListProjectMonthExpenseReportLines(Query[tuple[ExpenseReportLineExportDTO, ...]]):
+    """Every line of every *approved* report for ``project_id`` at ``period_start`` — a report not
+    yet approved contributed nothing to the period's expense total and is excluded, mirroring
+    ``billing.py``'s own summing of only-approved reports."""
+
+    project_id: UUID
+    period_start: date
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class ExpenseCurrencyTotalDTO:
     currency: str
     amount: Decimal

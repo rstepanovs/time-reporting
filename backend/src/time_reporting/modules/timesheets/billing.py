@@ -16,6 +16,7 @@ from time_reporting.db.mixins import utc_now
 from time_reporting.modules.audit.contracts import AuditAction, RecordAuditEvent
 from time_reporting.modules.expenses.contracts import (
     ExpenseReportSummaryDTO,
+    ListProjectMonthExpenseReportLines,
     ListProjectMonthExpenseReports,
     LockProjectMonthExpenseReports,
     UnlockProjectMonthExpenseReports,
@@ -27,9 +28,11 @@ from time_reporting.modules.projects.contracts import (
 )
 from time_reporting.modules.timesheets.contracts import (
     BillingPeriodAlreadySentError,
+    BillingPeriodExportRowDTO,
     BillingPeriodNotFoundError,
     BillingPeriodNotReadyError,
     BillingPeriodStatus,
+    GetBillingPeriodExportRows,
     ProjectBillingPeriodDTO,
     ReopenProjectBillingPeriod,
     SendProjectMonthToBilling,
@@ -49,7 +52,12 @@ from time_reporting.modules.timesheets.summary import (
     _start_of_iso_week,
 )
 from time_reporting.modules.timesheets.team import billing_readiness
-from time_reporting.modules.users.contracts import GetUserById, UserDTO, UserNotFoundError
+from time_reporting.modules.users.contracts import (
+    GetUserById,
+    GetUsersByIds,
+    UserDTO,
+    UserNotFoundError,
+)
 
 
 class BillingService:
@@ -160,6 +168,73 @@ class BillingService:
                 ),
             )
         )
+
+    async def get_export_rows(
+        self, query: GetBillingPeriodExportRows
+    ) -> tuple[BillingPeriodExportRowDTO, ...]:
+        period = await self._periods.get(
+            project_id=query.project_id, period_start=query.period_start
+        )
+        if period is None:
+            raise BillingPeriodNotFoundError(query.project_id, query.period_start)
+        project = await self._bus.query(GetProjectById(project_id=query.project_id))
+        assert project is not None
+
+        entries = await self._entries.list_for_projects_in_range(
+            frozenset({query.project_id}), period.period_start, period.period_end
+        )
+        items_by_id = {
+            item.id: item
+            for item in await self._bus.query(
+                GetProjectBillingItemsByIds(
+                    billing_item_ids=frozenset(entry.billing_item_id for entry in entries)
+                )
+            )
+        }
+        users_by_id = {
+            user.id: user
+            for user in await self._bus.query(
+                GetUsersByIds(user_ids=frozenset(entry.user_id for entry in entries))
+            )
+        }
+        rows = [
+            BillingPeriodExportRowDTO(
+                entry_date=entry.entry_date,
+                user_name=users_by_id[entry.user_id].name,
+                user_email=users_by_id[entry.user_id].email,
+                billing_item_name=items_by_id[entry.billing_item_id].name,
+                unit=entry.unit,
+                quantity=entry.quantity,
+                currency=None,
+                description=entry.note,
+                vendor=None,
+                document_no=None,
+            )
+            for entry in entries
+        ]
+
+        lines = await self._bus.query(
+            ListProjectMonthExpenseReportLines(
+                project_id=query.project_id, period_start=period.period_start
+            )
+        )
+        rows.extend(
+            BillingPeriodExportRowDTO(
+                entry_date=line.expense_date,
+                user_name=line.user.name,
+                user_email=line.user.email,
+                billing_item_name=line.billing_item.name,
+                unit=BillingUnit.AMOUNT,
+                quantity=line.amount,
+                currency=project.customer.currency,
+                description=line.description,
+                vendor=line.vendor,
+                document_no=line.document_no,
+            )
+            for line in lines
+        )
+        rows.sort(key=lambda row: (row.entry_date, row.user_name))
+        return tuple(rows)
 
     async def _period_dto(
         self,

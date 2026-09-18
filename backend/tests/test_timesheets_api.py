@@ -1,10 +1,21 @@
+import csv
+import io
 from datetime import date
+from decimal import Decimal
 
 import pytest
 from httpx import AsyncClient
 
 from support import ADMIN, ADMIN_ONLY, EMPLOYEE, MANAGER, AuthHeaders, ProjectFactory, UserFactory
-from time_reporting.modules.projects.contracts import BillingItemPreset
+from time_reporting.core.cqrs import Bus
+from time_reporting.modules.expenses.contracts import (
+    ApproveExpenseReport,
+    CreateExpenseReport,
+    ExpenseLineChange,
+    SaveExpenseReportLines,
+    SubmitExpenseReport,
+)
+from time_reporting.modules.projects.contracts import BillingItemPreset, ListProjectBillingItems
 from time_reporting.modules.users.contracts import UserRole
 
 # 2026-09-14 is a Monday.
@@ -957,3 +968,141 @@ async def test_admin_can_list_and_filter_billing_periods(
     assert item["period_start"] == "2026-09-01"
     assert item["sent_by_id"] == str(manager.id)
     assert item["sent_by_name"] == manager.name
+
+
+async def test_export_billing_period_csv_requires_admin(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    project = await make_project()
+
+    anonymous = await client.get(
+        f"/api/v1/timesheets/billing-periods/{project.id}/2026-09-01/export.csv"
+    )
+    assert anonymous.status_code == 401
+
+    manager_headers = auth_headers(await make_user(roles=MANAGER))
+    forbidden = await client.get(
+        f"/api/v1/timesheets/billing-periods/{project.id}/2026-09-01/export.csv",
+        headers=manager_headers,
+    )
+    assert forbidden.status_code == 403
+
+
+async def test_export_billing_period_csv_unknown_period_returns_404(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    admin_headers = auth_headers(await make_user(roles=ADMIN))
+    project = await make_project()
+
+    response = await client.get(
+        f"/api/v1/timesheets/billing-periods/{project.id}/2026-09-01/export.csv",
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 404
+
+
+async def test_export_billing_period_csv_contains_both_sources(
+    client: AsyncClient,
+    bus: Bus,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    admin = await make_user(roles=ADMIN)
+    admin_headers = auth_headers(admin)
+    manager = await make_user(roles=MANAGER)
+    manager_headers = auth_headers(manager)
+    worker = await make_user(roles=EMPLOYEE)
+    worker_headers = auth_headers(worker)
+    project = await make_project(manager_id=manager.id)
+    await _add_member(client, manager_headers, str(project.id), str(worker.id))
+
+    item_id = await _normal_hours_item_id(client, manager_headers, str(project.id))
+    await client.put(
+        f"/api/v1/timesheets/weeks/{A_MONDAY}/entries",
+        headers=worker_headers,
+        json={"changes": [{"billing_item_id": item_id, "date": A_MONDAY, "quantity": "8.00"}]},
+    )
+    await client.post(f"/api/v1/timesheets/weeks/{A_MONDAY}/submit", headers=worker_headers)
+    worker_id = (await client.get("/api/v1/users/me", headers=worker_headers)).json()["id"]
+    await client.post(
+        f"/api/v1/timesheets/weeks/{A_MONDAY}/approve",
+        headers=manager_headers,
+        params={"user_id": worker_id},
+    )
+
+    billing_items = await bus.query(ListProjectBillingItems(project_id=project.id))
+    purchasing_id = next(
+        item.id for item in billing_items if item.preset == BillingItemPreset.PURCHASING_EXPENSES
+    )
+    report = await bus.execute(
+        CreateExpenseReport(user_id=worker.id, project_id=project.id, year=2026, month=9)
+    )
+    await bus.execute(
+        SaveExpenseReportLines(
+            report_id=report.id,
+            actor_id=worker.id,
+            lines=(
+                ExpenseLineChange(
+                    line_id=None,
+                    billing_item_id=purchasing_id,
+                    expense_date=date(2026, 9, 5),
+                    amount=Decimal("42.50"),
+                    description="Taxi",
+                    vendor="City Cabs",
+                    document_no="INV-1",
+                ),
+            ),
+        )
+    )
+    await bus.execute(SubmitExpenseReport(report_id=report.id, actor_id=worker.id))
+    await bus.execute(ApproveExpenseReport(report_id=report.id, reviewer_id=manager.id))
+
+    await client.post(
+        "/api/v1/timesheets/billing-periods",
+        headers=manager_headers,
+        json={"project_id": str(project.id), "year": 2026, "month": 9},
+    )
+
+    response = await client.get(
+        f"/api/v1/timesheets/billing-periods/{project.id}/2026-09-01/export.csv",
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    assert response.headers["content-disposition"] == (
+        f'attachment; filename="billing-{project.id}-2026-09-01.csv"'
+    )
+    rows = list(csv.reader(io.StringIO(response.text)))
+    assert rows[0] == [
+        "Date",
+        "User",
+        "Email",
+        "Billing item",
+        "Unit",
+        "Quantity",
+        "Currency",
+        "Description",
+        "Vendor",
+        "Document no.",
+    ]
+    data_rows = rows[1:]
+    assert len(data_rows) == 2
+    hours_row = next(row for row in data_rows if row[4] == "hour")
+    assert hours_row[1] == worker.name
+    assert hours_row[5] == "8.00"
+    expense_row = next(row for row in data_rows if row[4] == "amount")
+    assert expense_row[1] == worker.name
+    assert expense_row[5] == "42.50"
+    assert expense_row[6] == project.customer.currency
+    assert expense_row[7] == "Taxi"
+    assert expense_row[8] == "City Cabs"
+    assert expense_row[9] == "INV-1"

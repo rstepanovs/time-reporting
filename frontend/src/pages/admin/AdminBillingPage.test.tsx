@@ -52,6 +52,18 @@ describe("AdminBillingPage", () => {
     expect(within(row).getByText(testBillingPeriodListItem.sent_by_name)).toBeTruthy();
   });
 
+  it("links each row to its CSV export", async () => {
+    renderApp("/admin/billing");
+
+    const nameCell = await screen.findByText(testBillingPeriodListItem.project_name);
+    const row = nameCell.closest("tr")!;
+    const link = within(row).getByRole("link", { name: "CSV" });
+    expect(link.getAttribute("href")).toBe(
+      `/api/v1/timesheets/billing-periods/${testBillingPeriodListItem.project_id}` +
+        `/${testBillingPeriodListItem.period_start}/export.csv`,
+    );
+  });
+
   it("shows an empty state when there are no periods", async () => {
     vi.mocked(listBillingPeriods).mockResolvedValue({ items: [], total: 0, limit: 20, offset: 0 });
 

@@ -18,6 +18,7 @@ from time_reporting.modules.expenses.contracts import (
     ExpenseAttachmentDTO,
     ExpenseCurrencyTotalDTO,
     ExpenseReportDTO,
+    ExpenseReportLineExportDTO,
     ExpenseReportStatus,
     ExpenseReportSummaryDTO,
     GetAttachmentPath,
@@ -26,6 +27,7 @@ from time_reporting.modules.expenses.contracts import (
     ListAttachmentStorageKeys,
     ListExpenseOptions,
     ListMyExpenseReports,
+    ListProjectMonthExpenseReportLines,
     ListProjectMonthExpenseReports,
     ListSubmittedExpenseReports,
     LockProjectMonthExpenseReports,
@@ -43,6 +45,7 @@ from time_reporting.modules.expenses.repository import (
 from time_reporting.modules.expenses.service import ExpenseService, _month_bounds
 from time_reporting.modules.projects.contracts import (
     BillingUnit,
+    GetProjectBillingItemsByIds,
     GetProjectsByIds,
     ListManagedProjectsWithMembers,
     ListMemberProjectsWithBillingItems,
@@ -244,6 +247,57 @@ class ListProjectMonthExpenseReportsHandler:
             project_ids=query.project_ids, period_start=query.period_start
         )
         return await _summaries(self._bus, self._lines, report_rows)
+
+
+class ListProjectMonthExpenseReportLinesHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._bus = bus
+        self._reports = ExpenseReportRepository(bus.session)
+        self._lines = ExpenseReportLineRepository(bus.session)
+
+    async def handle(
+        self, query: ListProjectMonthExpenseReportLines
+    ) -> tuple[ExpenseReportLineExportDTO, ...]:
+        report_rows = [
+            row
+            for row in await self._reports.list_for_projects_period(
+                project_ids=frozenset({query.project_id}), period_start=query.period_start
+            )
+            if row.status is ExpenseReportStatus.APPROVED
+        ]
+        if not report_rows:
+            return ()
+        lines_by_report_id = {
+            row.id: await self._lines.list_for_report(row.id) for row in report_rows
+        }
+        users_by_id = {
+            user.id: user
+            for user in await self._bus.query(
+                GetUsersByIds(user_ids=frozenset(row.user_id for row in report_rows))
+            )
+        }
+        all_lines = [line for lines in lines_by_report_id.values() for line in lines]
+        items_by_id = {
+            item.id: item
+            for item in await self._bus.query(
+                GetProjectBillingItemsByIds(
+                    billing_item_ids=frozenset(line.billing_item_id for line in all_lines)
+                )
+            )
+        }
+        return tuple(
+            ExpenseReportLineExportDTO(
+                user=users_by_id[row.user_id],
+                expense_date=line.expense_date,
+                billing_item=items_by_id[line.billing_item_id],
+                amount=line.amount,
+                description=line.description,
+                vendor=line.vendor,
+                document_no=line.document_no,
+            )
+            for row in report_rows
+            for line in lines_by_report_id[row.id]
+        )
 
 
 async def _summaries(

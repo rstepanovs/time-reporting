@@ -4,11 +4,14 @@ Every authenticated user reads and writes their own week/dashboard; managers may
 not write) another user's data.
 """
 
+import csv
+import io
 from datetime import date
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Path, Query, status
+from fastapi.responses import StreamingResponse
 
 from time_reporting.api.deps import BusDep
 from time_reporting.modules.auth.dependencies import AdminDep, CurrentUserDep, ManagerDep
@@ -21,6 +24,7 @@ from time_reporting.modules.timesheets.contracts import (
     DailyHoursExceededError,
     DuplicateChangeError,
     EntryDateOutsideWeekError,
+    GetBillingPeriodExportRows,
     GetMonthCalendar,
     GetMonthTimeSummary,
     GetTeamMonthOverview,
@@ -352,6 +356,59 @@ async def reopen_project_billing_period(
         )
     except BillingPeriodNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get(
+    "/billing-periods/{project_id}/{period_start}/export.csv",
+    responses={status.HTTP_404_NOT_FOUND: {"description": "No sent period found"}},
+)
+async def export_billing_period_csv(
+    project_id: UUID, period_start: date, _admin: AdminDep, bus: BusDep
+) -> StreamingResponse:
+    try:
+        rows = await bus.query(
+            GetBillingPeriodExportRows(project_id=project_id, period_start=period_start)
+        )
+    except BillingPeriodNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(
+        [
+            "Date",
+            "User",
+            "Email",
+            "Billing item",
+            "Unit",
+            "Quantity",
+            "Currency",
+            "Description",
+            "Vendor",
+            "Document no.",
+        ]
+    )
+    for row in rows:
+        writer.writerow(
+            [
+                row.entry_date.isoformat(),
+                row.user_name,
+                row.user_email,
+                row.billing_item_name,
+                row.unit.value,
+                str(row.quantity),
+                row.currency or "",
+                row.description or "",
+                row.vendor or "",
+                row.document_no or "",
+            ]
+        )
+    filename = f"billing-{project_id}-{period_start.isoformat()}.csv"
+    return StreamingResponse(
+        iter([buffer.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/options")

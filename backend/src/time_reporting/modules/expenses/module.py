@@ -13,6 +13,7 @@ from time_reporting.modules.expenses.contracts import (
     ListAttachmentStorageKeys,
     ListExpenseOptions,
     ListMyExpenseReports,
+    ListProjectMonthExpenseReportLines,
     ListProjectMonthExpenseReports,
     ListSubmittedExpenseReports,
     LockProjectMonthExpenseReports,
@@ -33,6 +34,7 @@ from time_reporting.modules.expenses.handlers import (
     ListAttachmentStorageKeysHandler,
     ListExpenseOptionsHandler,
     ListMyExpenseReportsHandler,
+    ListProjectMonthExpenseReportLinesHandler,
     ListProjectMonthExpenseReportsHandler,
     ListSubmittedExpenseReportsHandler,
     LockProjectMonthExpenseReportsHandler,
@@ -50,6 +52,7 @@ def register(registry: HandlerRegistry) -> None:
     registry.query(ListExpenseOptions, ListExpenseOptionsHandler)
     registry.query(ListSubmittedExpenseReports, ListSubmittedExpenseReportsHandler)
     registry.query(ListProjectMonthExpenseReports, ListProjectMonthExpenseReportsHandler)
+    registry.query(ListProjectMonthExpenseReportLines, ListProjectMonthExpenseReportLinesHandler)
     registry.query(GetAttachmentPath, GetAttachmentPathHandler)
     registry.query(ListAttachmentStorageKeys, ListAttachmentStorageKeysHandler)
 

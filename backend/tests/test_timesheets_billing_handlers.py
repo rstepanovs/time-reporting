@@ -20,6 +20,7 @@ from time_reporting.modules.expenses.contracts import (
 from time_reporting.modules.projects.contracts import (
     AddProjectMember,
     BillingItemPreset,
+    BillingUnit,
     ListProjectBillingItems,
 )
 from time_reporting.modules.timesheets.contracts import (
@@ -30,6 +31,7 @@ from time_reporting.modules.timesheets.contracts import (
     BillingPeriodNotReadyError,
     BillingPeriodStatus,
     CurrencyAmountDTO,
+    GetBillingPeriodExportRows,
     GetTimesheetWeek,
     ListBillingPeriods,
     ReopenProjectBillingPeriod,
@@ -906,3 +908,112 @@ async def test_send_to_billing_locks_expense_reports_and_reopen_unlocks_them(
 
     unlocked = await bus.query(GetExpenseReport(report_id=report_id, viewer_id=worker.id))
     assert unlocked.is_locked is False
+
+
+# --- Billing period CSV export ---
+
+
+async def test_get_export_rows_combines_hours_and_approved_expense_lines(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    manager = await make_user(roles=MANAGER)
+    admin = await make_user(roles=ADMIN)
+    worker = await make_user()
+    project = await make_project(manager_id=manager.id)
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
+    item_id = await _normal_hours_item_id(bus, project.id)
+    await _book_and_approve(
+        bus,
+        worker_id=worker.id,
+        admin_id=admin.id,
+        item_id=item_id,
+        entry_date=WEEK_1,
+        week_start=WEEK_1,
+    )
+    await _claim_and_approve_expense(
+        bus, worker_id=worker.id, project_id=project.id, reviewer_id=manager.id
+    )
+    await bus.execute(
+        SendProjectMonthToBilling(project_id=project.id, year=2026, month=9, sent_by_id=manager.id)
+    )
+
+    rows = await bus.query(
+        GetBillingPeriodExportRows(project_id=project.id, period_start=date(2026, 9, 1))
+    )
+
+    assert len(rows) == 2
+    hours_row = next(row for row in rows if row.unit is BillingUnit.HOUR)
+    assert hours_row.user_name == worker.name
+    assert hours_row.user_email == worker.email
+    assert hours_row.quantity == Decimal("4")
+    assert hours_row.currency is None
+    expense_row = next(row for row in rows if row.unit is BillingUnit.AMOUNT)
+    assert expense_row.user_name == worker.name
+    assert expense_row.quantity == Decimal("42.50")
+    assert expense_row.currency == project.customer.currency
+    assert expense_row.description == "Taxi"
+
+
+async def test_get_export_rows_excludes_a_report_created_after_the_period_was_sent(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    """A new report for the same project/month can still be created after the period is sent
+    (creation itself isn't blocked by the lock — see ``expenses/CLAUDE.md``); it never contributed
+    to the sent total, so the export must not pick up its (unapproved) lines."""
+    manager = await make_user(roles=MANAGER)
+    admin = await make_user(roles=ADMIN)
+    worker = await make_user()
+    latecomer = await make_user()
+    project = await make_project(manager_id=manager.id)
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=latecomer.id))
+    item_id = await _normal_hours_item_id(bus, project.id)
+    await _book_and_approve(
+        bus,
+        worker_id=worker.id,
+        admin_id=admin.id,
+        item_id=item_id,
+        entry_date=WEEK_1,
+        week_start=WEEK_1,
+    )
+    await bus.execute(
+        SendProjectMonthToBilling(project_id=project.id, year=2026, month=9, sent_by_id=manager.id)
+    )
+
+    purchasing_id = await _purchasing_item_id(bus, project.id)
+    late_report = await bus.execute(
+        CreateExpenseReport(user_id=latecomer.id, project_id=project.id, year=2026, month=9)
+    )
+    await bus.execute(
+        SaveExpenseReportLines(
+            report_id=late_report.id,
+            actor_id=latecomer.id,
+            lines=(
+                ExpenseLineChange(
+                    line_id=None,
+                    billing_item_id=purchasing_id,
+                    expense_date=date(2026, 9, 6),
+                    amount=Decimal("5"),
+                    description="Too late",
+                ),
+            ),
+        )
+    )
+
+    rows = await bus.query(
+        GetBillingPeriodExportRows(project_id=project.id, period_start=date(2026, 9, 1))
+    )
+
+    assert len(rows) == 1
+    assert rows[0].unit is BillingUnit.HOUR
+
+
+async def test_get_export_rows_raises_for_an_unsent_period(
+    bus: Bus, make_project: ProjectFactory
+) -> None:
+    project = await make_project()
+
+    with pytest.raises(BillingPeriodNotFoundError):
+        await bus.query(
+            GetBillingPeriodExportRows(project_id=project.id, period_start=date(2026, 9, 1))
+        )

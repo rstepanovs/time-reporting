@@ -275,3 +275,12 @@ export async function reopenProjectBillingPeriod(params: {
   );
   if (!response.ok) throw await timesheetAwareError(response);
 }
+
+/** Relative download URL for a sent billing period's CSV export; used directly as an
+ * `<a href download>`, not fetched via `api` — following `backupDownloadUrl`. */
+export function billingPeriodExportUrl(projectId: string, periodStart: string): string {
+  return (
+    `/api/v1/timesheets/billing-periods/${encodeURIComponent(projectId)}` +
+    `/${encodeURIComponent(periodStart)}/export.csv`
+  );
+}

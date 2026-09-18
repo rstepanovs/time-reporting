@@ -12,6 +12,7 @@ from uuid import UUID
 
 from time_reporting.core.cqrs import Command, Query
 from time_reporting.modules.projects.contracts import (
+    BillingUnit,
     ProjectBillingItemDTO,
     ProjectDTO,
     ProjectOptionDTO,
@@ -501,6 +502,34 @@ class ListBillingPeriods(Query[BillingPeriodPageDTO]):
     month_to: date | None = None
     limit: int
     offset: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class BillingPeriodExportRowDTO:
+    """One row of a sent billing period's CSV export — either a time entry or an approved
+    expense-report line, shaped identically so the two sources appear in one sheet.
+    ``currency``/``vendor``/``document_no`` are only set for an expense-line row; a time-entry row
+    carries ``note`` (if any) as ``description`` instead."""
+
+    entry_date: date
+    user_name: str
+    user_email: str
+    billing_item_name: str
+    unit: BillingUnit
+    quantity: Decimal
+    currency: str | None
+    description: str | None
+    vendor: str | None
+    document_no: str | None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetBillingPeriodExportRows(Query[tuple[BillingPeriodExportRowDTO, ...]]):
+    """The rows behind a sent billing period's CSV export. Raises ``BillingPeriodNotFoundError`` if
+    no sent period exists for ``project_id``/``period_start``."""
+
+    project_id: UUID
+    period_start: date
 
 
 # --- Commands ---

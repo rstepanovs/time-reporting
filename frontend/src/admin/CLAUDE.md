@@ -27,8 +27,10 @@ Administration section. Backend: `modules/admin`.
 - `AdminCalendarPage` — non-working days, via `calendar/`.
 - `AdminBillingPage` (`/admin/billing`) — every sent billing period (customer/project/month-range
   filters, paginated), a per-row "Reopen…" confirm modal reusing `timesheets/hooks.ts`'s
-  `useReopenProjectBillingPeriod` (same mutation and modal shape as `pages/TeamPage.tsx`'s). Backed
-  by `timesheets/`, not an area of its own.
+  `useReopenProjectBillingPeriod` (same mutation and modal shape as `pages/TeamPage.tsx`'s), plus a
+  per-row "CSV" link (`timesheets/api.ts`'s `billingPeriodExportUrl`, a plain `<a href download>`
+  like `backupDownloadUrl`) to that period's time-entry/expense-line export. Backed by
+  `timesheets/`, not an area of its own.
 - `AdminAuditPage` (`/admin/audit`) — the administrative audit log: action/entity type/actor/date
   range filters, a paginated table (time, actor, action, summary) with each row expandable to show
   its raw `details` JSON. Backed by `audit/`.

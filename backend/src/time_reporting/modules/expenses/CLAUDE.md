@@ -98,7 +98,11 @@ dependency direction between the two modules is `timesheets` → `expenses`, nev
 `GetMonthExpenseTotals(user_id, year, month)` — a user's claimed amount per currency across *every*
 report for the month, any status — is the other `timesheets` → `expenses` read, feeding
 `timesheets.contracts.MonthTimeSummaryDTO.expenses` on the employee dashboard (the `amount`-unit
-`TimeEntry` rows that field used to sum no longer exist).
+`TimeEntry` rows that field used to sum no longer exist). `ListProjectMonthExpenseReportLines(
+project_id, period_start)` is a fourth `timesheets` → `expenses` read, line-level rather than
+per-report: only *approved* reports' lines are returned (a report created for the same
+project/month after the period was already sent is never approved against it and is excluded), for
+`timesheets`' billing-period CSV export (`GetBillingPeriodExportRows`).
 
 ## HTTP API (`router.py`, `schemas.py`)
 

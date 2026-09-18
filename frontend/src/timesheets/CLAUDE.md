@@ -10,9 +10,12 @@ Backend: `modules/timesheets` (workflow statuses, locks and billing readiness ar
   `getMonthTimeSummary`/`getWeeklyHours`, the manager team dashboard's `getTeamMonthOverview` (also
   `scope`-aware) and `sendProjectMonthToBilling`/`reopenProjectBillingPeriod`, admin-only
   `listBillingPeriods` (project/customer/month-range filters, pagination — backs
-  `pages/admin/AdminBillingPage.tsx`), plus `TimesheetRuleError` covering 400/403/404 and
-  `TimesheetConflictError` for a 409 — the week's status changed underneath the caller, or a billing
-  period isn't ready yet / was already sent — both with the backend's `detail` as the message.
+  `pages/admin/AdminBillingPage.tsx`) and `billingPeriodExportUrl(projectId, periodStart)` (a plain
+  relative URL for that page's per-row "CSV" `<a href download>`, never fetched through `api` —
+  following `system/api.ts`'s `backupDownloadUrl`), plus `TimesheetRuleError` covering 400/403/404
+  and `TimesheetConflictError` for a 409 — the week's status changed underneath the caller, or a
+  billing period isn't ready yet / was already sent — both with the backend's `detail` as the
+  message.
 - `hooks.ts` — `timesheetKeys` + `useTimesheetWeek`/`useTimesheetOptions`/`useMonthCalendar`/
   `useYearHours`/`useMonthTimeSummary`/`useWeeklyHours`/`useSubmittedTimesheetWeeks`/
   `useTeamMonthOverview`/`useBillingPeriods` queries and `useSaveTimesheetWeek`/
