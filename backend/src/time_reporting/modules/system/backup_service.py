@@ -1,12 +1,14 @@
-"""`pg_dump`/`pg_restore` orchestration. No ORM/session use — backups run as a subprocess against
-the same database the app's `DATABASE_URL` points at, entirely independent of the CQRS bus's
-request-scoped session.
+"""`pg_dump`/`pg_restore` orchestration, plus a matching tar archive of expense-report attachments
+taken alongside each dump. No ORM/session use — backups run as a subprocess against the same
+database the app's `DATABASE_URL` points at, entirely independent of the CQRS bus's request-scoped
+session.
 """
 
 import asyncio
 import logging
 import os
 import re
+import tarfile
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -23,8 +25,13 @@ from time_reporting.modules.system.contracts import (
 logger = logging.getLogger(__name__)
 
 _TIMESTAMP_FORMAT = "%Y%m%dT%H%M%SZ"
-_FILENAME_PATTERN = re.compile(
+_DUMP_PATTERN = re.compile(
     r"^time-reporting-(?P<timestamp>\d{8}T\d{6}Z)-(?P<revision>[0-9a-f]{12}|unknown)\.dump$"
+)
+_ATTACHMENTS_SUFFIX = "-attachments.tar.gz"
+_ARCHIVE_PATTERN = re.compile(
+    r"^time-reporting-(?P<timestamp>\d{8}T\d{6}Z)-(?P<revision>[0-9a-f]{12}|unknown)"
+    r"-attachments\.tar\.gz$"
 )
 _LOCK_FILE_NAME = ".backup.lock"
 # Kept out of the raised exception (which the API returns to the client) but logged in full up to
@@ -33,10 +40,12 @@ _STDERR_TAIL_CHARS = 4000
 
 
 def parse_backup_filename(name: str) -> tuple[datetime, str | None] | None:
-    """The dump's creation time and recorded revision, or `None` if `name` isn't a backup file
+    """The dump's creation time and recorded revision, or `None` if `name` isn't a `.dump` file
     name this service produced — also doubles as the name-validation check against path
-    traversal, since a valid match can only ever resolve inside `backup_dir`."""
-    match = _FILENAME_PATTERN.fullmatch(name)
+    traversal, since a valid match can only ever resolve inside `backup_dir`. Does not match the
+    attachments archive; see `_parse_any_backup_filename` for a download/delete path that accepts
+    either."""
+    match = _DUMP_PATTERN.fullmatch(name)
     if match is None:
         return None
     created_at = datetime.strptime(match.group("timestamp"), _TIMESTAMP_FORMAT).replace(tzinfo=UTC)
@@ -44,9 +53,19 @@ def parse_backup_filename(name: str) -> tuple[datetime, str | None] | None:
     return created_at, None if revision == "unknown" else revision
 
 
+def _parse_any_backup_filename(name: str) -> bool:
+    """Whether `name` is a `.dump` or `-attachments.tar.gz` file name this service produced — the
+    validation `path_for` uses, since either half of a backup pair may be requested on its own."""
+    return _DUMP_PATTERN.fullmatch(name) is not None or _ARCHIVE_PATTERN.fullmatch(name) is not None
+
+
 def _build_filename(created_at: datetime, revision: str | None) -> str:
     timestamp = created_at.strftime(_TIMESTAMP_FORMAT)
     return f"time-reporting-{timestamp}-{revision or 'unknown'}.dump"
+
+
+def _archive_name_for(dump_name: str) -> str:
+    return dump_name.removesuffix(".dump") + _ATTACHMENTS_SUFFIX
 
 
 def _libpq_connection(database_url: str) -> tuple[str, str | None]:
@@ -61,6 +80,7 @@ def _libpq_connection(database_url: str) -> tuple[str, str | None]:
 class BackupService:
     def __init__(self, settings: Settings) -> None:
         self._backup_dir = Path(settings.backup_dir)
+        self._attachment_dir = Path(settings.attachment_dir)
         self._retention_count = settings.backup_retention_count
         self._timeout_seconds = settings.backup_timeout_seconds
         self._dsn, self._password = _libpq_connection(settings.database_url)
@@ -91,13 +111,28 @@ class BackupService:
             tmp_path.unlink(missing_ok=True)
             raise
         tmp_path.rename(final_path)
+        attachments_size_bytes = self._archive_attachments(name)
         self.prune()
         return BackupInfoDTO(
             name=name,
             created_at=created_at,
             revision=revision,
             size_bytes=final_path.stat().st_size,
+            attachments_size_bytes=attachments_size_bytes,
         )
+
+    def _archive_attachments(self, dump_name: str) -> int | None:
+        """Write `<dump_name minus .dump>-attachments.tar.gz` from `attachment_dir`, returning its
+        size — or `None` without writing anything if the directory doesn't exist yet (a fresh
+        install that has never received an upload)."""
+        if not self._attachment_dir.is_dir():
+            return None
+        archive_path = self._backup_dir / _archive_name_for(dump_name)
+        tmp_path = self._backup_dir / f".{archive_path.name}.tmp"
+        with tarfile.open(tmp_path, "w:gz") as tar:
+            tar.add(self._attachment_dir, arcname=".")
+        tmp_path.rename(archive_path)
+        return archive_path.stat().st_size
 
     def list(self) -> tuple[BackupInfoDTO, ...]:
         if not self._backup_dir.is_dir():
@@ -108,12 +143,16 @@ class BackupService:
             if parsed is None:
                 continue
             created_at, revision = parsed
+            archive_path = self._backup_dir / _archive_name_for(path.name)
             backups.append(
                 BackupInfoDTO(
                     name=path.name,
                     created_at=created_at,
                     revision=revision,
                     size_bytes=path.stat().st_size,
+                    attachments_size_bytes=(
+                        archive_path.stat().st_size if archive_path.is_file() else None
+                    ),
                 )
             )
         backups.sort(key=lambda backup: backup.created_at, reverse=True)
@@ -126,9 +165,10 @@ class BackupService:
     def prune(self) -> None:
         for stale in self.list()[self._retention_count :]:
             (self._backup_dir / stale.name).unlink(missing_ok=True)
+            (self._backup_dir / _archive_name_for(stale.name)).unlink(missing_ok=True)
 
     def path_for(self, name: str) -> Path:
-        if parse_backup_filename(name) is None:
+        if not _parse_any_backup_filename(name):
             raise BackupNotFoundError(name)
         path = self._backup_dir / name
         if not path.is_file():
@@ -146,6 +186,29 @@ class BackupService:
             self._dsn,
             str(path),
         )
+        archive_path = self._backup_dir / _archive_name_for(path.name)
+        if not archive_path.is_file():
+            # Not a hard failure: an `expense_attachments` row whose file is missing already
+            # degrades gracefully (`AttachmentNotFoundError`), the same way a manually deleted
+            # upload would — see `expenses.CLAUDE.md`'s "File writes are never transactional".
+            logger.warning(
+                "No attachments archive found for %s; any expense_attachments rows in the "
+                "restored database may reference missing files",
+                path.name,
+            )
+            return
+        self._attachment_dir.mkdir(parents=True, exist_ok=True)
+        # A restore replaces the whole database, so it replaces the attachment directory too,
+        # rather than merging archived files over whatever happened to be on disk beforehand.
+        for existing in self._attachment_dir.iterdir():
+            if existing.is_dir():
+                for child in existing.iterdir():
+                    child.unlink()
+                existing.rmdir()
+            else:
+                existing.unlink()
+        with tarfile.open(archive_path, "r:gz") as tar:
+            tar.extractall(self._attachment_dir, filter="data")
 
     async def _run(self, *args: str) -> None:
         env = dict(os.environ)

@@ -61,6 +61,7 @@ class BackupResponse(BaseModel):
     created_at: datetime
     revision: str | None
     size_bytes: int
+    attachments_size_bytes: int | None
 
 
 class BackupListResponse(BaseModel):

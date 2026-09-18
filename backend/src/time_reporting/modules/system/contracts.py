@@ -71,6 +71,9 @@ class BackupInfoDTO:
     # made before the database had ever been migrated.
     revision: str | None
     size_bytes: int
+    # The size of this backup's `<name minus .dump>-attachments.tar.gz`, or `None` if it has none
+    # (an attachment directory didn't exist yet when this dump was taken).
+    attachments_size_bytes: int | None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

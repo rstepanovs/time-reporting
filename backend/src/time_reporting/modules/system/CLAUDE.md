@@ -38,10 +38,20 @@ configuration, for `/admin/system/*` and `/admin/backups/*` (both `AdminDep` onl
   - `list()` / `last_backup_at()` read `backup_dir` directly (no index file); `prune()` keeps the
     newest `backup_retention_count`.
   - `path_for(name)` is the only way a name from a URL path parameter becomes a filesystem path:
-    `parse_backup_filename` (also used by `list()`) doubles as validation, since only a name this
-    service could have produced matches the pattern — no path traversal.
-  - `restore(path)` runs `pg_restore --clean --if-exists --single-transaction --no-owner`; CLI-only
-    (`cli.py`'s `restore` command), never exposed over HTTP.
+    `parse_backup_filename` (used by `list()`) or, for the archive half of a pair,
+    `_ARCHIVE_PATTERN` — together `_parse_any_backup_filename` doubles as validation, since only a
+    name this service could have produced matches either pattern — no path traversal.
+  - `create()` also tars `attachment_dir` (the `expenses` module's uploaded receipt/invoice scans
+    — see `expenses/CLAUDE.md`) into `<same timestamp>-<same revision>-attachments.tar.gz` next to
+    the dump, via stdlib `tarfile` (no new dependency), *unless* `attachment_dir` doesn't exist yet
+    (nothing has ever been uploaded) — then `BackupInfoDTO.attachments_size_bytes` is `None` and no
+    second file is written. `prune()` removes a pair together.
+  - `restore(path)` runs `pg_restore --clean --if-exists --single-transaction --no-owner`, then, if
+    `<path minus .dump>-attachments.tar.gz` exists next to it, replaces the whole contents of
+    `attachment_dir` with that archive's (never merges) — a missing archive only logs a warning,
+    it doesn't fail the restore, since a stray `expense_attachments` row pointing at a missing file
+    is a state `expenses` already tolerates. CLI-only (`cli.py`'s `restore` command), never exposed
+    over HTTP.
   - The DSN passed on the command line never carries the password (`_libpq_connection` strips it
     from `database_url` via `sqlalchemy.engine.make_url`); it goes to the subprocess only through
     the `PGPASSWORD` environment variable.

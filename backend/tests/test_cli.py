@@ -194,6 +194,7 @@ def _fake_backup(*, revision: str | None = "abcdef012345") -> BackupInfoDTO:
         created_at=datetime.now(UTC),
         revision=revision,
         size_bytes=1024,
+        attachments_size_bytes=None,
     )
 
 

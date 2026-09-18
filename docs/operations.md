@@ -80,6 +80,12 @@ docker compose up -d
   (`/var/backups/time-reporting` in Compose, the `backups` named volume, shared by `backend`,
   `migrate` and `backup`) as `time-reporting-<UTC timestamp>-<alembic revision>.dump`; only the
   newest `BACKUP_RETENTION_COUNT` (default 14) are kept.
+- Alongside the dump, it also writes `time-reporting-<same timestamp>-<same
+  revision>-attachments.tar.gz` — a tar of `attachment_dir` (the expense-report receipt/invoice
+  scans, `/var/lib/time-reporting/attachments` in Compose, the `attachments` volume) — so one
+  backup operation covers both, kept and pruned together. Skipped (no second file, and
+  `attachments_size_bytes` is `null` in the API/CLI output) only if `attachment_dir` has never
+  been created, i.e. no attachment has ever been uploaded.
 - The `backup` service runs it on a loop, every `BACKUP_INTERVAL_HOURS` (default 24h); `migrate`
   also runs one (`--if-pending-migrations`, skipped if the database isn't migrated yet or is
   already at head) before every upgrade.
@@ -93,14 +99,29 @@ docker compose up -d
     cp /backups/<file> /dest/
   ```
 
+  Remember to also copy the matching `*-attachments.tar.gz`, if one exists.
+
 ## Restore
 
 `time-reporting restore <file> --yes` (`pg_restore --clean --if-exists --single-transaction
---no-owner`) replaces the current database's contents with the backup's. It is **CLI-only**,
-deliberately not exposed over HTTP or from the admin UI — see [Rollback](#rollback) for the full
-sequence (stop `backend` first, so nothing writes mid-restore). Without `--yes` it refuses to run.
-The command also prints the alembic revision recorded in the backup's file name, so you can
-confirm it matches the code you're about to run before continuing.
+--no-owner`) replaces the current database's contents with the backup's, and — if
+`<file minus .dump>-attachments.tar.gz` sits next to it — replaces the whole contents of
+`attachment_dir` with that archive's too. If the archive is missing, the restore still proceeds
+(only a warning is logged); any `expense_attachments` row in the restored database then points at
+a file that doesn't exist, which the app already tolerates (the download/list views just treat it
+as gone, the same as a manually deleted upload). It is **CLI-only**, deliberately not exposed over
+HTTP or from the admin UI — see [Rollback](#rollback) for the full sequence (stop `backend` first,
+so nothing writes mid-restore). Without `--yes` it refuses to run. The command also prints the
+alembic revision recorded in the backup's file name, so you can confirm it matches the code you're
+about to run before continuing.
+
+## Orphaned attachment files
+
+Uploading an expense-report attachment writes its file, then its database row, in that order —
+not one transaction. If a command fails or the process is killed between the two, the file is
+never referenced by any row. `time-reporting prune-attachments` (add `--dry-run` to only list what
+it would remove) deletes every file under `attachment_dir` that no `expense_attachments` row
+references; safe to run at any time, including on a schedule alongside backups.
 
 ## pgAdmin
 
