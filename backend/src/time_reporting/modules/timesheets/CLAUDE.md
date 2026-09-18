@@ -5,13 +5,22 @@ Owns `TimeEntry`, `TimesheetRowComment`, `TimesheetWeek` (status) and `ProjectBi
 Depends on: `projects.contracts` (`ListMemberProjectsWithBillingItems`,
 `ListManagedProjectsWithMembers`, `ListProjects`, `GetProjectsByIds`,
 `GetProjectBillingItemsByIds`), `work_calendar.contracts` (`GetCalendarDays`), `users.contracts`
-(`GetUserById`, `GetUsersByIds`, `UserRole`), `audit.contracts` (`RecordAuditEvent`). Consumed by
-`admin` via `CountTimeEntries`.
+(`GetUserById`, `GetUsersByIds`, `UserRole`), `audit.contracts` (`RecordAuditEvent`),
+`expenses.contracts` (`GetMonthExpenseTotals`, and, from `billing.py`,
+`LockProjectMonthExpenseReports`/`UnlockProjectMonthExpenseReports`/
+`ListProjectMonthExpenseReports` — see "Billing handoff" below). Consumed by `admin` via
+`CountTimeEntries`.
 
 ## Entries and the weekly grid
 
 - `TimeEntry`: at most one row per (user, billing item, date), holding a `quantity` in the billing
-  item's `unit` (hours, days or a money amount) and an optional note.
+  item's `unit` — `hour` or `day` only; `amount` items are rejected
+  (`TimesheetUnitNotAllowedError`) and excluded from `ListTimesheetOptions`/the row picker, since
+  expenses are claimed through the `expenses` module's reports instead. A check constraint
+  (`unit <> 'amount'`) backs this at the database layer; a one-off data migration
+  (`5e5dbf0870c9_move_amount_time_entries_to_expense_.py`) moved every pre-existing `amount` row
+  into an equivalent expense report before adding it — see that migration's own docstring for
+  exactly which status/lock state each row landed in.
 - `project_id` and `unit` are denormalized onto the row from the billing item at write time (never
   changed afterwards) so this module's own queries — summing a user's hours for a day, filtering by
   project — never join into the projects module's tables; both are guarded by `ON DELETE RESTRICT`,
@@ -70,8 +79,12 @@ date) so "expected to date" and "which month is current" stay deterministic in t
   `other_hours`) with a per-project breakdown. `day`/`amount`-unit entries (per diems, expenses)
   aren't part of either query — the dashboard is hours-only.
 - `GetMonthTimeSummary(user_id, year, month, today)` is one month's hours (as `HoursTotalsDTO`) plus
-  the benefits `HoursTotalsDTO` leaves out — `day`-unit entries as `per_diem_days`, `amount`-unit
-  entries summed per customer currency (never combined across currencies) as `expenses`.
+  the benefits `HoursTotalsDTO` leaves out: `day`-unit entries as `per_diem_days`, and
+  `expenses` — summed per customer currency (never combined across currencies) from
+  `expenses.GetMonthExpenseTotals`, *not* from `time_entries` (no `amount`-unit rows exist there
+  anymore). That query counts a user's claimed amount across every one of their reports for the
+  month regardless of status — draft included — mirroring how an entered amount used to show up
+  immediately, before the expenses module's workflow existed.
 - `GetWeeklyHours(user_id, weeks, today)` is `weeks` ISO weeks ending with `today`'s week (oldest
   first, capped at `MAX_WEEKLY_HOURS_WEEKS` = 26, `WeekRangeOutOfBoundsError` outside that) with a
   per-project hour breakdown over the whole range.

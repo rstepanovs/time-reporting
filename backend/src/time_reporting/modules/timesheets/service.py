@@ -41,6 +41,7 @@ from time_reporting.modules.timesheets.contracts import (
     TimesheetBillingItemNotFoundError,
     TimesheetRowClosedError,
     TimesheetRowDTO,
+    TimesheetUnitNotAllowedError,
     TimesheetWeekDTO,
     TimesheetWeekLockedError,
     TimesheetWeekStatus,
@@ -105,7 +106,11 @@ class TimesheetService:
         }
         open_item_ids = frozenset(
             item.id
-            for option in await self._bus.query(ListMemberProjectsWithBillingItems(user_id=user_id))
+            for option in await self._bus.query(
+                ListMemberProjectsWithBillingItems(
+                    user_id=user_id, units=frozenset({BillingUnit.HOUR, BillingUnit.DAY})
+                )
+            )
             for item in option.billing_items
         )
         locked_dates_by_project = await self._locked_dates_by_project(
@@ -400,7 +405,12 @@ class TimesheetService:
     async def _open_items(
         self, user_id: UUID
     ) -> tuple[dict[UUID, ProjectBillingItemDTO], dict[UUID, ProjectDTO]]:
-        options = await self._bus.query(ListMemberProjectsWithBillingItems(user_id=user_id))
+        # `amount` items are claimed only through the expenses module now — see expenses/CLAUDE.md.
+        options = await self._bus.query(
+            ListMemberProjectsWithBillingItems(
+                user_id=user_id, units=frozenset({BillingUnit.HOUR, BillingUnit.DAY})
+            )
+        )
         open_items = {item.id: item for option in options for item in option.billing_items}
         projects_by_item = {
             item.id: option.project for option in options for item in option.billing_items
@@ -413,16 +423,21 @@ class TimesheetService:
         open_items: dict[UUID, ProjectBillingItemDTO],
     ) -> None:
         """Raise if any of ``billing_item_ids`` isn't currently open for this user: not found at
-        all (``TimesheetBillingItemNotFoundError``), or found but closed
+        all (``TimesheetBillingItemNotFoundError``), an ``amount`` item
+        (``TimesheetUnitNotAllowedError`` — claimed through the expenses module instead, and would
+        otherwise surface as the more confusing "not open" below), or found but closed
         (``TimesheetRowClosedError`` — archived, or the user isn't a member anymore)."""
         unknown_ids = billing_item_ids - open_items.keys()
         if not unknown_ids:
             return
         existing = await self._bus.query(GetProjectBillingItemsByIds(billing_item_ids=unknown_ids))
-        existing_ids = frozenset(item.id for item in existing)
+        existing_by_id = {item.id: item for item in existing}
         for billing_item_id in unknown_ids:
-            if billing_item_id not in existing_ids:
+            item = existing_by_id.get(billing_item_id)
+            if item is None:
                 raise TimesheetBillingItemNotFoundError(billing_item_id)
+            if item.unit is BillingUnit.AMOUNT:
+                raise TimesheetUnitNotAllowedError(billing_item_id)
             raise TimesheetRowClosedError(billing_item_id)
 
     async def _apply_changes(

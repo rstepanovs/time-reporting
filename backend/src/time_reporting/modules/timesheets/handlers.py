@@ -10,6 +10,7 @@ from uuid import UUID
 
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.projects.contracts import (
+    BillingUnit,
     GetProjectsByIds,
     ListManagedProjectsWithMembers,
     ListMemberProjectsWithBillingItems,
@@ -77,7 +78,12 @@ class ListTimesheetOptionsHandler:
         self._bus = bus
 
     async def handle(self, query: ListTimesheetOptions) -> tuple[ProjectOptionDTO, ...]:
-        return await self._bus.query(ListMemberProjectsWithBillingItems(user_id=query.user_id))
+        # `amount` items are claimed only through the expenses module now — see expenses/CLAUDE.md.
+        return await self._bus.query(
+            ListMemberProjectsWithBillingItems(
+                user_id=query.user_id, units=frozenset({BillingUnit.HOUR, BillingUnit.DAY})
+            )
+        )
 
 
 class CountTimeEntriesHandler:

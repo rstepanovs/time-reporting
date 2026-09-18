@@ -9,6 +9,7 @@ from time_reporting.core.cqrs import Bus
 from time_reporting.modules.projects.contracts import (
     AddProjectMember,
     BillingItemPreset,
+    BillingUnit,
     ListProjectBillingItems,
     UpdateProject,
     UpdateProjectBillingItem,
@@ -33,6 +34,7 @@ from time_reporting.modules.timesheets.contracts import (
     TimeEntryChange,
     TimesheetBillingItemNotFoundError,
     TimesheetRowClosedError,
+    TimesheetUnitNotAllowedError,
     TimesheetWeekLockedError,
     TimesheetWeekStatus,
     WeekStartNotMondayError,
@@ -354,7 +356,7 @@ async def test_save_week_rejects_out_of_range_day_quantity(
         )
 
 
-async def test_save_week_allows_amount_with_no_upper_bound(
+async def test_save_week_rejects_an_amount_item(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
     user = await make_user()
@@ -363,19 +365,31 @@ async def test_save_week_allows_amount_with_no_upper_bound(
     items = await bus.query(ListProjectBillingItems(project_id=project.id))
     expense_item = next(i for i in items if i.preset == BillingItemPreset.OTHER_EXPENSES)
 
-    updated = await bus.execute(
-        SaveTimesheetWeek(
-            user_id=user.id,
-            week_start=A_MONDAY,
-            changes=(
-                TimeEntryChange(
-                    billing_item_id=expense_item.id, date=A_MONDAY, quantity=Decimal("999.99")
+    with pytest.raises(TimesheetUnitNotAllowedError):
+        await bus.execute(
+            SaveTimesheetWeek(
+                user_id=user.id,
+                week_start=A_MONDAY,
+                changes=(
+                    TimeEntryChange(
+                        billing_item_id=expense_item.id, date=A_MONDAY, quantity=Decimal("999.99")
+                    ),
                 ),
-            ),
+            )
         )
-    )
-    row = next(r for r in updated.rows if r.billing_item.id == expense_item.id)
-    assert row.entries[0].quantity == Decimal("999.99")
+
+
+async def test_list_timesheet_options_excludes_amount_items(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    user = await make_user()
+    project = await make_project()
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=user.id))
+
+    options = await bus.query(ListTimesheetOptions(user_id=user.id))
+
+    units = {item.unit for option in options for item in option.billing_items}
+    assert BillingUnit.AMOUNT not in units
 
 
 async def test_save_week_rejects_more_than_24_hours_on_one_day(

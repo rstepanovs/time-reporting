@@ -170,6 +170,26 @@ class ListProjectMonthExpenseReports(Query[tuple[ExpenseReportSummaryDTO, ...]])
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class ExpenseCurrencyTotalDTO:
+    currency: str
+    amount: Decimal
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetMonthExpenseTotals(Query[tuple[ExpenseCurrencyTotalDTO, ...]]):
+    """``user_id``'s total claimed amount per currency across *all* their reports (any status) for
+    ``year``/``month`` — one report can only ever hold one currency (its project's), but a user can
+    have several reports (different projects, possibly different currencies) in the same month.
+    Every status counts, not just ``approved``: mirrors the pre-expenses-module behavior where an
+    entered amount showed up in the employee dashboard's running total immediately, before any
+    workflow existed. Used by ``timesheets.contracts.MonthTimeSummaryDTO.expenses``."""
+
+    user_id: UUID
+    year: int
+    month: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class AttachmentFileDTO:
     """Enough for the router to stream an attachment back as a ``FileResponse``. Unlike
     ``system.contracts.GetBackupPath`` (whose generated file name already doubles as its own

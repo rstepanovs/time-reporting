@@ -95,6 +95,10 @@ project-month's reports back for its billing readiness rule and totals — the o
 dependency direction between the two modules is `timesheets` → `expenses`, never the reverse.
 `ListSubmittedExpenseReports(manager_id)` backs a manager's approvals list, scoped through
 `projects.ListManagedProjectsWithMembers` exactly like `timesheets.ListSubmittedTimesheetWeeks`.
+`GetMonthExpenseTotals(user_id, year, month)` — a user's claimed amount per currency across *every*
+report for the month, any status — is the other `timesheets` → `expenses` read, feeding
+`timesheets.contracts.MonthTimeSummaryDTO.expenses` on the employee dashboard (the `amount`-unit
+`TimeEntry` rows that field used to sum no longer exist).
 
 ## HTTP API (`router.py`, `schemas.py`)
 

@@ -44,6 +44,7 @@ from time_reporting.modules.timesheets.contracts import (
     TimesheetBillingItemNotFoundError,
     TimesheetProjectNotFoundError,
     TimesheetRowClosedError,
+    TimesheetUnitNotAllowedError,
     TimesheetWeekLockedError,
     WeekRangeOutOfBoundsError,
     WeekStartNotMondayError,
@@ -168,6 +169,7 @@ async def save_timesheet_week(
         EntryDateOutsideWeekError,
         DuplicateChangeError,
         TimesheetRowClosedError,
+        TimesheetUnitNotAllowedError,
         QuantityOutOfRangeError,
         DailyHoursExceededError,
     ) as exc:

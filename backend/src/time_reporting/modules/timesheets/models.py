@@ -32,7 +32,9 @@ class TimeEntry(TimestampMixin, Base):
     module's own queries — filtering by project, or summing a user's hours for a day — never need
     to join into the projects module's tables. ``unit`` reuses the ``billing_unit`` Postgres enum
     already created by the projects module's migration (``create_type=False``): it is the same
-    logical enum, not a new one.
+    logical enum, not a new one. ``amount`` is excluded by a check constraint — expenses are
+    claimed through the ``expenses`` module's reports now, not a timesheet cell; existing
+    ``amount`` rows were moved there by the migration that added the constraint.
     """
 
     __tablename__ = "time_entries"
@@ -44,6 +46,7 @@ class TimeEntry(TimestampMixin, Base):
             name="uq_time_entries_user_id_billing_item_id_entry_date",
         ),
         CheckConstraint("quantity > 0", name="quantity_positive"),
+        CheckConstraint("unit <> 'amount'", name="unit_not_amount"),
         # Serves both a single user's week (user_id + a date range) and, as a prefix, a plain
         # user_id filter; no separate index on user_id alone.
         Index("ix_time_entries_user_id_entry_date", "user_id", "entry_date"),

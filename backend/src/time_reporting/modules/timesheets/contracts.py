@@ -530,8 +530,9 @@ class SaveTimesheetWeek(Command[TimesheetWeekDTO]):
     unchanged (the bus also rolls back the whole command on any exception). Raises
     ``WeekStartNotMondayError``, ``EntryDateOutsideWeekError``, ``DuplicateChangeError``,
     ``TimesheetBillingItemNotFoundError``, ``TimesheetRowClosedError``,
-    ``QuantityOutOfRangeError``, ``DailyHoursExceededError`` or ``TimesheetWeekLockedError`` (the
-    week is submitted or approved).
+    ``TimesheetUnitNotAllowedError`` (an ``amount`` item — claim expenses through the ``expenses``
+    module instead), ``QuantityOutOfRangeError``, ``DailyHoursExceededError`` or
+    ``TimesheetWeekLockedError`` (the week is submitted or approved).
     """
 
     user_id: UUID
@@ -638,6 +639,18 @@ class TimesheetRowClosedError(TimesheetError):
 
     def __init__(self, billing_item_id: UUID) -> None:
         super().__init__(f"Billing item {billing_item_id} is not open for this user")
+        self.billing_item_id = billing_item_id
+
+
+class TimesheetUnitNotAllowedError(TimesheetError):
+    """Raised when a change targets an ``amount``-unit billing item — expenses are claimed through
+    the ``expenses`` module's reports now, not the timesheet grid."""
+
+    def __init__(self, billing_item_id: UUID) -> None:
+        super().__init__(
+            f"Billing item {billing_item_id} is an expense item; claim it through an expense "
+            "report instead"
+        )
         self.billing_item_id = billing_item_id
 
 

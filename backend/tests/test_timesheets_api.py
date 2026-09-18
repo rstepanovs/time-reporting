@@ -195,7 +195,9 @@ async def test_list_timesheet_options_returns_member_projects(
     assert response.status_code == 200
     body = response.json()
     assert [option["project"]["id"] for option in body] == [str(project.id)]
-    assert len(body[0]["billing_items"]) == 6
+    # 6 defaults minus the 2 `amount` ones, claimed through the expenses module now.
+    assert len(body[0]["billing_items"]) == 4
+    assert all(item["unit"] != "amount" for item in body[0]["billing_items"])
 
 
 async def test_worker_can_read_own_month_calendar_and_year_hours(

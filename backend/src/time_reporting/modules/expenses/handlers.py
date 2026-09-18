@@ -3,6 +3,7 @@
 Handlers translate between bus messages and the service/repository and never return ORM entities.
 """
 
+from collections import defaultdict
 from collections.abc import Sequence
 from decimal import Decimal
 
@@ -15,11 +16,13 @@ from time_reporting.modules.expenses.contracts import (
     DeleteExpenseAttachment,
     DeleteExpenseReport,
     ExpenseAttachmentDTO,
+    ExpenseCurrencyTotalDTO,
     ExpenseReportDTO,
     ExpenseReportStatus,
     ExpenseReportSummaryDTO,
     GetAttachmentPath,
     GetExpenseReport,
+    GetMonthExpenseTotals,
     ListAttachmentStorageKeys,
     ListExpenseOptions,
     ListMyExpenseReports,
@@ -156,6 +159,37 @@ class ListMyExpenseReportsHandler:
             user_id=query.user_id, period_start=period_start
         )
         return await _summaries(self._bus, self._lines, report_rows)
+
+
+class GetMonthExpenseTotalsHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._bus = bus
+        self._reports = ExpenseReportRepository(bus.session)
+        self._lines = ExpenseReportLineRepository(bus.session)
+
+    async def handle(self, query: GetMonthExpenseTotals) -> tuple[ExpenseCurrencyTotalDTO, ...]:
+        period_start, _period_end = _month_bounds(query.year, query.month)
+        report_rows = await self._reports.list_for_user_period(
+            user_id=query.user_id, period_start=period_start
+        )
+        if not report_rows:
+            return ()
+        projects = await self._bus.query(
+            GetProjectsByIds(project_ids=frozenset(row.project_id for row in report_rows))
+        )
+        currency_by_project = {project.id: project.customer.currency for project in projects}
+        totals = await self._lines.sum_and_count_by_report(frozenset(row.id for row in report_rows))
+
+        by_currency: dict[str, Decimal] = defaultdict(Decimal)
+        for row in report_rows:
+            total, _count = totals.get(row.id, (Decimal("0"), 0))
+            currency = currency_by_project.get(row.project_id)
+            if total and currency is not None:
+                by_currency[currency] += total
+        return tuple(
+            ExpenseCurrencyTotalDTO(currency=currency, amount=amount)
+            for currency, amount in sorted(by_currency.items())
+        )
 
 
 class ListExpenseOptionsHandler:

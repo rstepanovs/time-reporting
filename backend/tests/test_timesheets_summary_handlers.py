@@ -13,6 +13,11 @@ from support import (
 )
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.customers.contracts import CreateCustomer
+from time_reporting.modules.expenses.contracts import (
+    CreateExpenseReport,
+    ExpenseLineChange,
+    SaveExpenseReportLines,
+)
 from time_reporting.modules.projects.contracts import (
     AddProjectBillingItem,
     AddProjectMember,
@@ -67,6 +72,32 @@ async def _book(bus: Bus, user_id: UUID, item_id: UUID, day: date, quantity: Dec
             user_id=user_id,
             week_start=week_start,
             changes=(TimeEntryChange(billing_item_id=item_id, date=day, quantity=quantity),),
+        )
+    )
+
+
+async def _claim_expense(
+    bus: Bus, user_id: UUID, project_id: UUID, item_id: UUID, day: date, amount: Decimal
+) -> None:
+    """Create (or reuse) ``user_id``'s expense report for ``project_id``'s ``day``'s month and add
+    one line — the expenses module's equivalent of ``_book`` for ``amount``-unit items, which
+    ``SaveTimesheetWeek`` no longer accepts."""
+    report = await bus.execute(
+        CreateExpenseReport(user_id=user_id, project_id=project_id, year=day.year, month=day.month)
+    )
+    await bus.execute(
+        SaveExpenseReportLines(
+            report_id=report.id,
+            actor_id=user_id,
+            lines=(
+                ExpenseLineChange(
+                    line_id=None,
+                    billing_item_id=item_id,
+                    expense_date=day,
+                    amount=amount,
+                    description="Test expense",
+                ),
+            ),
         )
     )
 
@@ -391,15 +422,21 @@ async def test_month_time_summary_groups_expenses_by_currency(
         bus, gbp_project.id, BillingItemPreset.PURCHASING_EXPENSES
     )
 
-    await _book(bus, user.id, eur_expense_id, date(2026, 9, 1), Decimal("120.00"))
-    await _book(bus, user.id, gbp_expense_id, date(2026, 9, 2), Decimal("50.00"))
+    await _claim_expense(
+        bus, user.id, eur_project.id, eur_expense_id, date(2026, 9, 1), Decimal("120.00")
+    )
+    await _claim_expense(
+        bus, user.id, gbp_project.id, gbp_expense_id, date(2026, 9, 2), Decimal("50.00")
+    )
     # A second EUR expense on a different project should add to the same currency total.
     other_eur_project = await make_project(customer_id=eur_customer_id)
     await bus.execute(AddProjectMember(project_id=other_eur_project.id, user_id=user.id))
     other_eur_expense_id = await _billing_item_id(
         bus, other_eur_project.id, BillingItemPreset.PURCHASING_EXPENSES
     )
-    await _book(bus, user.id, other_eur_expense_id, date(2026, 9, 3), Decimal("30.00"))
+    await _claim_expense(
+        bus, user.id, other_eur_project.id, other_eur_expense_id, date(2026, 9, 3), Decimal("30.00")
+    )
 
     summary = await bus.query(
         GetMonthTimeSummary(user_id=user.id, year=YEAR, month=MONTH, today=TODAY)
