@@ -103,22 +103,30 @@ The Administration section (`admin`) is `admin/AdminShortcutsCard.tsx`, document
 
 - `TeamScopeToggle` — "My projects"/"All", available to any manager. URL-backed (`?scope=`) on
   `/approvals` and `/team`, local state on the dashboard.
-- `pages/ApprovalsPage.tsx` (`/approvals`) lists weeks awaiting review via
-  `useSubmittedTimesheetWeeks` narrowed by the scope, each row linking to `/timesheet?week=&user=`.
+- `pages/ApprovalsPage.tsx` (`/approvals`) is a Mantine `Tabs` (URL-backed `?tab=timesheets|
+  expenses`, default `timesheets`) over two independent lists, the one `TeamScopeToggle` applying
+  to both: "Timesheets" lists weeks awaiting review via `useSubmittedTimesheetWeeks` narrowed by
+  the scope, each row linking to `/timesheet?week=&user=`; "Expenses" is the same for expense
+  reports via `expenses.useSubmittedExpenseReports`, each row linking to `/expenses/:reportId` —
+  see `expenses/CLAUDE.md`. Approve/return themselves happen on the target page
+  (`TimesheetGrid`/`ExpenseReportPage`), not on this list.
 - The dashboard's "My team" section (`manager` only), driven by `useTeamMonthOverview` for the
   current month:
   - `TeamTimesheetsCard.tsx` — awaiting-approval/returned/not-submitted counts, linking to
     `/approvals?scope=`.
-  - `ProjectBillingCard.tsx` — each managed project's hours, weeks-approved x/y and billing status
-    for a ‹›-navigable month (previous month during a month's first 10 days, current month after),
-    with a "Send to billing" button behind a confirming modal for a `ready` project.
+  - `ProjectBillingCard.tsx` — each managed project's hours, weeks-approved x/y (plus a blocking
+    expense-report count when `blocking_reports > 0`) and billing status for a ‹›-navigable month
+    (previous month during a month's first 10 days, current month after), with a "Send to billing"
+    button behind a confirming modal for a `ready` project.
   - `TeamStaffCard.tsx` — everyone on the manager's projects, deduplicated across projects, hours
     reported this month vs. expected with a warning icon/tooltip, linking to `/timesheet?week=&user=`
     for the current week; footer "Team overview →" to `/team`.
 - `pages/TeamPage.tsx` (`/team`, nav item right after Approvals) is the fuller view: the scope toggle
   and a `?month=YYYY-MM` navigator like `/hours`, then per managed project a header (customer/name,
-  hours, weeks approved x/y, a billing status badge, the same "Send to billing" modal when `ready`
-  or, once `sent`, an admin-only "Reopen" behind its own confirming modal) and `TeamWeekMatrix.tsx`
-  (presentational: members × the month's ISO weeks, each cell a status badge plus that member's hours
-  on the project that week linking to `/timesheet?week=&user=`, a week outside the queried month
-  marked with `*`, a warning icon/tooltip per member).
+  hours, weeks approved x/y plus the same blocking-report count, a billing status badge, the same
+  "Send to billing" modal when `ready` or, once `sent`, an admin-only "Reopen" behind its own
+  confirming modal) and `TeamWeekMatrix.tsx` (presentational: members × the month's ISO weeks, each
+  cell a status badge plus that member's hours on the project that week linking to
+  `/timesheet?week=&user=`, a week outside the queried month marked with `*`, a warning icon/tooltip
+  per member). Neither view lists the project's expense reports themselves — only the blocking
+  count; see the "Expenses" tab of `/approvals` or `/expenses` for the reports.

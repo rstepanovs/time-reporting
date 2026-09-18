@@ -153,6 +153,8 @@ function ProjectSection({
           <Text size="xs" c="dimmed">
             {formatHours(billing.hours.total_hours)} h · Weeks{" "}
             {billing.weeks_in_scope - billing.blocking_weeks}/{billing.weeks_in_scope} approved
+            {billing.blocking_reports > 0 &&
+              ` · ${billing.blocking_reports} expense report(s) pending`}
           </Text>
         </div>
         <Group gap="xs">

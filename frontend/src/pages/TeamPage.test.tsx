@@ -150,4 +150,20 @@ describe("TeamPage", () => {
       );
     });
   });
+
+  it("shows a blocking expense-report count next to the blocking weeks", async () => {
+    const overview = {
+      ...testTeamMonthOverview,
+      projects: testTeamMonthOverview.projects.map((project) =>
+        project.project.id === testReadyBillingPeriod.project_id
+          ? { ...project, billing: { ...project.billing, status: "not_ready" as const, blocking_reports: 2 } }
+          : project,
+      ),
+    };
+    vi.mocked(getTeamMonthOverview).mockResolvedValue(overview);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
+    renderApp("/team");
+
+    await screen.findByText(/2 expense report\(s\) pending/);
+  });
 });

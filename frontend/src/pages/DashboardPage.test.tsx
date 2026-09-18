@@ -210,4 +210,20 @@ describe("DashboardPage", () => {
       );
     });
   });
+
+  it("shows a blocking expense-report count on the Billing card", async () => {
+    const overview = {
+      ...testTeamMonthOverview,
+      projects: testTeamMonthOverview.projects.map((project) =>
+        project.project.id === testReadyBillingPeriod.project_id
+          ? { ...project, billing: { ...project.billing, status: "not_ready" as const, blocking_reports: 1 } }
+          : project,
+      ),
+    };
+    vi.mocked(getTeamMonthOverview).mockResolvedValue(overview);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
+    renderApp("/");
+
+    await screen.findByText(/1 expense report\(s\) pending/);
+  });
 });
