@@ -4,8 +4,8 @@ The shared archive-or-delete UI for users, customers and projects, plus the dash
 Administration section. Backend: `modules/admin`.
 
 - `AdminShortcutsCard.tsx` — the dashboard's Administration section for `admin` users: a single
-  `DashboardCard` with link-only shortcuts to Users/Customers/Projects/Calendar/Billing/Audit log/
-  Backups/System status, no data calls.
+  `DashboardCard` with link-only shortcuts to Users/Customers/Projects/Calendar/Billing/Company/
+  Audit log/Backups/System status, no data calls.
 
 - `api.ts` — `getRemovalImpact`/`removeEntity` against `/api/v1/admin/...`, plus
   `RemovalBlockedError` (409, carries `blockers`), `RemovalRuleError` (400) and
@@ -31,6 +31,9 @@ Administration section. Backend: `modules/admin`.
   per-row "CSV" link (`timesheets/api.ts`'s `billingPeriodExportUrl`, a plain `<a href download>`
   like `backupDownloadUrl`) to that period's time-entry/expense-line export. Backed by
   `timesheets/`, not an area of its own.
+- `AdminCompanyPage` (`/admin/company`) — the company profile/settings form (legal identity,
+  address, bank details, invoicing defaults, the `allow_self_review` workflow switch) and a logo
+  upload/preview/remove control. Backed by `company/`, not an area of `admin/` itself.
 - `AdminAuditPage` (`/admin/audit`) — the administrative audit log: action/entity type/actor/date
   range filters, a paginated table (time, actor, action, summary) with each row expandable to show
   its raw `details` JSON. Backed by `audit/`.

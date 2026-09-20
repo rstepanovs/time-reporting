@@ -1,6 +1,7 @@
 import type { AuditEvent, AuditEventPage } from "@/audit/api";
 import type { CurrentUser } from "@/auth/api";
 import type { CalendarDay, NonWorkingDay } from "@/calendar/api";
+import type { CompanySettings } from "@/company/api";
 import type { Customer } from "@/customers/api";
 import type {
   ExpenseAttachment,
@@ -200,6 +201,33 @@ export const testBackup: Backup = {
 export const testBackupList: BackupList = {
   backups: [testBackup],
   last_backup_at: testBackup.created_at,
+};
+
+export const testCompanySettings: CompanySettings = {
+  legal_name: "Acme Consulting AB",
+  org_number: "556000-0000",
+  vat_number: "SE556000000001",
+  address: {
+    street: "Storgatan 1",
+    street2: null,
+    postal_code: "111 22",
+    city: "Stockholm",
+    country: "SE",
+  },
+  email: "billing@acme.example",
+  phone: "+46 70 000 00 00",
+  registered_office: "Stockholm",
+  bankgiro: "123-4567",
+  iban: "SE0000000000000000000000",
+  bic: "ESSESESS",
+  f_tax_approved: true,
+  default_invoice_locale: "sv",
+  late_interest: "Referensränta + 8 %",
+  invoice_number_prefix: "2026-",
+  next_invoice_number: 1,
+  allow_self_review: false,
+  has_logo: false,
+  updated_at: "2026-09-16T10:00:00Z",
 };
 
 export const testNonWorkingDay: NonWorkingDay = {

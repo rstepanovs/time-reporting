@@ -26,6 +26,7 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   "backup.created": "Backup created",
   "expense_report.approved": "Expense report approved",
   "expense_report.returned": "Expense report returned",
+  "company.updated": "Company settings updated",
 };
 
 const ACTION_OPTIONS = (Object.keys(ACTION_LABELS) as AuditAction[]).map((value) => ({
@@ -43,6 +44,7 @@ const ENTITY_TYPE_LABELS: Record<string, string> = {
   billing_period: "Billing period",
   calendar: "Calendar",
   backup: "Backup",
+  company: "Company",
 };
 
 const ENTITY_TYPE_OPTIONS = Object.entries(ENTITY_TYPE_LABELS).map(([value, label]) => ({

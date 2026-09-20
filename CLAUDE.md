@@ -126,6 +126,9 @@ Modules talk to each other exclusively through the in-process CQRS bus in `core/
 - `api/deps.py:BusDep` builds a request-scoped `Bus`; `cli.py` builds one per invocation the same way.
 
 Modules (each documented in its own `CLAUDE.md`):
+- **`company`** — `CompanySettings`: the singleton company profile (legal identity, address, bank
+  details, logo, `allow_self_review`), and gapless invoice numbering. Nothing depends on it, so it
+  registers first in `modules/registry.py`.
 - **`users`** — `User`, access levels (`admin`/`manager`/`accountant`, combinable, on top of the
   implicit "employee" baseline every account has), account management, user directory.
 - **`auth`** — JWT issuing/validation, login/session cookie, route guards (`auth/dependencies.py`).
@@ -158,7 +161,7 @@ owning module's `PATCH` endpoint (`ManagerDep`).
   401, marks the app signed out (sets the `currentUserQueryKey` query data to `null`).
 - **`api/queryClient.ts`** — shared TanStack Query `QueryClient`.
 - **Feature areas** — `auth/`, `customers/`, `users/`, `projects/`, `calendar/`, `timesheets/`,
-  `expenses/`, `admin/`, `system/`, `audit/`: each typically has `api.ts` (typed calls plus the
+  `expenses/`, `company/`, `admin/`, `system/`, `audit/`: each typically has `api.ts` (typed calls plus the
   area's own error classes mapped from HTTP status codes, with the backend's `detail` as the
   message where it's user-facing), `hooks.ts` (a `<area>Keys` query-key factory plus TanStack Query
   queries/mutations) and its modals/components. Each area's `CLAUDE.md` has the details.
@@ -170,14 +173,14 @@ owning module's `PATCH` endpoint (`ManagerDep`).
   params `week`/`user`), `/hours` (`month`), `/expenses` (`month`) and `/expenses/:reportId`,
   `/projects`, `/projects/:projectId`, `/account/password`; `/approvals` and `/team`
   sit under `RequireRole roles={["manager"]}` (any-of, so an admin who is also a manager passes too);
-  `/admin/{users,customers,projects,calendar,billing,audit,backups,status}` sit under `RequireRole
+  `/admin/{users,customers,projects,calendar,billing,company,audit,backups,status}` sit under `RequireRole
   roles={["admin"]}`, with `/admin` redirecting to `/admin/users`.
 - **`components/AppLayout.tsx`** — the signed-in shell: header with the account menu (shows a badge
   per access level the user holds, or "Employee" if none) and an `AppShell.Navbar` (collapsible on
   mobile via a `Burger`) linking to the pages in `pages/` (Dashboard, Timesheet, My hours, Expenses,
   Projects, in that order — plus Approvals then Team, inserted right after Expenses, shown only when
   `canManage(user)`), plus an "Administration" nav group (Users/Customers/Projects/Calendar/Billing/
-  Audit log/Backups/System status) shown only when `isAdmin(user)`.
+  Company/Audit log/Backups/System status) shown only when `isAdmin(user)`.
   `components/DashboardCard.tsx` is the shared frame the dashboard's widget cards render inside
   (title, content, an optional "Details →" style footer link, a highlight tint via
   `data-highlighted`).

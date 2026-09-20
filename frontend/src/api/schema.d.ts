@@ -85,6 +85,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/company": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Company Settings */
+        get: operations["get_company_settings_api_v1_company_get"];
+        /** Update Company Settings */
+        put: operations["update_company_settings_api_v1_company_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/company/logo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Company Logo */
+        get: operations["get_company_logo_api_v1_company_logo_get"];
+        /** Set Company Logo */
+        put: operations["set_company_logo_api_v1_company_logo_put"];
+        post?: never;
+        /** Clear Company Logo */
+        delete: operations["clear_company_logo_api_v1_company_logo_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/me": {
         parameters: {
             query?: never;
@@ -1040,7 +1077,7 @@ export interface components {
          *     add a value (see ``AuditEvent.action`` in ``models.py``).
          * @enum {string}
          */
-        AuditAction: "user.created" | "user.roles_changed" | "user.activated" | "user.deactivated" | "user.password_reset" | "user.deleted" | "customer.archived" | "customer.deleted" | "project.archived" | "project.deleted" | "billing_period.sent" | "billing_period.reopened" | "calendar.public_holidays_imported" | "backup.created" | "expense_report.approved" | "expense_report.returned";
+        AuditAction: "user.created" | "user.roles_changed" | "user.activated" | "user.deactivated" | "user.password_reset" | "user.deleted" | "customer.archived" | "customer.deleted" | "project.archived" | "project.deleted" | "billing_period.sent" | "billing_period.reopened" | "calendar.public_holidays_imported" | "backup.created" | "expense_report.approved" | "expense_report.returned" | "company.updated";
         /** AuditEventPageResponse */
         AuditEventPageResponse: {
             /** Items */
@@ -1299,6 +1336,11 @@ export interface components {
              */
             client_secret?: string | null;
         };
+        /** Body_set_company_logo_api_v1_company_logo_put */
+        Body_set_company_logo_api_v1_company_logo_put: {
+            /** File */
+            file: string;
+        };
         /** CalendarDayHoursResponse */
         CalendarDayHoursResponse: {
             calendar_day: components["schemas"]["CalendarDayResponse"];
@@ -1337,6 +1379,166 @@ export interface components {
             expected_hours: string;
             /** Hours */
             hours: string;
+        };
+        /** CompanyAddressRequest */
+        CompanyAddressRequest: {
+            /**
+             * Street
+             * @default
+             */
+            street: string;
+            /** Street2 */
+            street2?: string | null;
+            /**
+             * Postal Code
+             * @default
+             */
+            postal_code: string;
+            /**
+             * City
+             * @default
+             */
+            city: string;
+            /**
+             * Country
+             * @description ISO 3166-1 alpha-2 country code, or "" if not yet set
+             * @default
+             * @example SE
+             */
+            country: string;
+        };
+        /** CompanyAddressResponse */
+        CompanyAddressResponse: {
+            /** Street */
+            street: string;
+            /** Street2 */
+            street2: string | null;
+            /** Postal Code */
+            postal_code: string;
+            /** City */
+            city: string;
+            /** Country */
+            country: string;
+        };
+        /** CompanySettingsResponse */
+        CompanySettingsResponse: {
+            /** Legal Name */
+            legal_name: string;
+            /** Org Number */
+            org_number: string;
+            /** Vat Number */
+            vat_number: string;
+            address: components["schemas"]["CompanyAddressResponse"];
+            /** Email */
+            email: string;
+            /** Phone */
+            phone: string;
+            /** Registered Office */
+            registered_office: string;
+            /** Bankgiro */
+            bankgiro: string;
+            /** Iban */
+            iban: string;
+            /** Bic */
+            bic: string;
+            /** F Tax Approved */
+            f_tax_approved: boolean;
+            /** Default Invoice Locale */
+            default_invoice_locale: string;
+            /** Late Interest */
+            late_interest: string;
+            /** Invoice Number Prefix */
+            invoice_number_prefix: string;
+            /** Next Invoice Number */
+            next_invoice_number: number;
+            /** Allow Self Review */
+            allow_self_review: boolean;
+            /** Has Logo */
+            has_logo: boolean;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * CompanySettingsUpdateRequest
+         * @description A full replace of the settings row — the admin page always submits the whole form.
+         */
+        CompanySettingsUpdateRequest: {
+            /**
+             * Legal Name
+             * @default
+             */
+            legal_name: string;
+            /**
+             * Org Number
+             * @default
+             */
+            org_number: string;
+            /**
+             * Vat Number
+             * @default
+             */
+            vat_number: string;
+            address?: components["schemas"]["CompanyAddressRequest"];
+            /**
+             * Email
+             * @default
+             */
+            email: string | "";
+            /**
+             * Phone
+             * @default
+             */
+            phone: string;
+            /**
+             * Registered Office
+             * @default
+             */
+            registered_office: string;
+            /**
+             * Bankgiro
+             * @default
+             */
+            bankgiro: string;
+            /**
+             * Iban
+             * @default
+             */
+            iban: string;
+            /**
+             * Bic
+             * @default
+             */
+            bic: string;
+            /**
+             * F Tax Approved
+             * @default false
+             */
+            f_tax_approved: boolean;
+            /** @default sv */
+            default_invoice_locale: components["schemas"]["InvoiceLocale"];
+            /**
+             * Late Interest
+             * @default
+             */
+            late_interest: string;
+            /**
+             * Invoice Number Prefix
+             * @default
+             */
+            invoice_number_prefix: string;
+            /**
+             * Next Invoice Number
+             * @default 1
+             */
+            next_invoice_number: number;
+            /**
+             * Allow Self Review
+             * @default false
+             */
+            allow_self_review: boolean;
         };
         /** CreateExpenseReportRequest */
         CreateExpenseReportRequest: {
@@ -1733,6 +1935,8 @@ export interface components {
             /** Added */
             added: number;
         };
+        /** @enum {string} */
+        InvoiceLocale: "sv" | "en";
         /** MonthCalendarResponse */
         MonthCalendarResponse: {
             user: components["schemas"]["TimesheetUserResponse"];
@@ -2776,6 +2980,146 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    get_company_settings_api_v1_company_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanySettingsResponse"];
+                };
+            };
+        };
+    };
+    update_company_settings_api_v1_company_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompanySettingsUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanySettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_company_logo_api_v1_company_logo_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    set_company_logo_api_v1_company_logo_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_set_company_logo_api_v1_company_logo_put"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanySettingsResponse"];
+                };
+            };
+            /** @description The logo is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The logo type isn't allowed */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clear_company_logo_api_v1_company_logo_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanySettingsResponse"];
+                };
             };
         };
     };

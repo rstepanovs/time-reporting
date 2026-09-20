@@ -7,6 +7,7 @@ import { AdminAuditPage } from "@/pages/admin/AdminAuditPage";
 import { AdminBackupsPage } from "@/pages/admin/AdminBackupsPage";
 import { AdminBillingPage } from "@/pages/admin/AdminBillingPage";
 import { AdminCalendarPage } from "@/pages/admin/AdminCalendarPage";
+import { AdminCompanyPage } from "@/pages/admin/AdminCompanyPage";
 import { AdminCustomersPage } from "@/pages/admin/AdminCustomersPage";
 import { AdminProjectsPage } from "@/pages/admin/AdminProjectsPage";
 import { AdminSystemStatusPage } from "@/pages/admin/AdminSystemStatusPage";
@@ -61,6 +62,7 @@ export const routes: RouteObject[] = [
               { path: "projects", element: <AdminProjectsPage /> },
               { path: "calendar", element: <AdminCalendarPage /> },
               { path: "billing", element: <AdminBillingPage /> },
+              { path: "company", element: <AdminCompanyPage /> },
               { path: "audit", element: <AdminAuditPage /> },
               { path: "backups", element: <AdminBackupsPage /> },
               { path: "status", element: <AdminSystemStatusPage /> },
