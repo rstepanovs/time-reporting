@@ -6,6 +6,7 @@ Depends on: `projects.contracts` (`ListMemberProjectsWithBillingItems`,
 `ListManagedProjectsWithMembers`, `ListProjects`, `GetProjectsByIds`,
 `GetProjectBillingItemsByIds`), `work_calendar.contracts` (`GetCalendarDays`), `users.contracts`
 (`GetUserById`, `GetUsersByIds`, `UserRole`), `audit.contracts` (`RecordAuditEvent`),
+`company.contracts` (`GetCompanySettings`, for the `allow_self_review` check below),
 `expenses.contracts` (`GetMonthExpenseTotals`, and, from `billing.py`,
 `LockProjectMonthExpenseReports`/`UnlockProjectMonthExpenseReports`/
 `ListProjectMonthExpenseReports`/`ListProjectMonthExpenseReportLines` — see "Billing handoff"
@@ -37,9 +38,10 @@ below). Consumed by `admin` via `CountTimeEntries`.
   by a `TimesheetWeek` row keyed `(user_id, week_start)` — no row means `draft`, the status is never
   persisted as `draft`). `can_edit`/`can_submit` are `viewer_id == user_id` and the week is
   `draft`/`returned`, while `can_review` is the viewer holding `manager`, the week being
-  `submitted`/`approved`, and the viewer not being the week's owner — nobody, not even an admin,
-  reviews their own week. None of these three are enforced here — only computed for the caller to
-  render around — the router still owns authorization.
+  `submitted`/`approved`, and either the viewer not being the week's owner or
+  `company.allow_self_review` being on (see "Workflow" below) — nobody reviews their own week
+  otherwise, not even an admin. None of these three are enforced here — only computed for the
+  caller to render around — the router still owns authorization.
 - `SaveTimesheetWeek` applies a batch of cell changes (`quantity=None` deletes a cell) and
   `row_comments` changes (`comment=None`/blank deletes one) as one command: raises
   `TimesheetWeekLockedError` if the week is `submitted`/`approved`, else validates the
@@ -60,7 +62,13 @@ below). Consumed by `admin` via `CountTimeEntries`.
   `ReturnTimesheetWeek` (submitted → approved, or submitted/approved → `returned` with a required
   `comment`, `ManagerDep` at the router) drive the workflow, each raising
   `InvalidWeekStatusTransitionError` outside its allowed source statuses and `SelfReviewError` for
-  anyone — including an admin — reviewing their own week.
+  anyone — including an admin — reviewing their own week. The one exception:
+  `company.GetCompanySettings().allow_self_review` on *and* the reviewer holding `manager` (checked
+  again here, in `_ensure_review_allowed`, since the router's `ManagerDep` alone can't tell a
+  self-review from a regular one) lets a manager approve/return their own week — needed for a
+  one-person company where nobody else can. `ApproveTimesheetWeek`/`ReturnTimesheetWeek` aren't
+  audited either way (see the module-level note above), so a self-review leaves no extra trace
+  here — contrast `expenses`, which is audited and does record it.
 - `ListSubmittedTimesheetWeeks` (oldest submission first, with each week's total `hour`-unit
   quantity via `TimeEntryRepository.sum_hours_by_user_week`, optional `manager_id` for the "my
   projects" scope) backs the frontend's approvals page.

@@ -14,6 +14,7 @@ from time_reporting.core.config import get_settings
 from time_reporting.core.cqrs import Bus
 from time_reporting.db.mixins import utc_now
 from time_reporting.modules.audit.contracts import AuditAction, RecordAuditEvent
+from time_reporting.modules.company.contracts import GetCompanySettings
 from time_reporting.modules.expenses.contracts import (
     AddExpenseAttachment,
     ApproveExpenseReport,
@@ -174,11 +175,15 @@ class ExpenseService:
             and report_row.status in _EDITABLE_STATUSES
             and not is_locked
         )
+        self_review_allowed = False
+        if viewer_id == report_row.user_id:
+            settings = await self._bus.query(GetCompanySettings())
+            self_review_allowed = settings.allow_self_review
         can_review = (
             viewer is not None
             and UserRole.MANAGER in viewer.roles
             and report_row.status in _REVIEWABLE_STATUSES
-            and viewer_id != report_row.user_id
+            and (viewer_id != report_row.user_id or self_review_allowed)
             and not is_locked
         )
 
@@ -279,10 +284,11 @@ class ExpenseService:
         report_row = await self._reports.get(command.report_id)
         if report_row is None:
             raise ExpenseReportNotFoundError(command.report_id)
-        self._ensure_not_self_review(report_row.user_id, command.reviewer_id)
+        await self._ensure_review_allowed(report_row.user_id, command.reviewer_id)
         if report_row.status is not ExpenseReportStatus.SUBMITTED:
             raise InvalidExpenseStatusTransitionError(report_row.id, report_row.status, "approve")
 
+        is_self_review = report_row.user_id == command.reviewer_id
         report_row.status = ExpenseReportStatus.APPROVED
         report_row.reviewed_at = utc_now()
         report_row.reviewed_by_id = command.reviewer_id
@@ -301,6 +307,7 @@ class ExpenseService:
                     f"Approved {project.customer.name} · {project.name} expense report "
                     f"({report_row.period_start:%Y-%m})"
                 ),
+                details={"self_review": True} if is_self_review else None,
             )
         )
 
@@ -313,12 +320,13 @@ class ExpenseService:
         comment = command.comment.strip()
         if not comment:
             raise ExpenseReturnCommentRequiredError()
-        self._ensure_not_self_review(report_row.user_id, command.reviewer_id)
+        await self._ensure_review_allowed(report_row.user_id, command.reviewer_id)
         if report_row.status not in _REVIEWABLE_STATUSES:
             raise InvalidExpenseStatusTransitionError(report_row.id, report_row.status, "return")
         if report_row.locked_at is not None:
             raise ExpenseReportLockedError(report_row.id)
 
+        is_self_review = report_row.user_id == command.reviewer_id
         report_row.status = ExpenseReportStatus.RETURNED
         report_row.reviewed_at = utc_now()
         report_row.reviewed_by_id = command.reviewer_id
@@ -327,6 +335,9 @@ class ExpenseService:
 
         project = await self._bus.query(GetProjectById(project_id=report_row.project_id))
         assert project is not None
+        details: dict[str, object] = {"comment": comment}
+        if is_self_review:
+            details["self_review"] = True
         await self._bus.execute(
             RecordAuditEvent(
                 actor_id=command.reviewer_id,
@@ -337,7 +348,7 @@ class ExpenseService:
                     f"Returned {project.customer.name} · {project.name} expense report "
                     f"({report_row.period_start:%Y-%m})"
                 ),
-                details={"comment": comment},
+                details=details,
             )
         )
 
@@ -429,9 +440,18 @@ class ExpenseService:
             path=path, file_name=attachment.file_name, content_type=attachment.content_type
         )
 
-    @staticmethod
-    def _ensure_not_self_review(user_id: UUID, reviewer_id: UUID) -> None:
-        if reviewer_id == user_id:
+    async def _ensure_review_allowed(self, user_id: UUID, reviewer_id: UUID) -> None:
+        """Nobody reviews their own report — unless ``company.allow_self_review`` is on and the
+        reviewer holds ``manager`` (the router's ``ManagerDep`` normally guarantees the latter, but
+        this is checked here too since a self-review is otherwise indistinguishable from a regular
+        one at this point)."""
+        if reviewer_id != user_id:
+            return
+        settings = await self._bus.query(GetCompanySettings())
+        if not settings.allow_self_review:
+            raise ExpenseSelfReviewError()
+        reviewer = await self._bus.query(GetUserById(user_id=reviewer_id))
+        if reviewer is None or UserRole.MANAGER not in reviewer.roles:
             raise ExpenseSelfReviewError()
 
     async def _get_own_report(self, report_id: UUID, actor_id: UUID) -> ExpenseReport:

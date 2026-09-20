@@ -14,7 +14,9 @@ nothing beyond `audit.contracts` (`RecordAuditEvent`, for `UpdateCompanySettings
   `email`, `phone`, `registered_office`, bank details (`bankgiro`, `iban`, `bic`),
   `f_tax_approved`, `default_invoice_locale` (`"sv"`/`"en"`, see `INVOICE_LOCALES` in
   `contracts.py`), `late_interest` (free text, printed on an invoice as-is), invoice numbering
-  (`invoice_number_prefix`, `next_invoice_number`), `allow_self_review` and the logo. Every text
+  (`invoice_number_prefix`, `next_invoice_number`), `allow_self_review` (read by `timesheets` and
+  `expenses` to let a manager approve/return their own week or report — see their `CLAUDE.md`
+  `Workflow` sections) and the logo. Every text
   field defaults to `""` rather than `NULL` — an empty company profile is a valid, if incomplete,
   state; a future `invoices` module checks completeness before allowing an issue.
 - `GetCompanySettings` → `CompanySettingsDTO` (the logo's *presence* only, as `has_logo`, never its

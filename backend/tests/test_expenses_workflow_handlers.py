@@ -7,6 +7,7 @@ import pytest
 from support import MANAGER, ProjectFactory, UserFactory
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.audit.contracts import AuditAction, ListAuditEvents
+from time_reporting.modules.company.contracts import CompanyAddressDTO, UpdateCompanySettings
 from time_reporting.modules.expenses.contracts import (
     ApproveExpenseReport,
     CreateExpenseReport,
@@ -37,6 +38,30 @@ from time_reporting.modules.users.contracts import UserDTO
 YEAR = 2026
 MONTH = 9
 PERIOD_START = date(2026, 9, 1)
+
+
+async def _enable_self_review(bus: Bus, actor_id: UUID) -> None:
+    await bus.execute(
+        UpdateCompanySettings(
+            actor_id=actor_id,
+            legal_name="",
+            org_number="",
+            vat_number="",
+            address=CompanyAddressDTO(street="", street2=None, postal_code="", city="", country=""),
+            email="",
+            phone="",
+            registered_office="",
+            bankgiro="",
+            iban="",
+            bic="",
+            f_tax_approved=False,
+            default_invoice_locale="sv",
+            late_interest="",
+            invoice_number_prefix="",
+            next_invoice_number=1,
+            allow_self_review=True,
+        )
+    )
 
 
 async def _purchasing_item_id(bus: Bus, project_id: UUID) -> UUID:
@@ -132,6 +157,48 @@ async def test_approve_report_rejects_self_review(
         await bus.execute(ApproveExpenseReport(report_id=report.id, reviewer_id=user.id))
 
 
+async def test_approve_report_self_review_allowed_when_setting_is_on(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    manager = await make_user(roles=MANAGER)
+    project = await make_project()
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=manager.id))
+    await _enable_self_review(bus, manager.id)
+    report = await bus.execute(
+        CreateExpenseReport(user_id=manager.id, project_id=project.id, year=YEAR, month=MONTH)
+    )
+    await bus.execute(SubmitExpenseReport(report_id=report.id, actor_id=manager.id))
+
+    approved = await bus.execute(ApproveExpenseReport(report_id=report.id, reviewer_id=manager.id))
+
+    assert approved.status is ExpenseReportStatus.APPROVED
+
+    events = await bus.query(
+        ListAuditEvents(
+            limit=10,
+            offset=0,
+            action=AuditAction.EXPENSE_REPORT_APPROVED,
+            entity_type="expense_report",
+            entity_id=str(report.id),
+        )
+    )
+    assert events.items[0].details == {"self_review": True}
+
+
+async def test_approve_report_self_review_still_refused_for_a_non_manager_owner(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    user, project = await _member_project(bus, make_project, make_user)
+    await _enable_self_review(bus, user.id)
+    report = await bus.execute(
+        CreateExpenseReport(user_id=user.id, project_id=project.id, year=YEAR, month=MONTH)
+    )
+    await bus.execute(SubmitExpenseReport(report_id=report.id, actor_id=user.id))
+
+    with pytest.raises(ExpenseSelfReviewError):
+        await bus.execute(ApproveExpenseReport(report_id=report.id, reviewer_id=user.id))
+
+
 async def test_approve_report_rejects_draft(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
@@ -212,6 +279,72 @@ async def test_return_report_rejects_self_review(
         await bus.execute(
             ReturnExpenseReport(report_id=report.id, reviewer_id=user.id, comment="Nope")
         )
+
+
+async def test_return_report_self_review_allowed_when_setting_is_on(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    manager = await make_user(roles=MANAGER)
+    project = await make_project()
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=manager.id))
+    await _enable_self_review(bus, manager.id)
+    report = await bus.execute(
+        CreateExpenseReport(user_id=manager.id, project_id=project.id, year=YEAR, month=MONTH)
+    )
+    await bus.execute(SubmitExpenseReport(report_id=report.id, actor_id=manager.id))
+
+    returned = await bus.execute(
+        ReturnExpenseReport(report_id=report.id, reviewer_id=manager.id, comment="Fix this")
+    )
+
+    assert returned.status is ExpenseReportStatus.RETURNED
+
+    events = await bus.query(
+        ListAuditEvents(
+            limit=10,
+            offset=0,
+            action=AuditAction.EXPENSE_REPORT_RETURNED,
+            entity_type="expense_report",
+            entity_id=str(report.id),
+        )
+    )
+    assert events.items[0].details == {"comment": "Fix this", "self_review": True}
+
+
+async def test_return_report_self_review_still_refused_for_a_non_manager_owner(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    user, project = await _member_project(bus, make_project, make_user)
+    await _enable_self_review(bus, user.id)
+    report = await bus.execute(
+        CreateExpenseReport(user_id=user.id, project_id=project.id, year=YEAR, month=MONTH)
+    )
+    await bus.execute(SubmitExpenseReport(report_id=report.id, actor_id=user.id))
+
+    with pytest.raises(ExpenseSelfReviewError):
+        await bus.execute(
+            ReturnExpenseReport(report_id=report.id, reviewer_id=user.id, comment="Nope")
+        )
+
+
+async def test_can_review_reflects_self_review_setting(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    manager = await make_user(roles=MANAGER)
+    project = await make_project()
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=manager.id))
+    report = await bus.execute(
+        CreateExpenseReport(user_id=manager.id, project_id=project.id, year=YEAR, month=MONTH)
+    )
+    await bus.execute(SubmitExpenseReport(report_id=report.id, actor_id=manager.id))
+
+    off_view = await bus.query(GetExpenseReport(report_id=report.id, viewer_id=manager.id))
+    assert off_view.can_review is False
+
+    await _enable_self_review(bus, manager.id)
+
+    on_view = await bus.query(GetExpenseReport(report_id=report.id, viewer_id=manager.id))
+    assert on_view.can_review is True
 
 
 async def test_return_report_also_works_from_approved(

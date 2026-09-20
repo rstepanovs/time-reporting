@@ -234,6 +234,24 @@ describe("ExpenseReportPage", () => {
     });
   });
 
+  it("shows Approve on the viewer's own report when the server allows self-review", async () => {
+    // company.allow_self_review lets a manager approve their own report; the button is gated
+    // purely on the server's can_review flag, not a client-side ownership check.
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
+    vi.mocked(getExpenseReport).mockResolvedValue({
+      ...testExpenseReport,
+      user: { id: testManager.id, name: testManager.name, email: testManager.email },
+      status: "submitted",
+      can_edit: false,
+      can_submit: false,
+      can_review: true,
+    });
+    renderApp(`/expenses/${testExpenseReport.id}`);
+    await screen.findByText("Client dinner");
+
+    expect(screen.getByRole("button", { name: "Approve" })).toBeTruthy();
+  });
+
   it("a manager must enter a comment before returning a report", async () => {
     vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     vi.mocked(getExpenseReport).mockResolvedValue({

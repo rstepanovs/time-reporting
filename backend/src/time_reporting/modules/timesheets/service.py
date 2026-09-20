@@ -11,6 +11,7 @@ from uuid import UUID
 
 from time_reporting.core.cqrs import Bus
 from time_reporting.db.mixins import utc_now
+from time_reporting.modules.company.contracts import GetCompanySettings
 from time_reporting.modules.projects.contracts import (
     BillingUnit,
     GetProjectBillingItemsByIds,
@@ -147,11 +148,15 @@ class TimesheetService:
         # A locked project (sent to billing) can't be returned — a return would be rejected, so
         # hide the review actions entirely rather than let the caller hit a 409.
         is_locked = any(locked_dates_by_project.values())
+        self_review_allowed = False
+        if viewer_id == user_id:
+            settings = await self._bus.query(GetCompanySettings())
+            self_review_allowed = settings.allow_self_review
         can_review = (
             viewer is not None
             and UserRole.MANAGER in viewer.roles
             and status in _REVIEWABLE_STATUSES
-            and viewer_id != user_id
+            and (viewer_id != user_id or self_review_allowed)
             and not is_locked
         )
 
@@ -252,7 +257,7 @@ class TimesheetService:
         _ensure_monday(week_start)
         if await self._bus.query(GetUserById(user_id=command.user_id)) is None:
             raise UserNotFoundError(command.user_id)
-        self._ensure_not_self_review(command.user_id, command.reviewer_id)
+        await self._ensure_review_allowed(command.user_id, command.reviewer_id)
 
         week_row = await self._weeks.get(user_id=command.user_id, week_start=week_start)
         status = week_row.status if week_row is not None else TimesheetWeekStatus.DRAFT
@@ -277,7 +282,7 @@ class TimesheetService:
         comment = command.comment.strip()
         if not comment:
             raise ReturnCommentRequiredError()
-        self._ensure_not_self_review(command.user_id, command.reviewer_id)
+        await self._ensure_review_allowed(command.user_id, command.reviewer_id)
 
         week_row = await self._weeks.get(user_id=command.user_id, week_start=week_start)
         status = week_row.status if week_row is not None else TimesheetWeekStatus.DRAFT
@@ -295,9 +300,18 @@ class TimesheetService:
             user_id=command.user_id, week_start=week_start, viewer_id=command.reviewer_id
         )
 
-    @staticmethod
-    def _ensure_not_self_review(user_id: UUID, reviewer_id: UUID) -> None:
-        if reviewer_id == user_id:
+    async def _ensure_review_allowed(self, user_id: UUID, reviewer_id: UUID) -> None:
+        """Nobody reviews their own week — unless ``company.allow_self_review`` is on and the
+        reviewer holds ``manager`` (the router's ``ManagerDep`` normally guarantees the latter, but
+        this is checked here too since a self-review is otherwise indistinguishable from a regular
+        one at this point)."""
+        if reviewer_id != user_id:
+            return
+        settings = await self._bus.query(GetCompanySettings())
+        if not settings.allow_self_review:
+            raise SelfReviewError()
+        reviewer = await self._bus.query(GetUserById(user_id=reviewer_id))
+        if reviewer is None or UserRole.MANAGER not in reviewer.roles:
             raise SelfReviewError()
 
     async def _reviewer_name(self, week_row: TimesheetWeek | None) -> str | None:

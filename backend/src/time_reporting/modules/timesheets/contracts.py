@@ -585,8 +585,9 @@ class SubmitTimesheetWeek(Command[TimesheetWeekDTO]):
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ApproveTimesheetWeek(Command[TimesheetWeekDTO]):
     """Move ``user_id``'s week from submitted to approved. Raises ``WeekStartNotMondayError``,
-    ``UserNotFoundError``, ``InvalidWeekStatusTransitionError`` or ``SelfReviewError`` (nobody, not
-    even an admin, reviews their own week)."""
+    ``UserNotFoundError``, ``InvalidWeekStatusTransitionError`` or ``SelfReviewError`` (nobody
+    reviews their own week, unless ``company.allow_self_review`` is on and the reviewer holds
+    ``manager``)."""
 
     user_id: UUID
     week_start: date
@@ -597,7 +598,8 @@ class ApproveTimesheetWeek(Command[TimesheetWeekDTO]):
 class ReturnTimesheetWeek(Command[TimesheetWeekDTO]):
     """Move ``user_id``'s week from submitted/approved back to returned, with an explanatory
     ``comment``. Raises ``WeekStartNotMondayError``, ``UserNotFoundError``,
-    ``InvalidWeekStatusTransitionError``, ``SelfReviewError`` or ``ReturnCommentRequiredError``."""
+    ``InvalidWeekStatusTransitionError``, ``SelfReviewError`` (see ``ApproveTimesheetWeek``) or
+    ``ReturnCommentRequiredError``."""
 
     user_id: UUID
     week_start: date

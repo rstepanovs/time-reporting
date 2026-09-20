@@ -39,9 +39,11 @@ there).
 - `/expenses?month=YYYY-MM` — month navigation (the `HoursPage`/`TeamPage` pattern), a table of the
   month's reports (project, line count, total, status badge) linking to `/expenses/:reportId`, and
   a "New report" modal picking a project from `useExpenseOptions`.
-- `/expenses/:reportId` — header with status, period, an "Approve"/"Return…" pair gated on
-  `can_review` (never a client-side role check — a manager viewing their own report never sees
-  them, `ExpenseSelfReviewError`'s frontend counterpart), a "Delete" button for the owner's own
+- `/expenses/:reportId` — header with status, period, an "Approve"/"Return…" pair gated purely on
+  the server's `can_review` (never a client-side "is this my own report" check —
+  `ExpenseSelfReviewError`'s frontend counterpart, and the reason a manager viewing their own
+  report under `company.allow_self_review` sees the buttons with no page code change at all: see
+  `pages/ExpenseReportPage.test.tsx`'s self-review test), a "Delete" button for the owner's own
   `draft` report, and the return comment when `returned`; a "Sent to billing" alert when
   `is_locked`. `ExpenseLinesTable.tsx` holds a local draft (edits keyed by line id, plus a
   temp-id-keyed list for not-yet-saved rows) with an explicit Save/Discard and Submit (behind a

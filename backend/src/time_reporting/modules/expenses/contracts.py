@@ -318,8 +318,8 @@ class SubmitExpenseReport(Command[ExpenseReportDTO]):
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ApproveExpenseReport(Command[ExpenseReportDTO]):
     """Move the report from submitted to approved. Raises ``ExpenseReportNotFoundError``,
-    ``InvalidExpenseStatusTransitionError`` or ``ExpenseSelfReviewError`` (nobody, not even an
-    admin, reviews their own report)."""
+    ``InvalidExpenseStatusTransitionError`` or ``ExpenseSelfReviewError`` (nobody reviews their own
+    report, unless ``company.allow_self_review`` is on and the reviewer holds ``manager``)."""
 
     report_id: UUID
     reviewer_id: UUID

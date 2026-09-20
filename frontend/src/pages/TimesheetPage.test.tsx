@@ -406,6 +406,23 @@ describe("TimesheetPage", () => {
     });
   });
 
+  it("shows Approve on the viewer's own week when the server allows self-review", async () => {
+    // company.allow_self_review lets a manager approve their own week; the button is gated
+    // purely on the server's can_review flag, not a client-side ownership check.
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
+    vi.mocked(getTimesheetWeek).mockResolvedValue({
+      ...testTimesheetWeek,
+      status: "submitted",
+      can_edit: false,
+      can_submit: false,
+      can_review: true,
+    });
+    renderApp("/timesheet");
+    await screen.findByText(testTimesheetRow.billing_item.name);
+
+    expect(screen.getByRole("button", { name: "Approve" })).toBeTruthy();
+  });
+
   it("asks for confirmation before discarding unsaved changes on navigation", async () => {
     vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
     renderApp("/timesheet");

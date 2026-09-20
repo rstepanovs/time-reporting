@@ -7,8 +7,9 @@ report as a whole.
 
 Depends on `projects.contracts` (`ListMemberProjectsWithBillingItems` with
 `units={BillingUnit.AMOUNT}`, `GetProjectById`, `GetProjectsByIds`, `GetProjectBillingItemsByIds`,
-`ListManagedProjectsWithMembers`), `users.contracts` (`GetUserById`, `GetUsersByIds`) and
-`audit.contracts` (`RecordAuditEvent`). Must never depend on `timesheets.contracts` — the billing
+`ListManagedProjectsWithMembers`), `users.contracts` (`GetUserById`, `GetUsersByIds`),
+`audit.contracts` (`RecordAuditEvent`) and `company.contracts` (`GetCompanySettings`, for the
+`allow_self_review` check below). Must never depend on `timesheets.contracts` — the billing
 handoff runs the dependency the other way (see "Billing handoff and locking" below).
 
 ## Reports and lines
@@ -44,12 +45,18 @@ handoff runs the dependency the other way (see "Billing handoff and locking" bel
 
 `ExpenseReportStatus`: `draft` → `submitted` → `approved`/`returned`, the same shape and rules as
 `timesheets.TimesheetWeekStatus`: any manager may approve/return any report, never their own
-(`ExpenseSelfReviewError`); `ReturnExpenseReport` works from either `submitted` or `approved` and
+(`ExpenseSelfReviewError`) — unless `company.GetCompanySettings().allow_self_review` is on *and*
+the reviewer holds `manager` (checked again in `_ensure_review_allowed`, since the router's
+`ManagerDep` alone can't tell a self-review from a regular one; needed for a one-person company
+where nobody else can review); `ReturnExpenseReport` works from either `submitted` or `approved` and
 requires a non-empty `comment`, but is refused once the report is locked
 (`ExpenseReportLockedError` — un-approving hours already sent to billing isn't allowed). Only
 `ApproveExpenseReport` and `ReturnExpenseReport` are audited (`expense_report.approved` /
 `expense_report.returned`, `entity_id` the report's own id) — creating, saving lines, submitting and
-attachment writes are not, mirroring `timesheets`, which only audits the billing handoff itself.
+attachment writes are not, mirroring `timesheets`, which only audits the billing handoff itself. A
+self-review's audit event carries `details.self_review = true` (merged alongside `details.comment`
+for a return) so the log distinguishes it from an ordinary review — contrast `timesheets`, whose
+approve/return aren't audited at all.
 
 `get_report` computes `can_edit`/`can_submit`/`can_review`/`is_locked` for the **viewer** passed in
 — note that after `ReturnExpenseReport`/`ApproveExpenseReport` return their DTO, the viewer is the

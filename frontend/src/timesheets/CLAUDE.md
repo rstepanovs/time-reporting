@@ -56,9 +56,11 @@ Backend: `modules/timesheets` (workflow statuses, locks and billing readiness ar
   locked.
 - A status header shows the week's `status` badge and, once reviewed, who reviewed it and when, plus
   the return comment when `returned`. "Submit" (behind a confirming modal, auto-saving first if
-  there's anything pending) and, for a manager viewing the week, "Approve"/"Return…" (the latter's
-  modal requires a non-blank comment; both hidden once `can_review` is false, including when a locked
-  row would make a return fail) appear per `can_submit`/`can_review`.
+  there's anything pending) and "Approve"/"Return…" (the latter's modal requires a non-blank
+  comment; both hidden once `can_review` is false, including when a locked row would make a return
+  fail) appear per `can_submit`/`can_review` — purely server-driven flags, so a manager viewing
+  their *own* week under `company.allow_self_review` sees the same buttons with no page code
+  change at all: see `pages/TimesheetPage.test.tsx`'s self-review test.
 - `AddRowModal.tsx` — "add a row" / "copy rows from previous week". The month calendar renders below
   the grid.
 
