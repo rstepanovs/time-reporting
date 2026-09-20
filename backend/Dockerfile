@@ -9,6 +9,11 @@ ENV UV_COMPILE_BYTECODE=1 \
 
 WORKDIR /app
 
+# `git` is needed to fetch the `faktura-printer` dependency, pinned to a tag straight from GitHub
+# (see backend/pyproject.toml) rather than an index.
+RUN apt-get update && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+
 # Third-party dependencies first, so this layer is reused until the lock file changes.
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
@@ -29,7 +34,7 @@ ARG GIT_SHA
 
 # Debian bookworm ships only PostgreSQL 15's client, which can't `pg_dump`/`pg_restore` against a
 # 17 server (`db`'s image, compose.yaml) — pull `postgresql-client-17` from the PGDG apt repo
-# instead.
+# instead. Also: WeasyPrint's runtime libraries (Pango/HarfBuzz/fonts), for `invoices.rendering`.
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates gnupg \
     && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
         | gpg --dearmor -o /usr/share/keyrings/postgresql.gpg \
@@ -37,6 +42,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
         > /etc/apt/sources.list.d/pgdg.list \
     && apt-get update \
     && apt-get install -y --no-install-recommends postgresql-client-17 \
+        libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-dejavu-core \
     && apt-get purge -y --auto-remove curl gnupg \
     && rm -rf /var/lib/apt/lists/*
 

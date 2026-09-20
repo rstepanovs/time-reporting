@@ -40,6 +40,9 @@ class AuditAction(StrEnum):
     COMPANY_UPDATED = "company.updated"
     INVOICE_CREATED = "invoice.created"
     INVOICE_DELETED = "invoice.deleted"
+    INVOICE_ISSUED = "invoice.issued"
+    INVOICE_PAID = "invoice.paid"
+    INVOICE_VOIDED = "invoice.voided"
 
 
 # --- DTOs ---

@@ -4,33 +4,43 @@ from datetime import date
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 
 from time_reporting.api.deps import BusDep
 from time_reporting.modules.auth.dependencies import AccountantDep
 from time_reporting.modules.invoices.contracts import (
     BillingItemRateMissingError,
+    CompanyProfileIncompleteError,
     CreateInvoiceDraft,
     DeleteInvoiceDraft,
     GetInvoice,
+    GetInvoicePdf,
     InvoiceCustomerNotFoundError,
+    InvoiceEmptyError,
     InvoiceLineChange,
     InvoiceLineNotFoundError,
     InvoiceNoPeriodsError,
     InvoiceNotDraftError,
     InvoiceNotFoundError,
+    InvoiceNotIssuedError,
+    InvoiceNotVoidableError,
     InvoicePeriodNotEligibleError,
     InvoiceStatus,
+    IssueInvoice,
     ListInvoiceablePeriods,
     ListInvoices,
+    MarkInvoicePaid,
     UpdateInvoiceDraft,
+    VoidInvoice,
 )
 from time_reporting.modules.invoices.schemas import (
     CreateInvoiceDraftRequest,
     InvoiceableCustomerResponse,
     InvoicePageResponse,
     InvoiceResponse,
+    MarkInvoicePaidRequest,
     UpdateInvoiceDraftRequest,
+    VoidInvoiceRequest,
 )
 from time_reporting.modules.timesheets.contracts import BillingPeriodRef
 
@@ -180,3 +190,70 @@ async def delete_invoice_draft(invoice_id: UUID, current_user: AccountantDep, bu
         raise _not_found(str(exc)) from exc
     except InvoiceNotDraftError as exc:
         raise _conflict(str(exc)) from exc
+
+
+@router.post(
+    "/{invoice_id}/issue",
+    responses={**_NOT_FOUND_RESPONSE, **_RULE_RESPONSE, **_STATUS_CONFLICT_RESPONSE},
+)
+async def issue_invoice(
+    invoice_id: UUID, current_user: AccountantDep, bus: BusDep
+) -> InvoiceResponse:
+    try:
+        invoice = await bus.execute(IssueInvoice(invoice_id=invoice_id, actor_id=current_user.id))
+    except InvoiceNotFoundError as exc:
+        raise _not_found(str(exc)) from exc
+    except (InvoiceEmptyError, CompanyProfileIncompleteError) as exc:
+        raise _bad_request(str(exc)) from exc
+    except InvoiceNotDraftError as exc:
+        raise _conflict(str(exc)) from exc
+    return InvoiceResponse.model_validate(invoice)
+
+
+@router.post(
+    "/{invoice_id}/pay",
+    responses={**_NOT_FOUND_RESPONSE, **_STATUS_CONFLICT_RESPONSE},
+)
+async def mark_invoice_paid(
+    invoice_id: UUID, body: MarkInvoicePaidRequest, current_user: AccountantDep, bus: BusDep
+) -> InvoiceResponse:
+    try:
+        invoice = await bus.execute(
+            MarkInvoicePaid(invoice_id=invoice_id, actor_id=current_user.id, paid_on=body.paid_on)
+        )
+    except InvoiceNotFoundError as exc:
+        raise _not_found(str(exc)) from exc
+    except InvoiceNotIssuedError as exc:
+        raise _conflict(str(exc)) from exc
+    return InvoiceResponse.model_validate(invoice)
+
+
+@router.post(
+    "/{invoice_id}/void",
+    responses={**_NOT_FOUND_RESPONSE, **_STATUS_CONFLICT_RESPONSE},
+)
+async def void_invoice(
+    invoice_id: UUID, body: VoidInvoiceRequest, current_user: AccountantDep, bus: BusDep
+) -> InvoiceResponse:
+    try:
+        invoice = await bus.execute(
+            VoidInvoice(invoice_id=invoice_id, actor_id=current_user.id, reason=body.reason)
+        )
+    except InvoiceNotFoundError as exc:
+        raise _not_found(str(exc)) from exc
+    except InvoiceNotVoidableError as exc:
+        raise _conflict(str(exc)) from exc
+    return InvoiceResponse.model_validate(invoice)
+
+
+@router.get("/{invoice_id}/pdf", responses=_NOT_FOUND_RESPONSE)
+async def get_invoice_pdf(invoice_id: UUID, _accountant: AccountantDep, bus: BusDep) -> Response:
+    try:
+        pdf = await bus.query(GetInvoicePdf(invoice_id=invoice_id))
+    except InvoiceNotFoundError as exc:
+        raise _not_found(str(exc)) from exc
+    return Response(
+        content=pdf.content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{pdf.filename}"'},
+    )

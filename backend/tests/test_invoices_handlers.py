@@ -1,5 +1,8 @@
+import re
+import zlib
 from datetime import date, timedelta
 from decimal import Decimal
+from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import pytest
@@ -7,6 +10,8 @@ import pytest
 from support import ADMIN, MANAGER, CustomerFactory, ProjectFactory, UserFactory
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.admin.contracts import GetCustomerRemovalImpact, RemovalBlockerKind
+from time_reporting.modules.audit.contracts import AuditAction, ListAuditEvents
+from time_reporting.modules.company.contracts import CompanyAddressDTO, UpdateCompanySettings
 from time_reporting.modules.customers.contracts import UpdateCustomer
 from time_reporting.modules.expenses.contracts import (
     ApproveExpenseReport,
@@ -17,22 +22,32 @@ from time_reporting.modules.expenses.contracts import (
 )
 from time_reporting.modules.invoices.contracts import (
     BillingItemRateMissingError,
+    CompanyProfileIncompleteError,
     CountInvoices,
     CreateInvoiceDraft,
     DeleteInvoiceDraft,
     GetInvoice,
+    GetInvoicePdf,
     InvoiceCustomerNotFoundError,
+    InvoiceEmptyError,
     InvoiceLineChange,
     InvoiceLineKind,
     InvoiceLineNotFoundError,
     InvoiceNoPeriodsError,
+    InvoiceNotDraftError,
     InvoiceNotFoundError,
+    InvoiceNotIssuedError,
+    InvoiceNotVoidableError,
     InvoicePeriodNotEligibleError,
     InvoiceStatus,
+    IssueInvoice,
     ListInvoiceablePeriods,
     ListInvoices,
+    MarkInvoicePaid,
     UpdateInvoiceDraft,
+    VoidInvoice,
 )
+from time_reporting.modules.invoices.models import Invoice as InvoiceRow
 from time_reporting.modules.projects.contracts import (
     AddProjectMember,
     BillingItemPreset,
@@ -160,6 +175,88 @@ async def _sent_period(
         )
     )
     return project.id, manager, admin, worker
+
+
+async def _complete_company_profile(bus: Bus, admin_id: UUID) -> None:
+    """The minimum a company profile needs for ``IssueInvoice`` to accept it (see
+    ``CompanyProfileIncompleteError``)."""
+    await bus.execute(
+        UpdateCompanySettings(
+            actor_id=admin_id,
+            legal_name="Belt & Braces Software AB",
+            org_number="556677-8899",
+            vat_number="SE556677889901",
+            address=CompanyAddressDTO(
+                street="1 Main Street",
+                street2=None,
+                postal_code="123 45",
+                city="Lund",
+                country="se",
+            ),
+            email="info@example.se",
+            phone="070-000 00 00",
+            registered_office="Lund",
+            bankgiro="123-4567",
+            iban="",
+            bic="",
+            f_tax_approved=True,
+            default_invoice_locale="en",
+            late_interest="8.00 %",
+            invoice_number_prefix="INV-",
+            next_invoice_number=1,
+            allow_self_review=False,
+        )
+    )
+
+
+def _pdf_contains(pdf: bytes, needle: bytes) -> bool:
+    """WeasyPrint compresses every PDF stream (including the metadata/xref ones — PDF 1.7 default),
+    so a plain ``needle in pdf`` never matches; decompress each ``stream``/``endstream`` block and
+    search those instead, falling back to the raw bytes for anything left uncompressed."""
+    if needle in pdf:
+        return True
+    for match in re.finditer(rb"stream\r?\n(.*?)endstream", pdf, re.DOTALL):
+        try:
+            if needle in zlib.decompress(match.group(1)):
+                return True
+        except zlib.error:
+            continue
+    return False
+
+
+def _stub_renderer(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Most issue/pdf tests care about the workflow, not the rendered bytes — only
+    ``test_issue_invoice_renders_a_real_pdf`` exercises the actual ``faktura-printer`` call."""
+    monkeypatch.setattr(
+        "time_reporting.modules.invoices.service.render_invoice_pdf",
+        AsyncMock(return_value=b"%PDF-stub"),
+    )
+
+
+async def _issued_invoice(
+    bus: Bus,
+    make_project: ProjectFactory,
+    make_user: UserFactory,
+    make_customer: CustomerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[UUID, UserDTO]:
+    """A freshly issued invoice (stubbed renderer) plus the admin who issued it."""
+    _stub_renderer(monkeypatch)
+    customer = await make_customer()
+    project_id, _manager, admin, _worker = await _sent_period(
+        bus, make_project, make_user, customer_id=customer.id
+    )
+    await _complete_company_profile(bus, admin.id)
+    draft = await bus.execute(
+        CreateInvoiceDraft(
+            customer_id=customer.id,
+            periods=(BillingPeriodRef(project_id=project_id, period_start=PERIOD_START),),
+            invoice_date=date(2026, 10, 1),
+            actor_id=admin.id,
+        )
+    )
+    issued = await bus.execute(IssueInvoice(invoice_id=draft.id, actor_id=admin.id))
+    return issued.id, admin
 
 
 # --- CreateInvoiceDraft: line generation ---
@@ -756,3 +853,406 @@ async def test_count_invoices_and_customer_removal_impact(
     assert impact.can_delete_permanently is False
     kinds = {blocker.kind for blocker in impact.blockers}
     assert RemovalBlockerKind.INVOICES in kinds
+
+
+# --- IssueInvoice ---
+
+
+async def test_issue_invoice_renders_a_real_pdf(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory, make_customer: CustomerFactory
+) -> None:
+    """The one test in this module that exercises the actual faktura-printer render — every
+    other issue/pdf test stubs it out."""
+    customer = await make_customer()
+    project_id, _manager, admin, _worker = await _sent_period(
+        bus, make_project, make_user, customer_id=customer.id
+    )
+    await _complete_company_profile(bus, admin.id)
+    draft = await bus.execute(
+        CreateInvoiceDraft(
+            customer_id=customer.id,
+            periods=(BillingPeriodRef(project_id=project_id, period_start=PERIOD_START),),
+            invoice_date=date(2026, 10, 1),
+            actor_id=admin.id,
+        )
+    )
+
+    issued = await bus.execute(IssueInvoice(invoice_id=draft.id, actor_id=admin.id))
+
+    assert issued.status is InvoiceStatus.ISSUED
+    assert issued.number == "INV-1"
+    assert issued.issued_at is not None
+
+    row = await bus.session.get(InvoiceRow, issued.id)
+    assert row is not None
+    assert row.pdf is not None
+    assert row.pdf.startswith(b"%PDF")
+    assert row.pdf_sha256 is not None
+    assert _pdf_contains(row.pdf, b"INV-1")
+
+
+async def test_issue_invoice_allocates_consecutive_numbers(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory, make_customer: CustomerFactory
+) -> None:
+    customer = await make_customer()
+    admin_id: UUID | None = None
+    issued_numbers: list[str | None] = []
+    for _ in range(2):
+        project_id, _manager, admin, _worker = await _sent_period(
+            bus, make_project, make_user, customer_id=customer.id
+        )
+        admin_id = admin.id
+        if issued_numbers == []:
+            await _complete_company_profile(bus, admin.id)
+        draft = await bus.execute(
+            CreateInvoiceDraft(
+                customer_id=customer.id,
+                periods=(BillingPeriodRef(project_id=project_id, period_start=PERIOD_START),),
+                invoice_date=date(2026, 10, 1),
+                actor_id=admin.id,
+            )
+        )
+        issued = await bus.execute(IssueInvoice(invoice_id=draft.id, actor_id=admin.id))
+        issued_numbers.append(issued.number)
+    assert admin_id is not None
+    assert issued_numbers == ["INV-1", "INV-2"]
+
+
+async def test_issue_invoice_rejects_already_issued(
+    bus: Bus,
+    make_project: ProjectFactory,
+    make_user: UserFactory,
+    make_customer: CustomerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    invoice_id, admin = await _issued_invoice(
+        bus, make_project, make_user, make_customer, monkeypatch
+    )
+
+    with pytest.raises(InvoiceNotDraftError):
+        await bus.execute(IssueInvoice(invoice_id=invoice_id, actor_id=admin.id))
+
+
+async def test_issue_invoice_rejects_empty_draft(
+    bus: Bus,
+    make_project: ProjectFactory,
+    make_user: UserFactory,
+    make_customer: CustomerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_renderer(monkeypatch)
+    customer = await make_customer()
+    project_id, _manager, admin, _worker = await _sent_period(
+        bus, make_project, make_user, customer_id=customer.id
+    )
+    await _complete_company_profile(bus, admin.id)
+    draft = await bus.execute(
+        CreateInvoiceDraft(
+            customer_id=customer.id,
+            periods=(BillingPeriodRef(project_id=project_id, period_start=PERIOD_START),),
+            invoice_date=date(2026, 10, 1),
+            actor_id=admin.id,
+        )
+    )
+    await bus.execute(
+        UpdateInvoiceDraft(
+            invoice_id=draft.id,
+            actor_id=admin.id,
+            delete_line_ids=frozenset({draft.lines[0].id}),
+        )
+    )
+
+    with pytest.raises(InvoiceEmptyError):
+        await bus.execute(IssueInvoice(invoice_id=draft.id, actor_id=admin.id))
+
+
+async def test_issue_invoice_rejects_incomplete_company_profile(
+    bus: Bus,
+    make_project: ProjectFactory,
+    make_user: UserFactory,
+    make_customer: CustomerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_renderer(monkeypatch)
+    customer = await make_customer()
+    project_id, _manager, admin, _worker = await _sent_period(
+        bus, make_project, make_user, customer_id=customer.id
+    )
+    draft = await bus.execute(
+        CreateInvoiceDraft(
+            customer_id=customer.id,
+            periods=(BillingPeriodRef(project_id=project_id, period_start=PERIOD_START),),
+            invoice_date=date(2026, 10, 1),
+            actor_id=admin.id,
+        )
+    )
+
+    with pytest.raises(CompanyProfileIncompleteError):
+        await bus.execute(IssueInvoice(invoice_id=draft.id, actor_id=admin.id))
+
+
+async def test_issue_invoice_raises_when_not_found(bus: Bus, make_user: UserFactory) -> None:
+    admin = await make_user(roles=ADMIN)
+
+    with pytest.raises(InvoiceNotFoundError):
+        await bus.execute(IssueInvoice(invoice_id=uuid4(), actor_id=admin.id))
+
+
+async def test_issued_invoice_cannot_be_edited_or_deleted(
+    bus: Bus,
+    make_project: ProjectFactory,
+    make_user: UserFactory,
+    make_customer: CustomerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    invoice_id, admin = await _issued_invoice(
+        bus, make_project, make_user, make_customer, monkeypatch
+    )
+
+    with pytest.raises(InvoiceNotDraftError):
+        await bus.execute(
+            UpdateInvoiceDraft(invoice_id=invoice_id, actor_id=admin.id, notes="edited")
+        )
+    with pytest.raises(InvoiceNotDraftError):
+        await bus.execute(DeleteInvoiceDraft(invoice_id=invoice_id, actor_id=admin.id))
+
+
+async def test_issue_invoice_records_audit_event(
+    bus: Bus,
+    make_project: ProjectFactory,
+    make_user: UserFactory,
+    make_customer: CustomerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    invoice_id, admin = await _issued_invoice(
+        bus, make_project, make_user, make_customer, monkeypatch
+    )
+
+    events = await bus.query(
+        ListAuditEvents(
+            limit=10, offset=0, action=AuditAction.INVOICE_ISSUED, entity_type="invoice"
+        )
+    )
+    assert len(events.items) == 1
+    assert events.items[0].entity_id == str(invoice_id)
+    assert events.items[0].actor_id == admin.id
+
+
+# --- GetInvoicePdf ---
+
+
+async def test_get_invoice_pdf_previews_a_draft_without_storing_it(
+    bus: Bus,
+    make_project: ProjectFactory,
+    make_user: UserFactory,
+    make_customer: CustomerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_renderer(monkeypatch)
+    customer = await make_customer()
+    project_id, _manager, admin, _worker = await _sent_period(
+        bus, make_project, make_user, customer_id=customer.id
+    )
+    draft = await bus.execute(
+        CreateInvoiceDraft(
+            customer_id=customer.id,
+            periods=(BillingPeriodRef(project_id=project_id, period_start=PERIOD_START),),
+            invoice_date=date(2026, 10, 1),
+            actor_id=admin.id,
+        )
+    )
+
+    pdf = await bus.query(GetInvoicePdf(invoice_id=draft.id))
+    assert pdf.content == b"%PDF-stub"
+    assert "draft" in pdf.filename
+
+    row = await bus.session.get(InvoiceRow, draft.id)
+    assert row is not None
+    assert row.pdf is None
+    assert row.number is None
+
+
+async def test_get_invoice_pdf_serves_the_stored_bytes_once_issued(
+    bus: Bus,
+    make_project: ProjectFactory,
+    make_user: UserFactory,
+    make_customer: CustomerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    invoice_id, _admin = await _issued_invoice(
+        bus, make_project, make_user, make_customer, monkeypatch
+    )
+
+    pdf = await bus.query(GetInvoicePdf(invoice_id=invoice_id))
+
+    row = await bus.session.get(InvoiceRow, invoice_id)
+    assert row is not None
+    assert pdf.content == row.pdf
+    assert pdf.filename == f"invoice-{row.number}.pdf"
+
+
+async def test_get_invoice_pdf_raises_when_not_found(bus: Bus) -> None:
+    with pytest.raises(InvoiceNotFoundError):
+        await bus.query(GetInvoicePdf(invoice_id=uuid4()))
+
+
+# --- MarkInvoicePaid ---
+
+
+async def test_mark_invoice_paid(
+    bus: Bus,
+    make_project: ProjectFactory,
+    make_user: UserFactory,
+    make_customer: CustomerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    invoice_id, admin = await _issued_invoice(
+        bus, make_project, make_user, make_customer, monkeypatch
+    )
+
+    paid = await bus.execute(
+        MarkInvoicePaid(invoice_id=invoice_id, actor_id=admin.id, paid_on=date(2026, 10, 15))
+    )
+
+    assert paid.status is InvoiceStatus.PAID
+    assert paid.paid_on == date(2026, 10, 15)
+
+    events = await bus.query(
+        ListAuditEvents(limit=10, offset=0, action=AuditAction.INVOICE_PAID, entity_type="invoice")
+    )
+    assert len(events.items) == 1
+
+
+async def test_mark_invoice_paid_rejects_draft(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory, make_customer: CustomerFactory
+) -> None:
+    customer = await make_customer()
+    project_id, _manager, admin, _worker = await _sent_period(
+        bus, make_project, make_user, customer_id=customer.id
+    )
+    draft = await bus.execute(
+        CreateInvoiceDraft(
+            customer_id=customer.id,
+            periods=(BillingPeriodRef(project_id=project_id, period_start=PERIOD_START),),
+            invoice_date=date(2026, 10, 1),
+            actor_id=admin.id,
+        )
+    )
+
+    with pytest.raises(InvoiceNotIssuedError):
+        await bus.execute(
+            MarkInvoicePaid(invoice_id=draft.id, actor_id=admin.id, paid_on=date(2026, 10, 15))
+        )
+
+
+async def test_mark_invoice_paid_raises_when_not_found(bus: Bus, make_user: UserFactory) -> None:
+    admin = await make_user(roles=ADMIN)
+
+    with pytest.raises(InvoiceNotFoundError):
+        await bus.execute(
+            MarkInvoicePaid(invoice_id=uuid4(), actor_id=admin.id, paid_on=date(2026, 10, 15))
+        )
+
+
+# --- VoidInvoice ---
+
+
+async def test_void_invoice_frees_its_periods_and_keeps_the_pdf(
+    bus: Bus,
+    make_project: ProjectFactory,
+    make_user: UserFactory,
+    make_customer: CustomerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    invoice_id, admin = await _issued_invoice(
+        bus, make_project, make_user, make_customer, monkeypatch
+    )
+    before = await bus.query(GetInvoice(invoice_id=invoice_id))
+    customer_id = before.customer.id
+
+    voided = await bus.execute(
+        VoidInvoice(invoice_id=invoice_id, actor_id=admin.id, reason="Wrong customer")
+    )
+
+    assert voided.status is InvoiceStatus.VOID
+    assert voided.voided_at is not None
+    assert voided.void_reason == "Wrong customer"
+    assert voided.number == before.number
+
+    row = await bus.session.get(InvoiceRow, invoice_id)
+    assert row is not None
+    assert row.pdf is not None
+
+    invoiceable = await bus.query(ListInvoiceablePeriods())
+    assert any(c.customer_id == customer_id for c in invoiceable)
+
+    events = await bus.query(
+        ListAuditEvents(
+            limit=10, offset=0, action=AuditAction.INVOICE_VOIDED, entity_type="invoice"
+        )
+    )
+    assert len(events.items) == 1
+
+
+async def test_void_invoice_allowed_from_paid(
+    bus: Bus,
+    make_project: ProjectFactory,
+    make_user: UserFactory,
+    make_customer: CustomerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    invoice_id, admin = await _issued_invoice(
+        bus, make_project, make_user, make_customer, monkeypatch
+    )
+    await bus.execute(
+        MarkInvoicePaid(invoice_id=invoice_id, actor_id=admin.id, paid_on=date(2026, 10, 15))
+    )
+
+    voided = await bus.execute(
+        VoidInvoice(invoice_id=invoice_id, actor_id=admin.id, reason="Refunded")
+    )
+
+    assert voided.status is InvoiceStatus.VOID
+
+
+async def test_void_invoice_rejects_draft(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory, make_customer: CustomerFactory
+) -> None:
+    customer = await make_customer()
+    project_id, _manager, admin, _worker = await _sent_period(
+        bus, make_project, make_user, customer_id=customer.id
+    )
+    draft = await bus.execute(
+        CreateInvoiceDraft(
+            customer_id=customer.id,
+            periods=(BillingPeriodRef(project_id=project_id, period_start=PERIOD_START),),
+            invoice_date=date(2026, 10, 1),
+            actor_id=admin.id,
+        )
+    )
+
+    with pytest.raises(InvoiceNotVoidableError):
+        await bus.execute(VoidInvoice(invoice_id=draft.id, actor_id=admin.id, reason="Mistake"))
+
+
+async def test_void_invoice_rejects_already_void(
+    bus: Bus,
+    make_project: ProjectFactory,
+    make_user: UserFactory,
+    make_customer: CustomerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    invoice_id, admin = await _issued_invoice(
+        bus, make_project, make_user, make_customer, monkeypatch
+    )
+    await bus.execute(VoidInvoice(invoice_id=invoice_id, actor_id=admin.id, reason="First"))
+
+    with pytest.raises(InvoiceNotVoidableError):
+        await bus.execute(VoidInvoice(invoice_id=invoice_id, actor_id=admin.id, reason="Second"))
+
+
+async def test_void_invoice_raises_when_not_found(bus: Bus, make_user: UserFactory) -> None:
+    admin = await make_user(roles=ADMIN)
+
+    with pytest.raises(InvoiceNotFoundError):
+        await bus.execute(VoidInvoice(invoice_id=uuid4(), actor_id=admin.id, reason="x"))

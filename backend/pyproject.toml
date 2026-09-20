@@ -17,6 +17,7 @@ dependencies = [
     "email-validator>=2.3",
     "python-multipart>=0.0.32",
     "holidays>=0.104",
+    "faktura-printer @ git+https://github.com/rstepanovs/faktura-printer@v0.3.0",
 ]
 
 [project.scripts]
@@ -28,3 +29,8 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/time_reporting"]
+
+[tool.hatch.metadata]
+# faktura-printer is pinned to a tag straight from GitHub (not on an index yet) — see the
+# `dependencies` entry above.
+allow-direct-references = true

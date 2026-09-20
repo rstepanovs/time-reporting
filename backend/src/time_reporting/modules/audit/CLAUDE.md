@@ -59,7 +59,8 @@ the whole transaction — including any `AuditEvent` row already flushed — rol
   `details.fields` lists which fields changed (`"logo"` for a logo set/clear) — see
   `company/CLAUDE.md`.
 - `invoices.CreateInvoiceDraft` → `invoice.created`, `invoices.DeleteInvoiceDraft` →
-  `invoice.deleted`, both recorded by `invoices.service.InvoiceService`, `entity_id` is the
-  invoice's own id — see `invoices/CLAUDE.md`. Saving header/line changes
-  (`UpdateInvoiceDraft`) is not audited (mirrors `timesheets`/`expenses`, which only audit the
-  billing handoff/review, not day-to-day edits).
+  `invoice.deleted`, `invoices.IssueInvoice` → `invoice.issued`, `invoices.MarkInvoicePaid` →
+  `invoice.paid`, `invoices.VoidInvoice` → `invoice.voided` — all recorded by
+  `invoices.service.InvoiceService`, `entity_id` is the invoice's own id — see
+  `invoices/CLAUDE.md`. Saving header/line changes (`UpdateInvoiceDraft`) is not audited (mirrors
+  `timesheets`/`expenses`, which only audit the billing handoff/review, not day-to-day edits).

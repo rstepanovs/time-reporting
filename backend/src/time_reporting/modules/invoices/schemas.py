@@ -176,3 +176,15 @@ class UpdateInvoiceDraftRequest(BaseModel):
     clear_fields: list[ClearableInvoiceField] = Field(
         default=[], description=f"Any of: {', '.join(CLEARABLE_INVOICE_FIELDS)}"
     )
+
+
+class MarkInvoicePaidRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    paid_on: date
+
+
+class VoidInvoiceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]

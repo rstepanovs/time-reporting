@@ -18,7 +18,8 @@ nothing beyond `audit.contracts` (`RecordAuditEvent`, for `UpdateCompanySettings
   `expenses` to let a manager approve/return their own week or report — see their `CLAUDE.md`
   `Workflow` sections) and the logo. Every text
   field defaults to `""` rather than `NULL` — an empty company profile is a valid, if incomplete,
-  state; a future `invoices` module checks completeness before allowing an issue.
+  state; `invoices.IssueInvoice` checks completeness (`legal_name`/`org_number`) before allowing
+  an issue — see `invoices/CLAUDE.md`.
 - `GetCompanySettings` → `CompanySettingsDTO` (the logo's *presence* only, as `has_logo`, never its
   bytes — see "Logo" below). `UpdateCompanySettings` **replaces the whole row** in one call (`PUT
   /company`, not a partial patch) since the admin page is a single settings form; it validates
@@ -47,7 +48,7 @@ nothing beyond `audit.contracts` (`RecordAuditEvent`, for `UpdateCompanySettings
   `timesheets.LockProjectMonthExpenseReports`): it locks the settings row (`SELECT ... FOR
   UPDATE`), returns `invoice_number_prefix + next_invoice_number` and increments the counter.
   Numbering is gapless because the increment commits with whatever outer transaction called it
-  (a future `invoices.IssueInvoice`) — if that transaction later fails, the whole thing, including
+  (`invoices.IssueInvoice`) — if that transaction later fails, the whole thing, including
   this increment, rolls back, so the number is never burned. Never call this from an HTTP router
   directly.
 

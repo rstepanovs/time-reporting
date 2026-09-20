@@ -4,27 +4,44 @@ Changes are flushed through the repository; the bus commits. Reads other modules
 their ``contracts.py`` messages, dispatched on the shared ``Bus``.
 """
 
+import base64
+import hashlib
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import timedelta
 from decimal import ROUND_HALF_UP, Decimal
+from typing import Any
 from uuid import UUID
 
 from time_reporting.core.cqrs import Bus
+from time_reporting.db.mixins import utc_now
 from time_reporting.modules.audit.contracts import AuditAction, RecordAuditEvent
-from time_reporting.modules.company.contracts import GetCompanySettings
-from time_reporting.modules.customers.contracts import GetCustomerById, GetCustomersByIds
+from time_reporting.modules.company.contracts import (
+    AllocateInvoiceNumber,
+    CompanyLogoDTO,
+    CompanySettingsDTO,
+    GetCompanyLogo,
+    GetCompanySettings,
+)
+from time_reporting.modules.customers.contracts import (
+    CustomerDTO,
+    GetCustomerById,
+    GetCustomersByIds,
+)
 from time_reporting.modules.invoices.contracts import (
     BillingItemRateMissingError,
+    CompanyProfileIncompleteError,
     CountInvoices,
     CreateInvoiceDraft,
     DeleteInvoiceDraft,
     GetInvoice,
+    GetInvoicePdf,
     InvoiceableCustomerDTO,
     InvoiceablePeriodDTO,
     InvoiceCustomerDTO,
     InvoiceCustomerNotFoundError,
     InvoiceDTO,
+    InvoiceEmptyError,
     InvoiceLineChange,
     InvoiceLineDTO,
     InvoiceLineKind,
@@ -32,16 +49,23 @@ from time_reporting.modules.invoices.contracts import (
     InvoiceNoPeriodsError,
     InvoiceNotDraftError,
     InvoiceNotFoundError,
+    InvoiceNotIssuedError,
+    InvoiceNotVoidableError,
     InvoicePageDTO,
+    InvoicePdfDTO,
     InvoicePeriodDTO,
     InvoicePeriodNotEligibleError,
     InvoiceStatus,
     InvoiceSummaryDTO,
+    IssueInvoice,
     ListInvoiceablePeriods,
     ListInvoices,
+    MarkInvoicePaid,
     UpdateInvoiceDraft,
+    VoidInvoice,
 )
 from time_reporting.modules.invoices.models import Invoice, InvoiceBillingPeriod, InvoiceLine
+from time_reporting.modules.invoices.rendering import render_invoice_pdf
 from time_reporting.modules.invoices.repository import (
     InvoiceBillingPeriodRepository,
     InvoiceLineRepository,
@@ -65,6 +89,60 @@ from time_reporting.modules.timesheets.contracts import (
     ListBillingPeriods,
     MarkBillingPeriodsInvoiced,
 )
+
+# Company essentials an invoice can't be printed without — see CompanyProfileIncompleteError.
+_REQUIRED_COMPANY_FIELDS = ("legal_name", "org_number")
+
+
+def _build_seller_snapshot(
+    company: CompanySettingsDTO, logo: CompanyLogoDTO | None
+) -> dict[str, Any]:
+    """A plain dict matching ``faktura_printer.Seller`` kwargs, plus ``late_interest`` (popped
+    back out in ``rendering.py`` — ``Seller`` itself has no such field)."""
+    street = company.address.street
+    if company.address.street2:
+        street = f"{street}, {company.address.street2}"
+    return {
+        "name": company.legal_name,
+        "address": {
+            "street": street,
+            "postal_code": company.address.postal_code,
+            "city": company.address.city,
+            "country": company.address.country,
+        },
+        "logo": f"data:{logo.content_type};base64,{base64.b64encode(logo.content).decode()}"
+        if logo is not None
+        else None,
+        "phone": company.phone,
+        "email": company.email,
+        "registered_office": company.registered_office,
+        "bankgiro": company.bankgiro,
+        "iban": company.iban,
+        "bic": company.bic,
+        "org_number": company.org_number,
+        "vat_number": company.vat_number,
+        "f_tax_approved": company.f_tax_approved,
+        "late_interest": company.late_interest,
+    }
+
+
+def _build_buyer_snapshot(customer: CustomerDTO) -> dict[str, Any]:
+    """A plain dict matching ``faktura_printer.Buyer`` kwargs, plus ``customer_number`` (popped
+    back out in ``rendering.py`` — ``Buyer`` itself has no such field)."""
+    street = customer.billing_address.line1
+    if customer.billing_address.line2:
+        street = f"{street}, {customer.billing_address.line2}"
+    return {
+        "name": customer.legal_name or customer.name,
+        "address": {
+            "street": street,
+            "postal_code": customer.billing_address.postal_code or "",
+            "city": customer.billing_address.city,
+            "country": customer.billing_address.country,
+        },
+        "org_number": customer.tax_id or "",
+        "customer_number": customer.customer_number or "",
+    }
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -553,3 +631,123 @@ class InvoiceService:
                 summary=f"Deleted draft invoice for {customer.name}",
             )
         )
+
+    async def issue_invoice(self, command: IssueInvoice) -> InvoiceDTO:
+        invoice = await self._invoices.get(command.invoice_id)
+        if invoice is None:
+            raise InvoiceNotFoundError(command.invoice_id)
+        if invoice.status is not InvoiceStatus.DRAFT:
+            raise InvoiceNotDraftError(invoice.id, invoice.status)
+
+        lines = await self._lines.list_for_invoice(invoice.id)
+        if not lines:
+            raise InvoiceEmptyError(invoice.id)
+
+        company = await self._bus.query(GetCompanySettings())
+        missing = tuple(field for field in _REQUIRED_COMPANY_FIELDS if not getattr(company, field))
+        if missing:
+            raise CompanyProfileIncompleteError(missing)
+
+        customer = await self._bus.query(GetCustomerById(customer_id=invoice.customer_id))
+        assert customer is not None
+        logo = await self._bus.query(GetCompanyLogo())
+
+        number = await self._bus.execute(AllocateInvoiceNumber())
+        seller = _build_seller_snapshot(company, logo)
+        buyer = _build_buyer_snapshot(customer)
+        invoice.number = number
+        invoice.seller_snapshot = seller
+        invoice.buyer_snapshot = buyer
+        await self._invoices.save(invoice)
+
+        # Re-read as a DTO now that `number` is set, so the rendered PDF prints it too.
+        dto = await self.get_invoice(invoice.id)
+        pdf = await render_invoice_pdf(dto, seller=seller, buyer=buyer, draft=False)
+
+        invoice.pdf = pdf
+        invoice.pdf_sha256 = hashlib.sha256(pdf).hexdigest()
+        invoice.issued_at = utc_now()
+        invoice.issued_by_id = command.actor_id
+        invoice.status = InvoiceStatus.ISSUED
+        await self._invoices.save(invoice)
+
+        await self._bus.execute(
+            RecordAuditEvent(
+                actor_id=command.actor_id,
+                action=AuditAction.INVOICE_ISSUED,
+                entity_type="invoice",
+                entity_id=str(invoice.id),
+                summary=f"Issued invoice {number} for {customer.name}",
+            )
+        )
+        return await self.get_invoice(invoice.id)
+
+    async def mark_paid(self, command: MarkInvoicePaid) -> InvoiceDTO:
+        invoice = await self._invoices.get(command.invoice_id)
+        if invoice is None:
+            raise InvoiceNotFoundError(command.invoice_id)
+        if invoice.status is not InvoiceStatus.ISSUED:
+            raise InvoiceNotIssuedError(invoice.id, invoice.status)
+
+        invoice.status = InvoiceStatus.PAID
+        invoice.paid_on = command.paid_on
+        await self._invoices.save(invoice)
+
+        await self._bus.execute(
+            RecordAuditEvent(
+                actor_id=command.actor_id,
+                action=AuditAction.INVOICE_PAID,
+                entity_type="invoice",
+                entity_id=str(invoice.id),
+                summary=f"Marked invoice {invoice.number} paid",
+            )
+        )
+        return await self.get_invoice(invoice.id)
+
+    async def void_invoice(self, command: VoidInvoice) -> InvoiceDTO:
+        invoice = await self._invoices.get(command.invoice_id)
+        if invoice is None:
+            raise InvoiceNotFoundError(command.invoice_id)
+        if invoice.status not in (InvoiceStatus.ISSUED, InvoiceStatus.PAID):
+            raise InvoiceNotVoidableError(invoice.id, invoice.status)
+
+        invoice.status = InvoiceStatus.VOID
+        invoice.voided_at = utc_now()
+        invoice.void_reason = command.reason
+        await self._invoices.save(invoice)
+
+        await self._bus.execute(ClearBillingPeriodsInvoiced(invoice_id=invoice.id))
+        await self._bus.execute(
+            RecordAuditEvent(
+                actor_id=command.actor_id,
+                action=AuditAction.INVOICE_VOIDED,
+                entity_type="invoice",
+                entity_id=str(invoice.id),
+                summary=f"Voided invoice {invoice.number}",
+            )
+        )
+        return await self.get_invoice(invoice.id)
+
+    async def get_pdf(self, query: GetInvoicePdf) -> InvoicePdfDTO:
+        invoice = await self._invoices.get(query.invoice_id)
+        if invoice is None:
+            raise InvoiceNotFoundError(query.invoice_id)
+
+        if invoice.status is not InvoiceStatus.DRAFT:
+            # Rendered and stored once, at IssueInvoice time — never re-rendered afterwards, even
+            # once paid or void (VoidInvoice keeps the PDF as a record of what was cancelled).
+            assert invoice.pdf is not None
+            return InvoicePdfDTO(content=invoice.pdf, filename=f"invoice-{invoice.number}.pdf")
+
+        customer = await self._bus.query(GetCustomerById(customer_id=invoice.customer_id))
+        assert customer is not None
+        company = await self._bus.query(GetCompanySettings())
+        logo = await self._bus.query(GetCompanyLogo())
+        dto = await self.get_invoice(invoice.id)
+        pdf = await render_invoice_pdf(
+            dto,
+            seller=_build_seller_snapshot(company, logo),
+            buyer=_build_buyer_snapshot(customer),
+            draft=True,
+        )
+        return InvoicePdfDTO(content=pdf, filename=f"invoice-draft-{invoice.id}.pdf")

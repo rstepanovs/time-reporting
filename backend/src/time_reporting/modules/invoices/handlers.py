@@ -9,12 +9,17 @@ from time_reporting.modules.invoices.contracts import (
     CreateInvoiceDraft,
     DeleteInvoiceDraft,
     GetInvoice,
+    GetInvoicePdf,
     InvoiceableCustomerDTO,
     InvoiceDTO,
     InvoicePageDTO,
+    InvoicePdfDTO,
+    IssueInvoice,
     ListInvoiceablePeriods,
     ListInvoices,
+    MarkInvoicePaid,
     UpdateInvoiceDraft,
+    VoidInvoice,
 )
 from time_reporting.modules.invoices.service import InvoiceService
 
@@ -73,3 +78,35 @@ class DeleteInvoiceDraftHandler:
 
     async def handle(self, command: DeleteInvoiceDraft) -> None:
         await self._service.delete_draft(command)
+
+
+class IssueInvoiceHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._service = InvoiceService(bus)
+
+    async def handle(self, command: IssueInvoice) -> InvoiceDTO:
+        return await self._service.issue_invoice(command)
+
+
+class MarkInvoicePaidHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._service = InvoiceService(bus)
+
+    async def handle(self, command: MarkInvoicePaid) -> InvoiceDTO:
+        return await self._service.mark_paid(command)
+
+
+class VoidInvoiceHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._service = InvoiceService(bus)
+
+    async def handle(self, command: VoidInvoice) -> InvoiceDTO:
+        return await self._service.void_invoice(command)
+
+
+class GetInvoicePdfHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._service = InvoiceService(bus)
+
+    async def handle(self, query: GetInvoicePdf) -> InvoicePdfDTO:
+        return await self._service.get_pdf(query)

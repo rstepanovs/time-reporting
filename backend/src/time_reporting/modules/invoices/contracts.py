@@ -23,10 +23,10 @@ CLEARABLE_INVOICE_FIELDS: tuple[ClearableInvoiceField, ...] = get_args(
 
 
 class InvoiceStatus(StrEnum):
-    """An invoice's place in its lifecycle. ``DRAFT`` is mutable (header and lines); every other
-    status is set only by the future ``invoices`` issue/paid/void commands (T8) and, once
-    ``ISSUED``, the invoice itself becomes immutable — only ``paid_on``/``voided_at`` change from
-    there."""
+    """An invoice's place in its lifecycle. ``DRAFT`` is mutable (header and lines);
+    ``IssueInvoice`` moves it to ``ISSUED``, at which point it becomes immutable — only
+    ``MarkInvoicePaid`` (→ ``PAID``) and ``VoidInvoice`` (→ ``VOID``, from ``ISSUED`` or ``PAID``)
+    still change it, and only ``paid_on``/``voided_at``/``void_reason``."""
 
     DRAFT = "draft"
     ISSUED = "issued"
@@ -92,7 +92,7 @@ class InvoiceDTO:
     id: UUID
     customer: InvoiceCustomerDTO
     status: InvoiceStatus
-    # Allocated only when issued (T8) — ``None`` for every draft.
+    # Allocated by IssueInvoice — ``None`` for every draft.
     number: str | None
     invoice_date: date
     due_date: date
@@ -165,6 +165,16 @@ class InvoiceableCustomerDTO:
     periods: tuple[InvoiceablePeriodDTO, ...]
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class InvoicePdfDTO:
+    """A rendered invoice PDF. For a draft, a fresh, unstored preview (``GetInvoicePdf`` renders it
+    on every call, labeled "UTKAST/DRAFT"); for any other status, the bytes stored on the invoice
+    at ``IssueInvoice`` time, served unchanged."""
+
+    content: bytes
+    filename: str
+
+
 # --- Queries ---
 
 
@@ -201,6 +211,14 @@ class CountInvoices(Query[int]):
     customer removal impact."""
 
     customer_id: UUID
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetInvoicePdf(Query[InvoicePdfDTO]):
+    """Raises ``InvoiceNotFoundError`` if ``invoice_id`` doesn't exist. A query, not a command — a
+    draft's preview render touches no persisted state."""
+
+    invoice_id: UUID
 
 
 # --- Commands ---
@@ -277,6 +295,46 @@ class DeleteInvoiceDraft(Command[None]):
     actor_id: UUID
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class IssueInvoice(Command[InvoiceDTO]):
+    """Move a draft to ``ISSUED``: allocates a number (``company.AllocateInvoiceNumber``),
+    snapshots the current seller (company profile) and buyer (customer) so a later edit to either
+    never changes what an already-issued invoice printed, renders the PDF and stores it with its
+    SHA-256, all in this one transaction.
+
+    Raises ``InvoiceNotFoundError``, ``InvoiceNotDraftError`` (only a draft can be issued),
+    ``InvoiceEmptyError`` (no lines) or ``CompanyProfileIncompleteError`` (the company profile is
+    missing an essential field, e.g. ``legal_name``/``org_number``).
+    """
+
+    invoice_id: UUID
+    actor_id: UUID
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class MarkInvoicePaid(Command[InvoiceDTO]):
+    """Move an issued invoice to ``PAID``. ``paid_on`` is supplied by the caller (a date picker on
+    the frontend), never computed here. Raises ``InvoiceNotFoundError`` or
+    ``InvoiceNotIssuedError`` (only an issued invoice can be marked paid)."""
+
+    invoice_id: UUID
+    actor_id: UUID
+    paid_on: date
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class VoidInvoice(Command[InvoiceDTO]):
+    """Move an issued or paid invoice to ``VOID`` and free every billing period it covered (a
+    nested ``timesheets.ClearBillingPeriodsInvoiced``) — the number and PDF are kept as a record
+    that this invoice number was used and then cancelled. Raises ``InvoiceNotFoundError`` or
+    ``InvoiceNotVoidableError`` (a draft has nothing to void — delete it instead; an already-void
+    invoice can't be voided again)."""
+
+    invoice_id: UUID
+    actor_id: UUID
+    reason: str
+
+
 # --- Exceptions ---
 
 
@@ -326,8 +384,8 @@ class BillingItemRateMissingError(InvoiceError):
 
 
 class InvoiceNotDraftError(InvoiceError):
-    """Raised by ``UpdateInvoiceDraft``/``DeleteInvoiceDraft`` once the invoice has left
-    ``DRAFT`` (issued invoices are immutable; see ``InvoiceStatus``)."""
+    """Raised by ``UpdateInvoiceDraft``/``DeleteInvoiceDraft``/``IssueInvoice`` once the invoice
+    has left ``DRAFT`` (issued invoices are immutable; see ``InvoiceStatus``)."""
 
     def __init__(self, invoice_id: UUID, status: InvoiceStatus) -> None:
         super().__init__(f"Invoice {invoice_id} is {status}, not draft")
@@ -339,3 +397,40 @@ class InvoiceLineNotFoundError(InvoiceError):
     def __init__(self, line_id: UUID) -> None:
         super().__init__(f"Invoice line {line_id} not found")
         self.line_id = line_id
+
+
+class InvoiceEmptyError(InvoiceError):
+    """Raised by ``IssueInvoice`` when the draft has no lines — nothing to bill."""
+
+    def __init__(self, invoice_id: UUID) -> None:
+        super().__init__(f"Invoice {invoice_id} has no lines")
+        self.invoice_id = invoice_id
+
+
+class CompanyProfileIncompleteError(InvoiceError):
+    """Raised by ``IssueInvoice`` when the company profile (``company.CompanySettings``) is
+    missing a field an invoice can't be printed without — ``fields`` names every such field."""
+
+    def __init__(self, fields: tuple[str, ...]) -> None:
+        super().__init__(f"Company profile is missing: {', '.join(fields)}")
+        self.fields = fields
+
+
+class InvoiceNotIssuedError(InvoiceError):
+    """Raised by ``MarkInvoicePaid`` when the invoice isn't ``ISSUED`` (a draft has nothing to pay
+    yet; a paid or void invoice can't be paid again)."""
+
+    def __init__(self, invoice_id: UUID, status: InvoiceStatus) -> None:
+        super().__init__(f"Invoice {invoice_id} is {status}, not issued")
+        self.invoice_id = invoice_id
+        self.status = status
+
+
+class InvoiceNotVoidableError(InvoiceError):
+    """Raised by ``VoidInvoice`` when the invoice is a draft (delete it instead) or already
+    void."""
+
+    def __init__(self, invoice_id: UUID, status: InvoiceStatus) -> None:
+        super().__init__(f"Invoice {invoice_id} is {status} and can't be voided")
+        self.invoice_id = invoice_id
+        self.status = status

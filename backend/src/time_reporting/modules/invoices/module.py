@@ -6,18 +6,26 @@ from time_reporting.modules.invoices.contracts import (
     CreateInvoiceDraft,
     DeleteInvoiceDraft,
     GetInvoice,
+    GetInvoicePdf,
+    IssueInvoice,
     ListInvoiceablePeriods,
     ListInvoices,
+    MarkInvoicePaid,
     UpdateInvoiceDraft,
+    VoidInvoice,
 )
 from time_reporting.modules.invoices.handlers import (
     CountInvoicesHandler,
     CreateInvoiceDraftHandler,
     DeleteInvoiceDraftHandler,
     GetInvoiceHandler,
+    GetInvoicePdfHandler,
+    IssueInvoiceHandler,
     ListInvoiceablePeriodsHandler,
     ListInvoicesHandler,
+    MarkInvoicePaidHandler,
     UpdateInvoiceDraftHandler,
+    VoidInvoiceHandler,
 )
 
 
@@ -26,7 +34,11 @@ def register(registry: HandlerRegistry) -> None:
     registry.query(ListInvoices, ListInvoicesHandler)
     registry.query(ListInvoiceablePeriods, ListInvoiceablePeriodsHandler)
     registry.query(CountInvoices, CountInvoicesHandler)
+    registry.query(GetInvoicePdf, GetInvoicePdfHandler)
 
     registry.command(CreateInvoiceDraft, CreateInvoiceDraftHandler)
     registry.command(UpdateInvoiceDraft, UpdateInvoiceDraftHandler)
     registry.command(DeleteInvoiceDraft, DeleteInvoiceDraftHandler)
+    registry.command(IssueInvoice, IssueInvoiceHandler)
+    registry.command(MarkInvoicePaid, MarkInvoicePaidHandler)
+    registry.command(VoidInvoice, VoidInvoiceHandler)

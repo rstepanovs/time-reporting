@@ -17,6 +17,12 @@ openssl rand -hex 32
 docker compose up --build -d
 ```
 
+`backend`'s image build needs outbound HTTPS to GitHub: `faktura-printer` (PDF invoice rendering,
+`invoices/rendering.py`) is pinned to a tag straight from GitHub rather than an index (see
+`backend/pyproject.toml`), so the builder stage installs `git` and `uv sync` fetches it from there;
+the runtime stage also installs WeasyPrint's system libraries (Pango/HarfBuzz/fonts) alongside the
+PostgreSQL client. None of this needs network access again after the image is built.
+
 `compose.yaml` brings the stack up in dependency order: `db` → `migrate` (creates the schema, since
 there's nothing to back up yet) → `backend`/`backup` → `frontend`. Create the first administrator
 once the backend is up:

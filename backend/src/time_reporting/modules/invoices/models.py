@@ -27,9 +27,9 @@ from time_reporting.modules.invoices.contracts import InvoiceLineKind, InvoiceSt
 
 class Invoice(TimestampMixin, Base):
     """One customer invoice, built from one or more of that customer's sent, uninvoiced billing
-    periods (``InvoiceBillingPeriod``). ``DRAFT`` is mutable; every other status is set by the
-    future issue/paid/void commands (T8), at which point the invoice becomes immutable except for
-    ``paid_on``/``voided_at``/``void_reason``.
+    periods (``InvoiceBillingPeriod``). ``DRAFT`` is mutable; ``IssueInvoice`` moves it to
+    ``ISSUED``, at which point it becomes immutable except for
+    ``paid_on``/``voided_at``/``void_reason`` (``MarkInvoicePaid``/``VoidInvoice``).
     """
 
     __tablename__ = "invoices"
@@ -41,7 +41,7 @@ class Invoice(TimestampMixin, Base):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     customer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("customers.id", ondelete="RESTRICT"))
-    # Allocated only when issued (T8, via `company.AllocateInvoiceNumber`) — `None` for a draft.
+    # Allocated only when issued, via `company.AllocateInvoiceNumber` — `None` for a draft.
     number: Mapped[str | None] = mapped_column(String(50), unique=True)
     status: Mapped[InvoiceStatus] = mapped_column(
         Enum(InvoiceStatus, name="invoice_status", values_callable=lambda s: [x.value for x in s])
@@ -59,7 +59,7 @@ class Invoice(TimestampMixin, Base):
     subtotal: Mapped[Decimal] = mapped_column(Numeric(12, 2))
     vat_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2))
     total: Mapped[Decimal] = mapped_column(Numeric(12, 2))
-    # Seller/buyer identity frozen at issue time (T8), so a later edit to the company profile or
+    # Seller/buyer identity frozen at issue time, so a later edit to the company profile or
     # customer never changes what an already-issued invoice printed.
     seller_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     buyer_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
