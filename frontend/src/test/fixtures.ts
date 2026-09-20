@@ -9,6 +9,12 @@ import type {
   ExpenseReport,
   ExpenseReportSummary,
 } from "@/expenses/api";
+import type {
+  InvoiceableCustomer,
+  InvoiceablePeriod,
+  InvoicePage as InvoicePageType,
+  InvoiceSummary,
+} from "@/invoices/api";
 import type { BillingItem, Project, ProjectMember } from "@/projects/api";
 import type { Backup, BackupList, SystemConfig, SystemStatus } from "@/system/api";
 import type {
@@ -805,6 +811,40 @@ export const testBillingPeriodListItem: BillingPeriodListItem = {
 
 export const testBillingPeriodPage: BillingPeriodPage = {
   items: [testBillingPeriodListItem],
+  total: 1,
+  limit: 20,
+  offset: 0,
+};
+
+export const testInvoiceablePeriod: InvoiceablePeriod = {
+  project_id: testProject.id,
+  project_name: testProject.name,
+  period_start: "2026-09-01",
+  period_end: "2026-09-30",
+  sent_at: "2026-10-02T09:00:00Z",
+};
+
+export const testInvoiceableCustomer: InvoiceableCustomer = {
+  customer_id: testCustomer.id,
+  customer_name: testCustomer.name,
+  currency: testCustomer.currency,
+  periods: [testInvoiceablePeriod],
+};
+
+export const testInvoiceSummary: InvoiceSummary = {
+  id: "f1a1a1a1-1111-1111-1111-111111111111",
+  customer_id: testCustomer.id,
+  customer_name: testCustomer.name,
+  status: "issued",
+  number: "2026-1",
+  invoice_date: "2026-10-02",
+  due_date: "2026-11-01",
+  currency: testCustomer.currency,
+  total: "1250.00",
+};
+
+export const testInvoicePage: InvoicePageType = {
+  items: [testInvoiceSummary],
   total: 1,
   limit: 20,
   offset: 0,

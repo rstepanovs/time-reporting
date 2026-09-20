@@ -15,7 +15,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { Link, Outlet, useLocation } from "react-router";
 
 import { useAuthenticatedUser, useSignOut } from "@/auth/hooks";
-import { EMPLOYEE_LABEL, canManage, isAdmin, roleLabels } from "@/auth/roles";
+import { EMPLOYEE_LABEL, canManage, isAccountant, isAdmin, roleLabels } from "@/auth/roles";
 
 function AccountMenu() {
   const user = useAuthenticatedUser();
@@ -76,6 +76,9 @@ const NAV_ITEMS = [
 const APPROVALS_NAV_ITEM = { to: "/approvals", label: "Approvals" };
 const TEAM_NAV_ITEM = { to: "/team", label: "Team" };
 
+// Shown only to accountants; T14 adds a second item ("Accountant package") to this group.
+const BILLING_NAV_ITEMS = [{ to: "/invoices", label: "Invoices" }];
+
 const ADMIN_NAV_ITEMS = [
   { to: "/admin/users", label: "Users" },
   { to: "/admin/customers", label: "Customers" },
@@ -109,6 +112,20 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
           onClick={onNavigate}
         />
       ))}
+      {isAccountant(user) && (
+        <NavLink label="Billing" defaultOpened={location.pathname.startsWith("/invoices")}>
+          {BILLING_NAV_ITEMS.map((item) => (
+            <NavLink
+              key={item.to}
+              component={Link}
+              to={item.to}
+              label={item.label}
+              active={location.pathname.startsWith(item.to)}
+              onClick={onNavigate}
+            />
+          ))}
+        </NavLink>
+      )}
       {isAdmin(user) && (
         <NavLink
           label="Administration"
