@@ -37,6 +37,7 @@ class AuditAction(StrEnum):
     BACKUP_CREATED = "backup.created"
     EXPENSE_REPORT_APPROVED = "expense_report.approved"
     EXPENSE_REPORT_RETURNED = "expense_report.returned"
+    COMPANY_UPDATED = "company.updated"
 
 
 # --- DTOs ---

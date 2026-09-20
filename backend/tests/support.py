@@ -32,6 +32,7 @@ MANAGER = frozenset({UserRole.MANAGER})
 EMPLOYEE: frozenset[UserRole] = frozenset()
 # An admin with no manager level, for tests of the (new) orthogonal guards.
 ADMIN_ONLY = frozenset({UserRole.ADMIN})
+ACCOUNTANT = frozenset({UserRole.ACCOUNTANT})
 
 
 class UserFactory(Protocol):

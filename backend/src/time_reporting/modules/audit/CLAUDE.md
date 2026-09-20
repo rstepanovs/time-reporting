@@ -53,3 +53,8 @@ the whole transaction — including any `AuditEvent` row already flushed — rol
   the report's own id — see `expenses/CLAUDE.md`. Saving lines, submitting and creating a report
   are not audited (mirrors `timesheets`, which only audits the billing handoff, not day-to-day
   entry edits or submission).
+- `company.UpdateCompanySettings`/`SetCompanyLogo`/`ClearCompanyLogo` → `company.updated`, recorded
+  by `company.handlers`, only when something actually changed; `entity_type`/`entity_id` are both
+  the fixed string `"company"` (there is no per-entity UUID — the settings row is a singleton).
+  `details.fields` lists which fields changed (`"logo"` for a logo set/clear) — see
+  `company/CLAUDE.md`.
