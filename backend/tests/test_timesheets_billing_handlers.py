@@ -17,6 +17,8 @@ from time_reporting.modules.expenses.contracts import (
     SaveExpenseReportLines,
     SubmitExpenseReport,
 )
+from time_reporting.modules.invoices.contracts import InvoiceStatus
+from time_reporting.modules.invoices.models import Invoice
 from time_reporting.modules.projects.contracts import (
     AddProjectMember,
     BillingItemPreset,
@@ -811,7 +813,27 @@ async def test_list_billing_periods_includes_project_and_sender_names(
     assert item.sent_by_name == "Manager One"
 
 
-# --- Invoicing marks (nested-only commands, used by the future invoices module) ---
+# --- Invoicing marks (nested-only commands, used by the invoices module) ---
+
+
+async def _make_invoice_id(bus: Bus, customer_id: UUID) -> UUID:
+    """Insert a minimal, real ``invoices.Invoice`` row and return its id — ``invoice_id`` is a
+    real FK now (added by the ``invoices`` module's own migration, T7), so these tests can't just
+    make one up with ``uuid4()`` any more."""
+    invoice = Invoice(
+        customer_id=customer_id,
+        status=InvoiceStatus.DRAFT,
+        invoice_date=date(2026, 10, 1),
+        due_date=date(2026, 10, 31),
+        currency="EUR",
+        locale="en",
+        subtotal=Decimal("0"),
+        vat_amount=Decimal("0"),
+        total=Decimal("0"),
+    )
+    bus.session.add(invoice)
+    await bus.session.flush()
+    return invoice.id
 
 
 async def test_mark_and_clear_billing_periods_invoiced(
@@ -834,7 +856,7 @@ async def test_mark_and_clear_billing_periods_invoiced(
     await bus.execute(
         SendProjectMonthToBilling(project_id=project.id, year=2026, month=9, sent_by_id=manager.id)
     )
-    invoice_id = uuid4()
+    invoice_id = await _make_invoice_id(bus, project.customer.id)
 
     await bus.execute(
         MarkBillingPeriodsInvoiced(
@@ -901,7 +923,8 @@ async def test_mark_billing_periods_invoiced_rejects_already_invoiced(
         SendProjectMonthToBilling(project_id=project.id, year=2026, month=9, sent_by_id=manager.id)
     )
     ref = BillingPeriodRef(project_id=project.id, period_start=date(2026, 9, 1))
-    await bus.execute(MarkBillingPeriodsInvoiced(periods=(ref,), invoice_id=uuid4()))
+    invoice_id = await _make_invoice_id(bus, project.customer.id)
+    await bus.execute(MarkBillingPeriodsInvoiced(periods=(ref,), invoice_id=invoice_id))
 
     with pytest.raises(BillingPeriodAlreadyInvoicedError):
         await bus.execute(MarkBillingPeriodsInvoiced(periods=(ref,), invoice_id=uuid4()))
@@ -938,7 +961,8 @@ async def test_mark_billing_periods_invoiced_batch_leaves_nothing_changed_on_fai
     )
     july_ref = BillingPeriodRef(project_id=project.id, period_start=date(2026, 7, 1))
     september_ref = BillingPeriodRef(project_id=project.id, period_start=date(2026, 9, 1))
-    await bus.execute(MarkBillingPeriodsInvoiced(periods=(july_ref,), invoice_id=uuid4()))
+    invoice_id = await _make_invoice_id(bus, project.customer.id)
+    await bus.execute(MarkBillingPeriodsInvoiced(periods=(july_ref,), invoice_id=invoice_id))
 
     with pytest.raises(BillingPeriodAlreadyInvoicedError):
         await bus.execute(
@@ -981,7 +1005,7 @@ async def test_list_billing_periods_filters_by_invoiced(
     await bus.execute(
         MarkBillingPeriodsInvoiced(
             periods=(BillingPeriodRef(project_id=project.id, period_start=date(2026, 7, 1)),),
-            invoice_id=uuid4(),
+            invoice_id=await _make_invoice_id(bus, project.customer.id),
         )
     )
 

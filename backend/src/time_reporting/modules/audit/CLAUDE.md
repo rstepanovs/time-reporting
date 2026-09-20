@@ -58,3 +58,8 @@ the whole transaction — including any `AuditEvent` row already flushed — rol
   the fixed string `"company"` (there is no per-entity UUID — the settings row is a singleton).
   `details.fields` lists which fields changed (`"logo"` for a logo set/clear) — see
   `company/CLAUDE.md`.
+- `invoices.CreateInvoiceDraft` → `invoice.created`, `invoices.DeleteInvoiceDraft` →
+  `invoice.deleted`, both recorded by `invoices.service.InvoiceService`, `entity_id` is the
+  invoice's own id — see `invoices/CLAUDE.md`. Saving header/line changes
+  (`UpdateInvoiceDraft`) is not audited (mirrors `timesheets`/`expenses`, which only audit the
+  billing handoff/review, not day-to-day edits).

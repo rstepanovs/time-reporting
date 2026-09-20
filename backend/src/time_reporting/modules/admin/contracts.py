@@ -18,11 +18,12 @@ class RemovalOutcome(StrEnum):
 
 
 class RemovalBlockerKind(StrEnum):
-    """What prevents a permanent delete. More kinds arrive with invoices."""
+    """What prevents a permanent delete."""
 
     SELF = "self"
     PROJECTS = "projects"
     TIME_ENTRIES = "time_entries"
+    INVOICES = "invoices"
 
 
 class RemovalEffectKind(StrEnum):

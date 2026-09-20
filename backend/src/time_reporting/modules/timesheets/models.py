@@ -111,9 +111,10 @@ class ProjectBillingPeriod(TimestampMixin, Base):
     (``TimesheetWeekLockedError``'s billing-period sibling), and an admin can delete this row to
     reopen the period (refused once ``invoice_id`` is set). ``period_start``/``period_end`` are a
     calendar month's bounds today, kept as a range rather than a (year, month) pair so a future
-    non-monthly period fits the same table. ``invoice_id`` has no FK yet — the ``invoices`` table
-    doesn't exist until that module's own migration, which adds the FK (``ON DELETE SET NULL``)
-    onto this same column.
+    non-monthly period fits the same table. ``invoice_id`` references ``invoices.invoices`` (table
+    name only, per the module boundary rule — this module never imports ``invoices``), ``ON DELETE
+    SET NULL`` so deleting a draft invoice (``invoices.DeleteInvoiceDraft``) never blocks on this
+    row; in practice it is always cleared first, via the nested ``ClearBillingPeriodsInvoiced``.
     """
 
     __tablename__ = "project_billing_periods"
@@ -132,7 +133,9 @@ class ProjectBillingPeriod(TimestampMixin, Base):
     period_end: Mapped[date] = mapped_column(Date)
     sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     sent_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
-    invoice_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
+    invoice_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("invoices.id", ondelete="SET NULL"), index=True
+    )
 
 
 class TimesheetRowComment(TimestampMixin, Base):

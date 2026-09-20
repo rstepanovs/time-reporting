@@ -13,6 +13,7 @@ from time_reporting.modules.expenses.models import (
     ExpenseReport,
     ExpenseReportLine,
 )
+from time_reporting.modules.invoices.models import Invoice, InvoiceBillingPeriod, InvoiceLine
 from time_reporting.modules.projects.models import Project, ProjectBillingItem, ProjectMember
 from time_reporting.modules.timesheets.models import (
     TimeEntry,
@@ -30,6 +31,9 @@ __all__ = [
     "ExpenseAttachment",
     "ExpenseReport",
     "ExpenseReportLine",
+    "Invoice",
+    "InvoiceBillingPeriod",
+    "InvoiceLine",
     "NonWorkingDay",
     "Project",
     "ProjectBillingItem",

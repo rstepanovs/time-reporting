@@ -27,6 +27,7 @@ from time_reporting.modules.customers.contracts import (
     GetCustomerById,
     UpdateCustomer,
 )
+from time_reporting.modules.invoices.contracts import CountInvoices
 from time_reporting.modules.projects.contracts import (
     DeleteProject,
     GetProjectById,
@@ -102,9 +103,12 @@ class AdminRemovalService:
         projects = await self._bus.query(
             ListProjects(limit=1, offset=0, customer_id=customer_id, include_inactive=True)
         )
+        invoice_count = await self._bus.query(CountInvoices(customer_id=customer_id))
         blockers = []
         if projects.total:
             blockers.append(RemovalCountDTO(kind=RemovalBlockerKind.PROJECTS, count=projects.total))
+        if invoice_count:
+            blockers.append(RemovalCountDTO(kind=RemovalBlockerKind.INVOICES, count=invoice_count))
         return RemovalImpactDTO(
             is_active=customer.is_active,
             can_delete_permanently=not blockers,

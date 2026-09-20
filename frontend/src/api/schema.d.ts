@@ -878,6 +878,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/invoices/invoiceable-periods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Invoiceable Periods */
+        get: operations["list_invoiceable_periods_api_v1_invoices_invoiceable_periods_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Invoices */
+        get: operations["list_invoices_api_v1_invoices_get"];
+        put?: never;
+        /** Create Invoice Draft */
+        post: operations["create_invoice_draft_api_v1_invoices_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoices/{invoice_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Invoice */
+        get: operations["get_invoice_api_v1_invoices__invoice_id__get"];
+        /** Update Invoice Draft */
+        put: operations["update_invoice_draft_api_v1_invoices__invoice_id__put"];
+        post?: never;
+        /** Delete Invoice Draft */
+        delete: operations["delete_invoice_draft_api_v1_invoices__invoice_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/users/{user_id}/removal-impact": {
         parameters: {
             query?: never;
@@ -1077,7 +1131,7 @@ export interface components {
          *     add a value (see ``AuditEvent.action`` in ``models.py``).
          * @enum {string}
          */
-        AuditAction: "user.created" | "user.roles_changed" | "user.activated" | "user.deactivated" | "user.password_reset" | "user.deleted" | "customer.archived" | "customer.deleted" | "project.archived" | "project.deleted" | "billing_period.sent" | "billing_period.reopened" | "calendar.public_holidays_imported" | "backup.created" | "expense_report.approved" | "expense_report.returned" | "company.updated";
+        AuditAction: "user.created" | "user.roles_changed" | "user.activated" | "user.deactivated" | "user.password_reset" | "user.deleted" | "customer.archived" | "customer.deleted" | "project.archived" | "project.deleted" | "billing_period.sent" | "billing_period.reopened" | "calendar.public_holidays_imported" | "backup.created" | "expense_report.approved" | "expense_report.returned" | "company.updated" | "invoice.created" | "invoice.deleted";
         /** AuditEventPageResponse */
         AuditEventPageResponse: {
             /** Items */
@@ -1268,6 +1322,19 @@ export interface components {
             /** Offset */
             offset: number;
         };
+        /** BillingPeriodRefRequest */
+        BillingPeriodRefRequest: {
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /**
+             * Period Start
+             * Format: date
+             */
+            period_start: string;
+        };
         /**
          * BillingPeriodRequest
          * @description Consecutive billing periods of ``interval_count`` ``interval_unit``s from ``anchor_date``.
@@ -1383,6 +1450,8 @@ export interface components {
             /** Hours */
             hours: string;
         };
+        /** @enum {string} */
+        ClearableInvoiceField: "vat_rate" | "vat_note" | "your_reference" | "notes";
         /** CompanyAddressRequest */
         CompanyAddressRequest: {
             /**
@@ -1554,6 +1623,16 @@ export interface components {
             year: number;
             /** Month */
             month: number;
+        };
+        /** CreateInvoiceDraftRequest */
+        CreateInvoiceDraftRequest: {
+            /**
+             * Customer Id
+             * Format: uuid
+             */
+            customer_id: string;
+            /** Periods */
+            periods: components["schemas"]["BillingPeriodRefRequest"][];
         };
         /** CurrencyAmountResponse */
         CurrencyAmountResponse: {
@@ -1975,8 +2054,242 @@ export interface components {
             /** Added */
             added: number;
         };
+        /** InvoiceCustomerResponse */
+        InvoiceCustomerResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Currency */
+            currency: string;
+        };
+        /**
+         * InvoiceLineChangeRequest
+         * @description One line's new value. ``line_id`` given updates that line (whatever its ``kind``); omitted
+         *     (or ``null``), it creates a new manual line.
+         */
+        InvoiceLineChangeRequest: {
+            /** Line Id */
+            line_id?: string | null;
+            /** Description */
+            description: string;
+            /** Quantity */
+            quantity: number | string;
+            /** Unit */
+            unit: string;
+            /** Unit Price */
+            unit_price: number | string;
+        };
+        /**
+         * InvoiceLineKind
+         * @description Where a line came from. ``TIME`` and ``EXPENSE`` lines are generated by
+         *     ``CreateInvoiceDraft`` from a billing period's export rows (see
+         *     ``timesheets.contracts.GetBillingPeriodExportRows``); ``MANUAL`` lines are added free-form
+         *     while the invoice is a draft.
+         * @enum {string}
+         */
+        InvoiceLineKind: "time" | "expense" | "manual";
+        /** InvoiceLineResponse */
+        InvoiceLineResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Position */
+            position: number;
+            kind: components["schemas"]["InvoiceLineKind"];
+            /** Description */
+            description: string;
+            /** Quantity */
+            quantity: string;
+            /** Unit */
+            unit: string;
+            /** Unit Price */
+            unit_price: string;
+            /** Amount */
+            amount: string;
+            /** Project Id */
+            project_id: string | null;
+            /** Billing Item Id */
+            billing_item_id: string | null;
+        };
         /** @enum {string} */
         InvoiceLocale: "sv" | "en";
+        /** InvoicePageResponse */
+        InvoicePageResponse: {
+            /** Items */
+            items: components["schemas"]["InvoiceSummaryResponse"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
+        /** InvoicePeriodResponse */
+        InvoicePeriodResponse: {
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Project Name */
+            project_name: string;
+            /**
+             * Period Start
+             * Format: date
+             */
+            period_start: string;
+        };
+        /** InvoiceResponse */
+        InvoiceResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            customer: components["schemas"]["InvoiceCustomerResponse"];
+            status: components["schemas"]["InvoiceStatus"];
+            /** Number */
+            number: string | null;
+            /**
+             * Invoice Date
+             * Format: date
+             */
+            invoice_date: string;
+            /**
+             * Due Date
+             * Format: date
+             */
+            due_date: string;
+            /** Currency */
+            currency: string;
+            /** Locale */
+            locale: string;
+            /** Vat Rate */
+            vat_rate: string | null;
+            /** Vat Note */
+            vat_note: string | null;
+            /** Your Reference */
+            your_reference: string | null;
+            /** Notes */
+            notes: string | null;
+            /** Subtotal */
+            subtotal: string;
+            /** Vat Amount */
+            vat_amount: string;
+            /** Total */
+            total: string;
+            /** Issued At */
+            issued_at: string | null;
+            /** Paid On */
+            paid_on: string | null;
+            /** Voided At */
+            voided_at: string | null;
+            /** Void Reason */
+            void_reason: string | null;
+            /** Lines */
+            lines: components["schemas"]["InvoiceLineResponse"][];
+            /** Periods */
+            periods: components["schemas"]["InvoicePeriodResponse"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * InvoiceStatus
+         * @description An invoice's place in its lifecycle. ``DRAFT`` is mutable (header and lines); every other
+         *     status is set only by the future ``invoices`` issue/paid/void commands (T8) and, once
+         *     ``ISSUED``, the invoice itself becomes immutable — only ``paid_on``/``voided_at`` change from
+         *     there.
+         * @enum {string}
+         */
+        InvoiceStatus: "draft" | "issued" | "paid" | "void";
+        /**
+         * InvoiceSummaryResponse
+         * @description One row of a list view (``GET /invoices``).
+         */
+        InvoiceSummaryResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Customer Id
+             * Format: uuid
+             */
+            customer_id: string;
+            /** Customer Name */
+            customer_name: string;
+            status: components["schemas"]["InvoiceStatus"];
+            /** Number */
+            number: string | null;
+            /**
+             * Invoice Date
+             * Format: date
+             */
+            invoice_date: string;
+            /**
+             * Due Date
+             * Format: date
+             */
+            due_date: string;
+            /** Currency */
+            currency: string;
+            /** Total */
+            total: string;
+        };
+        /** InvoiceableCustomerResponse */
+        InvoiceableCustomerResponse: {
+            /**
+             * Customer Id
+             * Format: uuid
+             */
+            customer_id: string;
+            /** Customer Name */
+            customer_name: string;
+            /** Currency */
+            currency: string;
+            /** Periods */
+            periods: components["schemas"]["InvoiceablePeriodResponse"][];
+        };
+        /** InvoiceablePeriodResponse */
+        InvoiceablePeriodResponse: {
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Project Name */
+            project_name: string;
+            /**
+             * Period Start
+             * Format: date
+             */
+            period_start: string;
+            /**
+             * Period End
+             * Format: date
+             */
+            period_end: string;
+            /**
+             * Sent At
+             * Format: date-time
+             */
+            sent_at: string;
+        };
         /** MonthCalendarResponse */
         MonthCalendarResponse: {
             user: components["schemas"]["TimesheetUserResponse"];
@@ -2307,10 +2620,10 @@ export interface components {
         };
         /**
          * RemovalBlockerKind
-         * @description What prevents a permanent delete. More kinds arrive with invoices.
+         * @description What prevents a permanent delete.
          * @enum {string}
          */
-        RemovalBlockerKind: "self" | "projects" | "time_entries";
+        RemovalBlockerKind: "self" | "projects" | "time_entries" | "invoices";
         /** RemovalCountResponse */
         RemovalCountResponse: {
             /** Kind */
@@ -2734,6 +3047,37 @@ export interface components {
              * @description Token lifetime in seconds
              */
             expires_in: number;
+        };
+        /** UpdateInvoiceDraftRequest */
+        UpdateInvoiceDraftRequest: {
+            /** Invoice Date */
+            invoice_date?: string | null;
+            /** Due Date */
+            due_date?: string | null;
+            /** Vat Rate */
+            vat_rate?: number | string | null;
+            /** Vat Note */
+            vat_note?: string | null;
+            /** Your Reference */
+            your_reference?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Lines
+             * @default []
+             */
+            lines: components["schemas"]["InvoiceLineChangeRequest"][];
+            /**
+             * Delete Line Ids
+             * @default []
+             */
+            delete_line_ids: string[];
+            /**
+             * Clear Fields
+             * @description Any of: vat_rate, vat_note, your_reference, notes
+             * @default []
+             */
+            clear_fields: components["schemas"]["ClearableInvoiceField"][];
         };
         /** UserCreateRequest */
         UserCreateRequest: {
@@ -5574,6 +5918,232 @@ export interface operations {
                 content?: never;
             };
             /** @description The report's status does not allow this action */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_invoiceable_periods_api_v1_invoices_invoiceable_periods_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceableCustomerResponse"][];
+                };
+            };
+        };
+    };
+    list_invoices_api_v1_invoices_get: {
+        parameters: {
+            query?: {
+                customer_id?: string | null;
+                status?: components["schemas"]["InvoiceStatus"] | null;
+                date_from?: string | null;
+                date_to?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoicePageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_invoice_draft_api_v1_invoices_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateInvoiceDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceResponse"];
+                };
+            };
+            /** @description The draft violates an invoicing rule */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_invoice_api_v1_invoices__invoice_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invoice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceResponse"];
+                };
+            };
+            /** @description Invoice not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_invoice_draft_api_v1_invoices__invoice_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invoice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateInvoiceDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceResponse"];
+                };
+            };
+            /** @description Invoice not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The invoice is not a draft */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_invoice_draft_api_v1_invoices__invoice_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invoice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invoice not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The invoice is not a draft */
             409: {
                 headers: {
                     [name: string]: unknown;

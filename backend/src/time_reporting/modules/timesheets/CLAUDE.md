@@ -142,13 +142,13 @@ project `manager_id` manages (`manager_id=None` covers every active project — 
   nested `expenses.UnlockProjectMonthExpenseReports`, unlocking both the weeks and the reports —
   refused with `BillingPeriodInvoicedError` (409) once the period's `invoice_id` is set, so
   reopening never orphans an invoice's line items.
-- `ProjectBillingPeriod.invoice_id` (nullable, no FK yet — the future `invoices` module's own
-  migration adds `ON DELETE SET NULL` once that table exists) is stamped by the nested-only
-  `MarkBillingPeriodsInvoiced(periods, invoice_id)` (raising `BillingPeriodNotFoundError` or
-  `BillingPeriodAlreadyInvoicedError`, checked for every `BillingPeriodRef` — a `(project_id,
-  period_start)` pair — before any is mutated) and cleared by `ClearBillingPeriodsInvoiced
-  (invoice_id)`; both will be executed by that future module's `CreateInvoiceDraft`/
-  `DeleteInvoiceDraft`. Nothing in this module calls either yet.
+- `ProjectBillingPeriod.invoice_id` (nullable, `ON DELETE SET NULL` FK to `invoices.invoices` — by
+  table name only, added by `invoices`' own migration once that table existed, T7; this module
+  never imports `invoices`) is stamped by the nested-only `MarkBillingPeriodsInvoiced(periods,
+  invoice_id)` (raising `BillingPeriodNotFoundError` or `BillingPeriodAlreadyInvoicedError`, checked
+  for every `BillingPeriodRef` — a `(project_id, period_start)` pair — before any is mutated) and
+  cleared by `ClearBillingPeriodsInvoiced(invoice_id)`; both are executed by `invoices`'
+  `CreateInvoiceDraft`/`DeleteInvoiceDraft` — see `invoices/CLAUDE.md`.
 - Once sent, a period **locks** its dates: `SaveTimesheetWeek` rejects a cell change dated inside a
   sent period, or any row-comment change on a billing item whose project has any sent period
   overlapping the week (`BillingPeriodLockedError`), and `ReturnTimesheetWeek` rejects returning a
@@ -173,8 +173,7 @@ project `manager_id` manages (`manager_id=None` covers every active project — 
   on `ProjectBillingPeriod`, so it's resolved to that customer's project ids via
   `projects.ListProjects` first (capped at 10,000 projects — plenty for any real customer),
   intersected with `project_id` if both are given. `invoiced` filters on whether `invoice_id` is
-  set (`None` means no filter) — the future `invoices` module's `ListInvoiceablePeriods` will query
-  `invoiced=False`.
+  set (`None` means no filter) — `invoices.ListInvoiceablePeriods` queries `invoiced=False`.
 - `SendProjectMonthToBilling`/`ReopenProjectBillingPeriod` each record a `RecordAuditEvent`
   (`billing_period.sent`/`billing_period.reopened`) in `billing.py` on success, actor being
   `sent_by_id`/`ReopenProjectBillingPeriod.actor_id` respectively; `entity_id` is
@@ -187,7 +186,7 @@ project `manager_id` manages (`manager_id=None` covers every active project — 
   period) builds one row per time entry in the period's dates plus one row per approved expense
   line (via `expenses.ListProjectMonthExpenseReportLines`) — `BillingPeriodExportRowDTO` shapes
   both sources identically (`unit=amount` and `currency` set only for an expense row, both also
-  carrying `project_id`/`billing_item_id` — not rendered in the CSV, kept so the future `invoices`
-  module can aggregate lines from this same query instead of a separate one), sorted by date then
-  user name. The router (`csv.writer` over an `io.StringIO`, `StreamingResponse`) never touches the
+  carrying `project_id`/`billing_item_id` — not rendered in the CSV, used instead by
+  `invoices.CreateInvoiceDraft` to aggregate lines from this same query), sorted by date then user
+  name. The router (`csv.writer` over an `io.StringIO`, `StreamingResponse`) never touches the
   database beyond that one query.

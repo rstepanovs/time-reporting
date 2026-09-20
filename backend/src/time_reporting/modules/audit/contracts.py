@@ -38,6 +38,8 @@ class AuditAction(StrEnum):
     EXPENSE_REPORT_APPROVED = "expense_report.approved"
     EXPENSE_REPORT_RETURNED = "expense_report.returned"
     COMPANY_UPDATED = "company.updated"
+    INVOICE_CREATED = "invoice.created"
+    INVOICE_DELETED = "invoice.deleted"
 
 
 # --- DTOs ---
