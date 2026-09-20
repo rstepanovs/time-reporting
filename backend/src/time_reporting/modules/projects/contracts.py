@@ -114,6 +114,8 @@ class ProjectDTO:
     is_active: bool
     # Hours booked per working day when a timesheet week is prefilled for this project.
     normal_working_hours: Decimal
+    # Never billed — see ``timesheets.contracts.BillingPeriodStatus.NOT_BILLABLE``.
+    is_internal: bool
     manager: ProjectManagerDTO | None
     created_at: datetime
     updated_at: datetime
@@ -266,6 +268,7 @@ class CreateProject(Command[ProjectDTO]):
     name: str
     description: str | None = None
     normal_working_hours: Decimal = Decimal("8.00")
+    is_internal: bool = False
     manager_id: UUID | None = None
 
 
@@ -284,6 +287,7 @@ class UpdateProject(Command[ProjectDTO]):
     description: str | None = None
     is_active: bool | None = None
     normal_working_hours: Decimal | None = None
+    is_internal: bool | None = None
     manager_id: UUID | None = None
     clear_fields: frozenset[ClearableProjectField] = frozenset()
 

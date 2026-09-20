@@ -207,6 +207,32 @@ describe("ProjectDetailsPage", () => {
     });
   });
 
+  it("lets a manager mark a project internal", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
+    vi.mocked(updateProject).mockResolvedValue({ ...testProject, is_internal: true });
+    renderApp(`/projects/${testProject.id}`);
+    await screen.findByRole("heading", { name: testProject.name });
+    expect(screen.queryByText("Internal")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: /internal project/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => {
+      expect(updateProject).toHaveBeenCalledWith(testProject.id, { is_internal: true });
+    });
+  });
+
+  it("shows an Internal badge for an internal project", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
+    vi.mocked(getProject).mockResolvedValue({ ...testProject, is_internal: true });
+    renderApp(`/projects/${testProject.id}`);
+
+    await screen.findByRole("heading", { name: testProject.name });
+    expect(screen.getByText("Internal")).toBeTruthy();
+  });
+
   it("archives the project after confirming", async () => {
     vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
     vi.mocked(updateProject).mockResolvedValue({ ...testProject, is_active: false });

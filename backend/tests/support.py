@@ -57,5 +57,6 @@ class ProjectFactory(Protocol):
         customer_id: UUID | None = None,
         name: str | None = None,
         description: str | None = None,
+        is_internal: bool = False,
         manager_id: UUID | None = None,
     ) -> ProjectDTO: ...

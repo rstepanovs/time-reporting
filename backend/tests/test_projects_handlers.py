@@ -146,6 +146,35 @@ async def test_update_project_changes_normal_working_hours(
     assert updated.normal_working_hours == Decimal("6.00")
 
 
+async def test_create_project_defaults_to_not_internal(
+    bus: Bus, make_customer: CustomerFactory
+) -> None:
+    customer = await make_customer()
+
+    project = await bus.execute(CreateProject(customer_id=customer.id, name="Billable"))
+
+    assert project.is_internal is False
+
+
+async def test_create_project_accepts_is_internal(bus: Bus, make_customer: CustomerFactory) -> None:
+    customer = await make_customer()
+
+    project = await bus.execute(
+        CreateProject(customer_id=customer.id, name="Company Overhead", is_internal=True)
+    )
+
+    assert project.is_internal is True
+
+
+async def test_update_project_changes_is_internal(bus: Bus, make_project: ProjectFactory) -> None:
+    project = await make_project()
+    assert project.is_internal is False
+
+    updated = await bus.execute(UpdateProject(project_id=project.id, is_internal=True))
+
+    assert updated.is_internal is True
+
+
 async def test_create_project_for_unknown_customer_raises(bus: Bus) -> None:
     with pytest.raises(ProjectCustomerNotFoundError):
         await bus.execute(CreateProject(customer_id=uuid4(), name="Orphan"))

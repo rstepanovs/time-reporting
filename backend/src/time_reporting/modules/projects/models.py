@@ -13,6 +13,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
     func,
     true,
 )
@@ -51,6 +52,10 @@ class Project(TimestampMixin, Base):
     normal_working_hours: Mapped[Decimal] = mapped_column(
         Numeric(4, 2), default=Decimal("8.00"), server_default="8"
     )
+    # Never billed: timesheets still books hours against it, but its month is always
+    # `not_billable` and `SendProjectMonthToBilling` refuses it. Still belongs to a customer (often
+    # one representing the company itself), so currency and every existing join keep working.
+    is_internal: Mapped[bool] = mapped_column(default=False, server_default=false())
 
 
 class ProjectMember(Base):

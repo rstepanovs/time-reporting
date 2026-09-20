@@ -136,6 +136,7 @@ describe("ProjectsPage", () => {
           name: "New Project",
           description: null,
           normalWorkingHours: 8,
+          isInternal: false,
           managerId: null,
         },
         expect.anything(),

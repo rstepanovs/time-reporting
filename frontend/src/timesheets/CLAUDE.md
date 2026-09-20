@@ -122,7 +122,11 @@ The Administration section (`admin`) is `admin/AdminShortcutsCard.tsx`, document
   - `ProjectBillingCard.tsx` — each managed project's hours, weeks-approved x/y (plus a blocking
     expense-report count when `blocking_reports > 0`) and billing status for a ‹›-navigable month
     (previous month during a month's first 10 days, current month after), with a "Send to billing"
-    button behind a confirming modal for a `ready` project.
+    button behind a confirming modal for a `ready` project. An internal project
+    (`projects.ProjectDTO.is_internal`) always reports `not_billable` instead — its `STATUS_LABEL`/
+    `STATUS_COLOR` entry ("Internal — not billed", violet) is just another badge, so the "Send to
+    billing" button (gated on `status === "ready"`) never renders for it; same in `TeamPage.tsx`
+    below.
   - `TeamStaffCard.tsx` — everyone on the manager's projects, deduplicated across projects, hours
     reported this month vs. expected with a warning icon/tooltip, linking to `/timesheet?week=&user=`
     for the current week; footer "Team overview →" to `/team`.

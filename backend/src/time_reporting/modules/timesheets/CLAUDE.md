@@ -121,11 +121,18 @@ project `manager_id` manages (`manager_id=None` covers every active project — 
   one of the project's expense reports for the month (from `expenses.ListProjectMonthExpenseReports`
   — see `expenses/CLAUDE.md`); it is **ready** when that scope is non-empty and every week and
   report in it is `approved` — **not ready** otherwise (nothing booked yet, or some week/report
-  still needs approval/re-approval).
+  still needs approval/re-approval). This whole computation is skipped for an internal project
+  (`projects.ProjectDTO.is_internal`): its month is always `BillingPeriodStatus.NOT_BILLABLE`
+  (`team.py`'s `_billing_period`, checked before `sent_period`/`billing_readiness()` — an internal
+  project can never have a sent period, see below), and its `blocking_weeks`/`blocking_reports` are
+  reported as `0` regardless of what's actually booked. Hours still book normally on it and its
+  expense reports still follow the normal workflow — this only ever changes what
+  `ProjectBillingPeriodDTO.status` reports, never what's allowed on the timesheet/expenses side.
 - Sending is a stub — invoicing doesn't exist yet. `SendProjectMonthToBilling(project_id, year,
   month, sent_by_id)` inserts a `ProjectBillingPeriod` row (`project_id`, `period_start`/`period_end`
   = the calendar month, `sent_at`, `sent_by_id`; unique per `(project_id, period_start)`) once ready,
-  raising `BillingPeriodNotReadyError` (carries `blocking_weeks` *and* `blocking_reports`) or
+  raising `ProjectIsInternalError` (400) for an internal project — checked first, before readiness
+  — `BillingPeriodNotReadyError` (carries `blocking_weeks` *and* `blocking_reports`) or
   `BillingPeriodAlreadySentError` otherwise; allowed on any day, not only after the month ends, since
   a project's work can finish early. Any manager may send any project, regardless of its
   `manager_id` — the router's `ManagerDep` is the only check, same as approvals. Sending also

@@ -34,6 +34,7 @@ from time_reporting.modules.timesheets.contracts import (
     BillingPeriodStatus,
     GetBillingPeriodExportRows,
     ProjectBillingPeriodDTO,
+    ProjectIsInternalError,
     ReopenProjectBillingPeriod,
     SendProjectMonthToBilling,
     TimesheetProjectNotFoundError,
@@ -71,6 +72,8 @@ class BillingService:
         project = await self._bus.query(GetProjectById(project_id=command.project_id))
         if project is None:
             raise TimesheetProjectNotFoundError(command.project_id)
+        if project.is_internal:
+            raise ProjectIsInternalError(command.project_id)
         sender = await self._bus.query(GetUserById(user_id=command.sent_by_id))
         if sender is None:
             raise UserNotFoundError(command.sent_by_id)

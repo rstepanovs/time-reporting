@@ -34,6 +34,7 @@ from time_reporting.modules.timesheets.contracts import (
     GetBillingPeriodExportRows,
     GetTimesheetWeek,
     ListBillingPeriods,
+    ProjectIsInternalError,
     ReopenProjectBillingPeriod,
     ReturnTimesheetWeek,
     RowCommentChange,
@@ -304,6 +305,32 @@ async def test_send_for_unknown_project_raises(bus: Bus, make_user: UserFactory)
     with pytest.raises(TimesheetProjectNotFoundError):
         await bus.execute(
             SendProjectMonthToBilling(project_id=uuid4(), year=2026, month=9, sent_by_id=admin.id)
+        )
+
+
+async def test_send_for_internal_project_is_refused(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    manager = await make_user(roles=MANAGER)
+    worker = await make_user()
+    project = await make_project(manager_id=manager.id, is_internal=True)
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
+    item_id = await _normal_hours_item_id(bus, project.id)
+    await _book_and_approve(
+        bus,
+        worker_id=worker.id,
+        admin_id=manager.id,
+        item_id=item_id,
+        entry_date=WEEK_1,
+        week_start=WEEK_1,
+    )
+
+    # Even fully approved, an internal project can never be sent to billing.
+    with pytest.raises(ProjectIsInternalError):
+        await bus.execute(
+            SendProjectMonthToBilling(
+                project_id=project.id, year=2026, month=9, sent_by_id=manager.id
+            )
         )
 
 

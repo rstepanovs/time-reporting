@@ -251,11 +251,13 @@ class TimesheetWeekSummaryDTO:
 class BillingPeriodStatus(StrEnum):
     """A project's month, for the manager's billing handoff. No ``ProjectBillingPeriod`` row yet
     (added alongside ``SendProjectMonthToBilling``) means ``NOT_READY``/``READY``; ``SENT`` is set
-    once one exists."""
+    once one exists. ``NOT_BILLABLE`` overrides all of that for an internal project
+    (``projects.ProjectDTO.is_internal``), which can never be sent."""
 
     NOT_READY = "not_ready"
     READY = "ready"
     SENT = "sent"
+    NOT_BILLABLE = "not_billable"
 
 
 class TeamMemberWarning(StrEnum):
@@ -745,6 +747,14 @@ class ReturnCommentRequiredError(TimesheetError):
 class TimesheetProjectNotFoundError(TimesheetError):
     def __init__(self, project_id: UUID) -> None:
         super().__init__(f"Project {project_id} not found")
+        self.project_id = project_id
+
+
+class ProjectIsInternalError(TimesheetError):
+    """Raised by ``SendProjectMonthToBilling`` for an internal project — it is never billable."""
+
+    def __init__(self, project_id: UUID) -> None:
+        super().__init__(f"Project {project_id} is internal and cannot be sent to billing")
         self.project_id = project_id
 
 

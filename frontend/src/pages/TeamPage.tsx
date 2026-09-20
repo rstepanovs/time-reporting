@@ -27,11 +27,13 @@ const STATUS_LABEL: Record<BillingPeriodStatus, string> = {
   not_ready: "Not ready",
   ready: "Ready",
   sent: "Sent",
+  not_billable: "Internal — not billed",
 };
 const STATUS_COLOR: Record<BillingPeriodStatus, string> = {
   not_ready: "gray",
   ready: "blue",
   sent: "green",
+  not_billable: "violet",
 };
 
 function currentYearMonth(): { year: number; month: number } {

@@ -75,11 +75,53 @@ async def _member_project(
     make_user: UserFactory,
     *,
     manager_id: UUID | None = None,
+    is_internal: bool = False,
 ) -> tuple[UserDTO, ProjectDTO]:
     user = await make_user()
-    project = await make_project(manager_id=manager_id)
+    project = await make_project(manager_id=manager_id, is_internal=is_internal)
     await bus.execute(AddProjectMember(project_id=project.id, user_id=user.id))
     return user, project
+
+
+async def test_report_on_an_internal_project_works_end_to_end(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    """`expenses` doesn't look at `Project.is_internal` at all — the workflow, and the eventual
+    lock from a billing handoff, are entirely unaffected since an internal project's month can
+    never be sent to billing in the first place (see `timesheets.ProjectIsInternalError`)."""
+    manager = await make_user(roles=MANAGER)
+    user, project = await _member_project(
+        bus, make_project, make_user, manager_id=manager.id, is_internal=True
+    )
+    item_id = await _purchasing_item_id(bus, project.id)
+    report = await bus.execute(
+        CreateExpenseReport(user_id=user.id, project_id=project.id, year=YEAR, month=MONTH)
+    )
+    report = await bus.execute(
+        SaveExpenseReportLines(
+            report_id=report.id,
+            actor_id=user.id,
+            lines=(
+                ExpenseLineChange(
+                    line_id=None,
+                    billing_item_id=item_id,
+                    expense_date=date(2026, 9, 10),
+                    amount=Decimal("42.00"),
+                    description="Taxi",
+                    vendor=None,
+                    document_no=None,
+                ),
+            ),
+        )
+    )
+    assert report.total == Decimal("42.00")
+
+    submitted = await bus.execute(SubmitExpenseReport(report_id=report.id, actor_id=user.id))
+    assert submitted.status is ExpenseReportStatus.SUBMITTED
+
+    approved = await bus.execute(ApproveExpenseReport(report_id=report.id, reviewer_id=manager.id))
+    assert approved.status is ExpenseReportStatus.APPROVED
+    assert approved.is_locked is False
 
 
 # --- SubmitExpenseReport ---

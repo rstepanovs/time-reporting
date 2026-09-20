@@ -1,4 +1,14 @@
-import { Alert, Button, Modal, NumberInput, Select, Stack, Textarea, TextInput } from "@mantine/core";
+import {
+  Alert,
+  Button,
+  Checkbox,
+  Modal,
+  NumberInput,
+  Select,
+  Stack,
+  Textarea,
+  TextInput,
+} from "@mantine/core";
 import { isNotEmpty, useForm } from "@mantine/form";
 import { useDebouncedValue } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
@@ -20,6 +30,7 @@ type FormValues = {
   name: string;
   description: string;
   normalWorkingHours: number | string;
+  isInternal: boolean;
   managerId: string | null;
 };
 
@@ -55,6 +66,7 @@ export function ProjectFormModal(props: Props) {
             name: props.project.name,
             description: props.project.description ?? "",
             normalWorkingHours: props.project.normal_working_hours,
+            isInternal: props.project.is_internal,
             managerId: props.project.manager?.id ?? null,
           }
         : {
@@ -62,6 +74,7 @@ export function ProjectFormModal(props: Props) {
             name: "",
             description: "",
             normalWorkingHours: DEFAULT_NORMAL_WORKING_HOURS,
+            isInternal: false,
             managerId: null,
           },
     validate: {
@@ -93,6 +106,7 @@ export function ProjectFormModal(props: Props) {
           name: values.name,
           description: values.description || null,
           normalWorkingHours: values.normalWorkingHours,
+          isInternal: values.isInternal,
           managerId: values.managerId,
         });
         onClose();
@@ -108,6 +122,7 @@ export function ProjectFormModal(props: Props) {
           name?: string;
           description?: string | null;
           normal_working_hours?: number | string;
+          is_internal?: boolean;
           manager_id?: string | null;
         } = {};
         if (values.name !== original.name) body.name = values.name;
@@ -115,6 +130,9 @@ export function ProjectFormModal(props: Props) {
         if (newDescription !== original.description) body.description = newDescription;
         if (String(values.normalWorkingHours) !== original.normal_working_hours) {
           body.normal_working_hours = values.normalWorkingHours;
+        }
+        if (values.isInternal !== original.is_internal) {
+          body.is_internal = values.isInternal;
         }
         if (values.managerId !== (original.manager?.id ?? null)) {
           body.manager_id = values.managerId;
@@ -184,6 +202,12 @@ export function ProjectFormModal(props: Props) {
             decimalScale={2}
             key={form.key("normalWorkingHours")}
             {...form.getInputProps("normalWorkingHours")}
+          />
+          <Checkbox
+            label="Internal project"
+            description="Never billed — hours and expenses are still tracked, but its month always shows as not billable"
+            key={form.key("isInternal")}
+            {...form.getInputProps("isInternal", { type: "checkbox" })}
           />
           <Select
             label="Manager"

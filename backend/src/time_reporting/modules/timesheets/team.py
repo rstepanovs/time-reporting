@@ -267,6 +267,7 @@ class TeamOverviewService:
         billing = await self._billing_period(
             project_id=project.id,
             currency=project.customer.currency,
+            is_internal=project.is_internal,
             month_first=month_first,
             month_last=month_last,
             entries_for_project=entries_for_project,
@@ -283,6 +284,7 @@ class TeamOverviewService:
         *,
         project_id: UUID,
         currency: str,
+        is_internal: bool,
         month_first: date,
         month_last: date,
         entries_for_project: list[TimeEntry],
@@ -296,7 +298,14 @@ class TeamOverviewService:
             for time_entry in entries_for_project
         }
         report_statuses = [report.status for report in reports_for_project]
-        if sent_period is not None:
+        if is_internal:
+            # Never billable — an internal project can't have a sent period at all (guarded by
+            # ``BillingService.send_to_billing``), so readiness never applies either.
+            status = BillingPeriodStatus.NOT_BILLABLE
+            blocking_weeks = 0
+            blocking_reports = 0
+            weeks_in_scope = len(scope_pairs)
+        elif sent_period is not None:
             status = BillingPeriodStatus.SENT
             blocking_weeks = 0
             blocking_reports = 0

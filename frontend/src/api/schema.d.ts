@@ -1295,10 +1295,11 @@ export interface components {
          * BillingPeriodStatus
          * @description A project's month, for the manager's billing handoff. No ``ProjectBillingPeriod`` row yet
          *     (added alongside ``SendProjectMonthToBilling``) means ``NOT_READY``/``READY``; ``SENT`` is set
-         *     once one exists.
+         *     once one exists. ``NOT_BILLABLE`` overrides all of that for an internal project
+         *     (``projects.ProjectDTO.is_internal``), which can never be sent.
          * @enum {string}
          */
-        BillingPeriodStatus: "not_ready" | "ready" | "sent";
+        BillingPeriodStatus: "not_ready" | "ready" | "sent" | "not_billable";
         /**
          * BillingUnit
          * @description What a billing item's quantity is measured in. Immutable once the item exists.
@@ -2132,6 +2133,11 @@ export interface components {
              * @default 8.00
              */
             normal_working_hours: number | string;
+            /**
+             * Is Internal
+             * @default false
+             */
+            is_internal: boolean;
             /** Manager Id */
             manager_id?: string | null;
         };
@@ -2224,6 +2230,8 @@ export interface components {
             is_active: boolean;
             /** Normal Working Hours */
             normal_working_hours: string;
+            /** Is Internal */
+            is_internal: boolean;
             manager: components["schemas"]["ProjectManagerResponse"] | null;
             /**
              * Created At
@@ -2241,7 +2249,8 @@ export interface components {
          * @description Partial update: omitted fields are left unchanged.
          *
          *     ``customer_id`` is immutable and not part of this request. ``null`` clears ``description`` and
-         *     ``manager_id``; it is rejected for ``name``, ``is_active`` and ``normal_working_hours``.
+         *     ``manager_id``; it is rejected for ``name``, ``is_active``, ``normal_working_hours`` and
+         *     ``is_internal``.
          */
         ProjectUpdateRequest: {
             /** Name */
@@ -2252,6 +2261,8 @@ export interface components {
             is_active?: boolean | null;
             /** Normal Working Hours */
             normal_working_hours?: number | string | null;
+            /** Is Internal */
+            is_internal?: boolean | null;
             /** Manager Id */
             manager_id?: string | null;
         };
@@ -4686,6 +4697,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ProjectBillingPeriodResponse"];
                 };
+            };
+            /** @description The project is internal and never billed */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description User not found */
             404: {

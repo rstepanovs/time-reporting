@@ -11,6 +11,14 @@ Depends on: `customers.contracts` (`GetCustomersByIds`, active check), `users.co
 
 - `Project.normal_working_hours` (default 8, `0 < x ≤ 24`) is how many hours the timesheets module's
   weekly grid prefills per working day when it seeds a fresh draft week.
+- `Project.is_internal` (default false) marks a project that is never billed — set/read like
+  `is_active`, no validation here. It still belongs to a customer (typically one representing the
+  company itself), so nothing about currency or the existing joins changes; `timesheets` is what
+  acts on it: `billing_readiness()`/`GetTeamMonthOverview` report such a project's month as
+  `not_billable` instead of ready/not-ready, and `SendProjectMonthToBilling` refuses it with
+  `ProjectIsInternalError` — see `timesheets/CLAUDE.md`'s "Billing handoff and locking". `expenses`
+  doesn't look at this flag at all: an expense report on an internal project follows the normal
+  workflow and is never locked by a billing handoff that can't happen.
 - `Project.manager_id` is the one responsible manager (nullable; an active user holding the
   `manager` access level, checked on set — `ProjectManagerNotFoundError` /
   `ProjectManagerNotEligibleError` otherwise), settable on `CreateProject`/`UpdateProject`

@@ -35,6 +35,7 @@ from time_reporting.modules.timesheets.contracts import (
     ListBillingPeriods,
     ListSubmittedTimesheetWeeks,
     ListTimesheetOptions,
+    ProjectIsInternalError,
     QuantityOutOfRangeError,
     ReopenProjectBillingPeriod,
     ReturnCommentRequiredError,
@@ -316,6 +317,7 @@ async def list_billing_periods(
     status_code=status.HTTP_201_CREATED,
     responses={
         **_USER_NOT_FOUND_RESPONSE,
+        status.HTTP_400_BAD_REQUEST: {"description": "The project is internal and never billed"},
         status.HTTP_409_CONFLICT: {"description": "Not ready to send, or already sent"},
     },
 )
@@ -335,6 +337,8 @@ async def send_project_month_to_billing(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except UserNotFoundError as exc:
         raise _user_not_found() from exc
+    except ProjectIsInternalError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except (BillingPeriodNotReadyError, BillingPeriodAlreadySentError) as exc:
         raise _conflict(str(exc)) from exc
     return ProjectBillingPeriodResponse.model_validate(period)

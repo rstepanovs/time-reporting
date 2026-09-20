@@ -230,6 +230,43 @@ async def test_billing_readiness_not_ready_with_no_entries(
     assert billing.blocking_weeks == 0
 
 
+async def test_billing_readiness_not_billable_for_an_internal_project(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    manager = await make_user(roles=MANAGER)
+    admin = await make_user(roles=ADMIN)
+    worker = await make_user()
+    project = await make_project(manager_id=manager.id, is_internal=True)
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
+    item_id = await _normal_hours_item_id(bus, project.id)
+    await bus.execute(
+        SaveTimesheetWeek(
+            user_id=worker.id,
+            week_start=SEPTEMBER_WEEKS[1],
+            changes=(
+                TimeEntryChange(
+                    billing_item_id=item_id, date=SEPTEMBER_WEEKS[1], quantity=Decimal("4")
+                ),
+            ),
+        )
+    )
+    await bus.execute(SubmitTimesheetWeek(user_id=worker.id, week_start=SEPTEMBER_WEEKS[1]))
+    await bus.execute(
+        ApproveTimesheetWeek(user_id=worker.id, week_start=SEPTEMBER_WEEKS[1], reviewer_id=admin.id)
+    )
+
+    overview = await bus.query(
+        GetTeamMonthOverview(manager_id=manager.id, year=2026, month=9, today=date(2026, 9, 15))
+    )
+
+    # Fully approved and booked, yet never ready — an internal project is simply never billable.
+    billing = overview.projects[0].billing
+    assert billing.status is BillingPeriodStatus.NOT_BILLABLE
+    assert billing.blocking_weeks == 0
+    assert billing.blocking_reports == 0
+    assert billing.hours.normal_hours == Decimal("4")
+
+
 async def test_billing_readiness_blocked_by_an_unapproved_week(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:

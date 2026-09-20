@@ -79,6 +79,7 @@ def _to_dto(
         description=project.description,
         is_active=project.is_active,
         normal_working_hours=project.normal_working_hours,
+        is_internal=project.is_internal,
         manager=manager,
         created_at=project.created_at,
         updated_at=project.updated_at,
@@ -335,6 +336,7 @@ class CreateProjectHandler(_BaseHandler):
             name=command.name,
             description=command.description,
             normal_working_hours=command.normal_working_hours,
+            is_internal=command.is_internal,
             manager_id=command.manager_id,
         )
         return await self._project_dto(project)

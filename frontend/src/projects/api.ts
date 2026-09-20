@@ -118,6 +118,7 @@ export async function createProject(body: {
   name: string;
   description?: string | null;
   normalWorkingHours: number | string;
+  isInternal: boolean;
   managerId?: string | null;
 }): Promise<Project> {
   const { data, response } = await api.POST("/api/v1/projects", {
@@ -126,6 +127,7 @@ export async function createProject(body: {
       name: body.name,
       description: body.description,
       normal_working_hours: body.normalWorkingHours,
+      is_internal: body.isInternal,
       manager_id: body.managerId,
     },
   });
@@ -140,6 +142,7 @@ export async function updateProject(
     description?: string | null;
     is_active?: boolean;
     normal_working_hours?: number | string;
+    is_internal?: boolean;
     manager_id?: string | null;
   },
 ): Promise<Project> {

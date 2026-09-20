@@ -166,4 +166,21 @@ describe("TeamPage", () => {
 
     await screen.findByText(/2 expense report\(s\) pending/);
   });
+
+  it("shows an internal project as not billable, with no Send button", async () => {
+    const overview = {
+      ...testTeamMonthOverview,
+      projects: testTeamMonthOverview.projects.map((project) =>
+        project.project.id === testReadyBillingPeriod.project_id
+          ? { ...project, billing: { ...project.billing, status: "not_billable" as const } }
+          : project,
+      ),
+    };
+    vi.mocked(getTeamMonthOverview).mockResolvedValue(overview);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
+    renderApp("/team");
+
+    await screen.findByText("Internal — not billed");
+    expect(screen.queryByRole("button", { name: "Send to billing" })).toBeNull();
+  });
 });

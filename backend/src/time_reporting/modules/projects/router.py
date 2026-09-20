@@ -127,6 +127,7 @@ async def create_project(
                 name=body.name,
                 description=body.description,
                 normal_working_hours=body.normal_working_hours,
+                is_internal=body.is_internal,
                 manager_id=body.manager_id,
             )
         )
@@ -172,6 +173,7 @@ async def update_project(
                 description=body.description,
                 is_active=body.is_active,
                 normal_working_hours=body.normal_working_hours,
+                is_internal=body.is_internal,
                 manager_id=body.manager_id,
                 clear_fields=clear_fields,
             )
