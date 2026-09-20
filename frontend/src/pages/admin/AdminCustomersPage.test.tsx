@@ -96,6 +96,38 @@ describe("AdminCustomersPage", () => {
     expect(body.currency).toBe("EUR");
   });
 
+  it("creates a customer with invoicing fields", async () => {
+    vi.mocked(createCustomer).mockResolvedValue({ ...testCustomer, id: "new-id" });
+    renderApp("/admin/customers");
+    await screen.findByText(testCustomer.name);
+
+    fireEvent.click(screen.getByRole("button", { name: "New customer" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText(/^name/i), { target: { value: "New Co" } });
+    fireEvent.change(within(dialog).getByLabelText(/^address line 1/i), {
+      target: { value: "1 Street" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/^city/i), { target: { value: "Berlin" } });
+    fireEvent.change(within(dialog).getByLabelText(/^country/i), { target: { value: "DE" } });
+    fireEvent.change(within(dialog).getByLabelText(/^anchor date/i), {
+      target: { value: "2026-01-01" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/^currency/i), { target: { value: "EUR" } });
+    fireEvent.change(within(dialog).getByLabelText(/^vat rate/i), { target: { value: "25" } });
+    fireEvent.click(within(dialog).getByRole("combobox", { name: /invoice language/i }));
+    fireEvent.click(await screen.findByRole("option", { name: "Swedish" }));
+    fireEvent.change(within(dialog).getByLabelText(/^customer number/i), {
+      target: { value: "CUST-1" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create customer" }));
+
+    await waitFor(() => expect(createCustomer).toHaveBeenCalled());
+    const body = vi.mocked(createCustomer).mock.calls[0]![0];
+    expect(body.vat_rate).toBe(25);
+    expect(body.invoice_locale).toBe("sv");
+    expect(body.customer_number).toBe("CUST-1");
+  });
+
   it("edit sends null for a cleared optional field", async () => {
     vi.mocked(updateCustomer).mockResolvedValue(testCustomer);
     renderApp("/admin/customers");
@@ -115,6 +147,41 @@ describe("AdminCustomersPage", () => {
     );
     const body = vi.mocked(updateCustomer).mock.calls[0]![1];
     expect(body.name).toBeUndefined();
+  });
+
+  it("edit updates and clears invoicing fields", async () => {
+    const withVat: Customer = { ...testCustomer, vat_rate: "25.00", customer_number: "CUST-1" };
+    vi.mocked(listCustomers).mockResolvedValue(page([withVat]));
+    vi.mocked(updateCustomer).mockResolvedValue(withVat);
+    renderApp("/admin/customers");
+    const row = (await screen.findByText(withVat.name)).closest("tr")!;
+
+    fireEvent.click(within(row).getByRole("button", { name: "Actions" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText(/^vat rate/i), { target: { value: "" } });
+    fireEvent.change(within(dialog).getByLabelText(/^customer number/i), { target: { value: "" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() =>
+      expect(updateCustomer).toHaveBeenCalledWith(
+        withVat.id,
+        expect.objectContaining({ vat_rate: null, customer_number: null }),
+      ),
+    );
+  });
+
+  it("rejects a VAT rate over 100", async () => {
+    renderApp("/admin/customers");
+    await screen.findByText(testCustomer.name);
+
+    fireEvent.click(screen.getByRole("button", { name: "New customer" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText(/^vat rate/i), { target: { value: "150" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create customer" }));
+
+    expect(await within(dialog).findByText("Use 0 to 100")).toBeTruthy();
+    expect(createCustomer).not.toHaveBeenCalled();
   });
 
   it("shows a Restore action for an archived customer", async () => {

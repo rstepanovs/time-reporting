@@ -45,6 +45,11 @@ def to_dto(customer: Customer) -> CustomerDTO:
         payment_terms_days=customer.payment_terms_days,
         notes=customer.notes,
         is_active=customer.is_active,
+        vat_rate=customer.vat_rate,
+        vat_note=customer.vat_note,
+        invoice_locale=customer.invoice_locale,
+        customer_number=customer.customer_number,
+        your_reference=customer.your_reference,
         created_at=customer.created_at,
         updated_at=customer.updated_at,
     )

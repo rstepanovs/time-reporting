@@ -89,6 +89,11 @@ export const testCustomer: Customer = {
   payment_terms_days: 30,
   notes: null,
   is_active: true,
+  vat_rate: null,
+  vat_note: null,
+  invoice_locale: null,
+  customer_number: null,
+  your_reference: null,
   created_at: "2026-01-01T08:00:00Z",
   updated_at: "2026-01-01T08:00:00Z",
 };

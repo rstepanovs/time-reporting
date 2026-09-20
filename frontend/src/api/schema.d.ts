@@ -1585,6 +1585,22 @@ export interface components {
             payment_terms_days: number;
             /** Notes */
             notes?: string | null;
+            /**
+             * Vat Rate
+             * @description Null prints no VAT line
+             */
+            vat_rate?: number | string | null;
+            /** Vat Note */
+            vat_note?: string | null;
+            /**
+             * Invoice Locale
+             * @description Falls back to the company's default when null
+             */
+            invoice_locale?: ("sv" | "en") | null;
+            /** Customer Number */
+            customer_number?: string | null;
+            /** Your Reference */
+            your_reference?: string | null;
         };
         /** CustomerPageResponse */
         CustomerPageResponse: {
@@ -1622,6 +1638,16 @@ export interface components {
             notes: string | null;
             /** Is Active */
             is_active: boolean;
+            /** Vat Rate */
+            vat_rate: string | null;
+            /** Vat Note */
+            vat_note: string | null;
+            /** Invoice Locale */
+            invoice_locale: string | null;
+            /** Customer Number */
+            customer_number: string | null;
+            /** Your Reference */
+            your_reference: string | null;
             /**
              * Created At
              * Format: date-time
@@ -1637,8 +1663,9 @@ export interface components {
          * CustomerUpdateRequest
          * @description Partial update: omitted fields are left unchanged.
          *
-         *     ``null`` clears ``legal_name``, ``tax_id``, ``billing_email`` or ``notes``; it is rejected for
-         *     the other fields. ``billing_address`` and ``billing_period`` replace the whole object.
+         *     ``null`` clears ``legal_name``, ``tax_id``, ``billing_email``, ``notes``, ``vat_rate``,
+         *     ``vat_note``, ``invoice_locale``, ``customer_number`` or ``your_reference``; it is rejected
+         *     for the other fields. ``billing_address`` and ``billing_period`` replace the whole object.
          */
         CustomerUpdateRequest: {
             /** Name */
@@ -1659,6 +1686,16 @@ export interface components {
             notes?: string | null;
             /** Is Active */
             is_active?: boolean | null;
+            /** Vat Rate */
+            vat_rate?: number | string | null;
+            /** Vat Note */
+            vat_note?: string | null;
+            /** Invoice Locale */
+            invoice_locale?: ("sv" | "en") | null;
+            /** Customer Number */
+            customer_number?: string | null;
+            /** Your Reference */
+            your_reference?: string | null;
         };
         /** DatabaseStatusResponse */
         DatabaseStatusResponse: {

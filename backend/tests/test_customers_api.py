@@ -60,6 +60,52 @@ async def test_manager_can_create_and_update_customer(
     assert updated.json()["name"] == "Acme"
 
 
+async def test_invoicing_fields_round_trip_and_clear(
+    client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
+) -> None:
+    headers = auth_headers(await make_user(roles=ADMIN))
+
+    created = await client.post(
+        "/api/v1/customers",
+        headers=headers,
+        json=_payload(
+            vat_rate="25.00",
+            vat_note="Reverse charge",
+            invoice_locale="sv",
+            customer_number="CUST-1",
+            your_reference="Jane Doe",
+        ),
+    )
+
+    assert created.status_code == 201
+    body = created.json()
+    assert body["vat_rate"] == "25.00"
+    assert body["vat_note"] == "Reverse charge"
+    assert body["invoice_locale"] == "sv"
+    assert body["customer_number"] == "CUST-1"
+    assert body["your_reference"] == "Jane Doe"
+
+    cleared = await client.patch(
+        f"/api/v1/customers/{body['id']}",
+        headers=headers,
+        json={
+            "vat_rate": None,
+            "vat_note": None,
+            "invoice_locale": None,
+            "customer_number": None,
+            "your_reference": None,
+        },
+    )
+
+    assert cleared.status_code == 200
+    cleared_body = cleared.json()
+    assert cleared_body["vat_rate"] is None
+    assert cleared_body["vat_note"] is None
+    assert cleared_body["invoice_locale"] is None
+    assert cleared_body["customer_number"] is None
+    assert cleared_body["your_reference"] is None
+
+
 async def test_worker_can_read_but_not_write(
     client: AsyncClient,
     make_user: UserFactory,
@@ -156,8 +202,19 @@ async def test_duplicate_name_returns_409(
         ),
         _payload(payment_terms_days=-1),
         _payload(unexpected="field"),
+        _payload(vat_rate="150.00"),
+        _payload(invoice_locale="xx"),
     ],
-    ids=["country", "currency", "interval-count", "interval-unit", "payment-terms", "extra-field"],
+    ids=[
+        "country",
+        "currency",
+        "interval-count",
+        "interval-unit",
+        "payment-terms",
+        "extra-field",
+        "vat-rate",
+        "invoice-locale",
+    ],
 )
 async def test_invalid_create_payload_returns_422(
     client: AsyncClient,

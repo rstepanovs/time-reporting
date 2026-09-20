@@ -1,7 +1,8 @@
 """HTTP request/response models of the customers API."""
 
 from datetime import date, datetime
-from typing import Annotated, Self
+from decimal import Decimal
+from typing import Annotated, Literal, Self
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints, model_validator
@@ -11,6 +12,11 @@ from time_reporting.modules.customers.contracts import (
     BillingIntervalUnit,
     BillingPeriodDTO,
 )
+
+# Kept as a plain inline Literal (not a named type alias) so it doesn't collide with
+# ``company.contracts.InvoiceLocale``'s own hoisted OpenAPI schema of the same name — see
+# ``customers.contracts.INVOICE_LOCALES``, the source of truth these two literals both mirror.
+CustomerInvoiceLocale = Literal["sv", "en"]
 
 ShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
 TaxId = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)]
@@ -23,6 +29,13 @@ CurrencyCode = Annotated[
 ]
 PaymentTermsDays = Annotated[int, Field(ge=0, le=365)]
 Notes = Annotated[str, StringConstraints(strip_whitespace=True, max_length=10_000)]
+VatRate = Annotated[Decimal, Field(ge=0, le=100, max_digits=5, decimal_places=2)]
+CustomerNumber = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=50)
+]
+YourReference = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)
+]
 
 
 class BillingAddressRequest(BaseModel):
@@ -64,6 +77,13 @@ class CustomerCreateRequest(BaseModel):
     currency: CurrencyCode = Field(description="ISO 4217 currency code")
     payment_terms_days: PaymentTermsDays = 30
     notes: Notes | None = None
+    vat_rate: VatRate | None = Field(default=None, description="Null prints no VAT line")
+    vat_note: Notes | None = None
+    invoice_locale: CustomerInvoiceLocale | None = Field(
+        default=None, description="Falls back to the company's default when null"
+    )
+    customer_number: CustomerNumber | None = None
+    your_reference: YourReference | None = None
 
 
 # Fields of CustomerUpdateRequest that may be omitted but not set to null.
@@ -80,8 +100,9 @@ _NON_NULLABLE_UPDATE_FIELDS = (
 class CustomerUpdateRequest(BaseModel):
     """Partial update: omitted fields are left unchanged.
 
-    ``null`` clears ``legal_name``, ``tax_id``, ``billing_email`` or ``notes``; it is rejected for
-    the other fields. ``billing_address`` and ``billing_period`` replace the whole object.
+    ``null`` clears ``legal_name``, ``tax_id``, ``billing_email``, ``notes``, ``vat_rate``,
+    ``vat_note``, ``invoice_locale``, ``customer_number`` or ``your_reference``; it is rejected
+    for the other fields. ``billing_address`` and ``billing_period`` replace the whole object.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -96,6 +117,11 @@ class CustomerUpdateRequest(BaseModel):
     payment_terms_days: PaymentTermsDays | None = None
     notes: Notes | None = None
     is_active: bool | None = None
+    vat_rate: VatRate | None = None
+    vat_note: Notes | None = None
+    invoice_locale: CustomerInvoiceLocale | None = None
+    customer_number: CustomerNumber | None = None
+    your_reference: YourReference | None = None
 
     @model_validator(mode="after")
     def _reject_null_for_required_fields(self) -> Self:
@@ -142,6 +168,11 @@ class CustomerResponse(BaseModel):
     payment_terms_days: int
     notes: str | None
     is_active: bool
+    vat_rate: Decimal | None
+    vat_note: str | None
+    invoice_locale: str | None
+    customer_number: str | None
+    your_reference: str | None
     created_at: datetime
     updated_at: datetime
 
