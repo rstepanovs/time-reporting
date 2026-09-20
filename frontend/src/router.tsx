@@ -18,6 +18,7 @@ import { DashboardPage } from "@/pages/DashboardPage";
 import { ExpenseReportPage } from "@/pages/ExpenseReportPage";
 import { ExpensesPage } from "@/pages/ExpensesPage";
 import { HoursPage } from "@/pages/HoursPage";
+import { InvoicePage } from "@/pages/InvoicePage";
 import { InvoicesPage } from "@/pages/InvoicesPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
@@ -55,7 +56,10 @@ export const routes: RouteObject[] = [
           {
             path: "invoices",
             element: <RequireRole roles={["accountant"]} />,
-            children: [{ index: true, element: <InvoicesPage /> }],
+            children: [
+              { index: true, element: <InvoicesPage /> },
+              { path: ":invoiceId", element: <InvoicePage /> },
+            ],
           },
           { path: "account/password", element: <ChangePasswordPage /> },
           {

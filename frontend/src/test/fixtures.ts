@@ -10,8 +10,10 @@ import type {
   ExpenseReportSummary,
 } from "@/expenses/api";
 import type {
+  Invoice,
   InvoiceableCustomer,
   InvoiceablePeriod,
+  InvoiceLine,
   InvoicePage as InvoicePageType,
   InvoiceSummary,
 } from "@/invoices/api";
@@ -848,6 +850,55 @@ export const testInvoicePage: InvoicePageType = {
   total: 1,
   limit: 20,
   offset: 0,
+};
+
+export const testInvoiceLine: InvoiceLine = {
+  id: "f3c3c3c3-3333-3333-3333-333333333333",
+  position: 1,
+  kind: "manual",
+  description: "Consulting hours",
+  quantity: "10.00",
+  unit: "hour",
+  unit_price: "100.00",
+  amount: "1000.00",
+  project_id: null,
+  billing_item_id: null,
+};
+
+export const testInvoiceDraft: Invoice = {
+  id: testInvoiceSummary.id,
+  customer: { id: testCustomer.id, name: testCustomer.name, currency: testCustomer.currency },
+  status: "draft",
+  number: null,
+  invoice_date: "2026-10-02",
+  due_date: "2026-11-01",
+  currency: testCustomer.currency,
+  locale: "sv",
+  vat_rate: "25.00",
+  vat_note: null,
+  your_reference: null,
+  notes: null,
+  subtotal: "1000.00",
+  vat_amount: "250.00",
+  total: "1250.00",
+  issued_at: null,
+  paid_on: null,
+  voided_at: null,
+  void_reason: null,
+  lines: [testInvoiceLine],
+  periods: [
+    { project_id: testProject.id, project_name: testProject.name, period_start: "2026-09-01" },
+  ],
+  created_at: "2026-10-02T09:00:00Z",
+  updated_at: "2026-10-02T09:00:00Z",
+};
+
+export const testInvoiceIssued: Invoice = {
+  ...testInvoiceDraft,
+  id: "f2b2b2b2-2222-2222-2222-222222222222",
+  status: "issued",
+  number: "2026-1",
+  issued_at: "2026-10-02T10:00:00Z",
 };
 
 export const testAuditEvent: AuditEvent = {

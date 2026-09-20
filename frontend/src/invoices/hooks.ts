@@ -15,8 +15,12 @@ import {
 export const invoiceKeys = {
   all: ["invoices"] as const,
   invoiceablePeriods: () => [...invoiceKeys.all, "invoiceable-periods"] as const,
-  list: (params: Parameters<typeof listInvoices>[0]) =>
-    [...invoiceKeys.all, "list", params] as const,
+  // A shared prefix over every list variant, so a mutation can invalidate "every list" without
+  // also invalidating `detail(invoiceId)` — that entry is instead kept in sync directly via
+  // `setQueryData`, and invalidating it too would trigger a refetch that could momentarily
+  // clobber it with a stale response.
+  lists: () => [...invoiceKeys.all, "list"] as const,
+  list: (params: Parameters<typeof listInvoices>[0]) => [...invoiceKeys.lists(), params] as const,
   detail: (invoiceId: string) => [...invoiceKeys.all, "detail", invoiceId] as const,
 };
 
@@ -85,7 +89,7 @@ export function useIssueInvoice(invoiceId: string) {
     mutationFn: () => issueInvoice(invoiceId),
     onSuccess: (invoice) => {
       queryClient.setQueryData(invoiceKeys.detail(invoiceId), invoice);
-      void queryClient.invalidateQueries({ queryKey: invoiceKeys.all });
+      void queryClient.invalidateQueries({ queryKey: invoiceKeys.lists() });
     },
   });
 }
@@ -96,7 +100,7 @@ export function useMarkInvoicePaid(invoiceId: string) {
     mutationFn: (paidOn: string) => markInvoicePaid({ invoiceId, paidOn }),
     onSuccess: (invoice) => {
       queryClient.setQueryData(invoiceKeys.detail(invoiceId), invoice);
-      void queryClient.invalidateQueries({ queryKey: invoiceKeys.all });
+      void queryClient.invalidateQueries({ queryKey: invoiceKeys.lists() });
     },
   });
 }
@@ -110,7 +114,7 @@ export function useVoidInvoice(invoiceId: string) {
     onSuccess: (invoice) => {
       queryClient.setQueryData(invoiceKeys.detail(invoiceId), invoice);
       void queryClient.invalidateQueries({ queryKey: invoiceKeys.invoiceablePeriods() });
-      void queryClient.invalidateQueries({ queryKey: invoiceKeys.all });
+      void queryClient.invalidateQueries({ queryKey: invoiceKeys.lists() });
     },
   });
 }
