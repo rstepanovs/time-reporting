@@ -10,14 +10,20 @@ from datetime import date
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from fastapi.responses import StreamingResponse
 
 from time_reporting.api.deps import BusDep
-from time_reporting.modules.auth.dependencies import AdminDep, CurrentUserDep, ManagerDep
+from time_reporting.modules.auth.dependencies import (
+    AdminDep,
+    CurrentUserDep,
+    ManagerDep,
+    require_roles,
+)
 from time_reporting.modules.timesheets.contracts import (
     ApproveTimesheetWeek,
     BillingPeriodAlreadySentError,
+    BillingPeriodInvoicedError,
     BillingPeriodLockedError,
     BillingPeriodNotFoundError,
     BillingPeriodNotReadyError,
@@ -74,6 +80,9 @@ from time_reporting.modules.users.contracts import UserDTO, UserNotFoundError, U
 Scope = Literal["mine", "all"]
 
 router = APIRouter(prefix="/timesheets", tags=["timesheets"])
+
+# The billing list and its CSV export are also read by an accountant, not only an admin.
+BillingReaderDep = Annotated[UserDTO, Depends(require_roles(UserRole.ADMIN, UserRole.ACCOUNTANT))]
 
 _USER_NOT_FOUND_RESPONSE: dict[int | str, dict[str, Any]] = {
     status.HTTP_404_NOT_FOUND: {"description": "User not found"}
@@ -290,12 +299,13 @@ async def get_team_month_overview(
 
 @router.get("/billing-periods")
 async def list_billing_periods(
-    _admin: AdminDep,
+    _reader: BillingReaderDep,
     bus: BusDep,
     project_id: Annotated[UUID | None, Query()] = None,
     customer_id: Annotated[UUID | None, Query()] = None,
     month_from: Annotated[date | None, Query()] = None,
     month_to: Annotated[date | None, Query()] = None,
+    invoiced: Annotated[bool | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> BillingPeriodPageResponse:
@@ -305,6 +315,7 @@ async def list_billing_periods(
             customer_id=customer_id,
             month_from=month_from,
             month_to=month_to,
+            invoiced=invoiced,
             limit=limit,
             offset=offset,
         )
@@ -347,7 +358,10 @@ async def send_project_month_to_billing(
 @router.delete(
     "/billing-periods/{project_id}/{period_start}",
     status_code=status.HTTP_204_NO_CONTENT,
-    responses={status.HTTP_404_NOT_FOUND: {"description": "No sent period found"}},
+    responses={
+        status.HTTP_404_NOT_FOUND: {"description": "No sent period found"},
+        status.HTTP_409_CONFLICT: {"description": "The period is invoiced"},
+    },
 )
 async def reopen_project_billing_period(
     project_id: UUID, period_start: date, admin: AdminDep, bus: BusDep
@@ -360,6 +374,8 @@ async def reopen_project_billing_period(
         )
     except BillingPeriodNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except BillingPeriodInvoicedError as exc:
+        raise _conflict(str(exc)) from exc
 
 
 @router.get(
@@ -367,7 +383,7 @@ async def reopen_project_billing_period(
     responses={status.HTTP_404_NOT_FOUND: {"description": "No sent period found"}},
 )
 async def export_billing_period_csv(
-    project_id: UUID, period_start: date, _admin: AdminDep, bus: BusDep
+    project_id: UUID, period_start: date, _reader: BillingReaderDep, bus: BusDep
 ) -> StreamingResponse:
     try:
         rows = await bus.query(

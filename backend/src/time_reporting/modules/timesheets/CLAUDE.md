@@ -139,7 +139,16 @@ project `manager_id` manages (`manager_id=None` covers every active project — 
   executes a nested `expenses.LockProjectMonthExpenseReports`, so every report of the month locks in
   the same transaction as the handoff.
 - `ReopenProjectBillingPeriod(project_id, period_start)` (admin only) deletes the row and executes a
-  nested `expenses.UnlockProjectMonthExpenseReports`, unlocking both the weeks and the reports.
+  nested `expenses.UnlockProjectMonthExpenseReports`, unlocking both the weeks and the reports —
+  refused with `BillingPeriodInvoicedError` (409) once the period's `invoice_id` is set, so
+  reopening never orphans an invoice's line items.
+- `ProjectBillingPeriod.invoice_id` (nullable, no FK yet — the future `invoices` module's own
+  migration adds `ON DELETE SET NULL` once that table exists) is stamped by the nested-only
+  `MarkBillingPeriodsInvoiced(periods, invoice_id)` (raising `BillingPeriodNotFoundError` or
+  `BillingPeriodAlreadyInvoicedError`, checked for every `BillingPeriodRef` — a `(project_id,
+  period_start)` pair — before any is mutated) and cleared by `ClearBillingPeriodsInvoiced
+  (invoice_id)`; both will be executed by that future module's `CreateInvoiceDraft`/
+  `DeleteInvoiceDraft`. Nothing in this module calls either yet.
 - Once sent, a period **locks** its dates: `SaveTimesheetWeek` rejects a cell change dated inside a
   sent period, or any row-comment change on a billing item whose project has any sent period
   overlapping the week (`BillingPeriodLockedError`), and `ReturnTimesheetWeek` rejects returning a
@@ -154,24 +163,31 @@ project `manager_id` manages (`manager_id=None` covers every active project — 
 - `GetTimesheetWeek`'s `TimesheetRowDTO.locked_dates` reports which of a row's days fall in a sent
   period (regardless of `is_open`), and folds into `can_review` (false once any row is locked, so a
   blocked `return` isn't offered) so the HTTP layer needs no separate lock query.
-- `ListBillingPeriods(project_id, customer_id, month_from, month_to, limit, offset)` (`GET
-  /timesheets/billing-periods`, `AdminDep`) pages every sent period, newest `sent_at` first, for the
-  admin billing list; `BillingPeriodListItemDTO` flattens in the project/customer/sender names
-  (via `GetProjectsByIds`/`GetUsersByIds`) rather than the full `ProjectBillingPeriodDTO`, which
-  this list doesn't need. `month_from`/`month_to` filter `period_start` inclusively (always the
-  first of a month). `customer_id` has no column of its own on `ProjectBillingPeriod`, so it's
-  resolved to that customer's project ids via `projects.ListProjects` first (capped at 10,000
-  projects — plenty for any real customer), intersected with `project_id` if both are given.
+- `ListBillingPeriods(project_id, customer_id, month_from, month_to, invoiced, limit, offset)`
+  (`GET /timesheets/billing-periods`, `require_roles(admin, accountant)` — an accountant reads this
+  list too, not only an admin) pages every sent period, newest `sent_at` first, for the admin
+  billing list; `BillingPeriodListItemDTO` flattens in the project/customer/sender names (via
+  `GetProjectsByIds`/`GetUsersByIds`) rather than the full `ProjectBillingPeriodDTO`, which this
+  list doesn't need, plus `invoice_id` (`None` until marked). `month_from`/`month_to` filter
+  `period_start` inclusively (always the first of a month). `customer_id` has no column of its own
+  on `ProjectBillingPeriod`, so it's resolved to that customer's project ids via
+  `projects.ListProjects` first (capped at 10,000 projects — plenty for any real customer),
+  intersected with `project_id` if both are given. `invoiced` filters on whether `invoice_id` is
+  set (`None` means no filter) — the future `invoices` module's `ListInvoiceablePeriods` will query
+  `invoiced=False`.
 - `SendProjectMonthToBilling`/`ReopenProjectBillingPeriod` each record a `RecordAuditEvent`
   (`billing_period.sent`/`billing_period.reopened`) in `billing.py` on success, actor being
   `sent_by_id`/`ReopenProjectBillingPeriod.actor_id` respectively; `entity_id` is
   `"{project_id}:{period_start}"` (no single-UUID key exists for a billing period), with the
   project/customer names and period only in `summary`/`details` — see `audit/CLAUDE.md`.
-- `GET /timesheets/billing-periods/{project_id}/{period_start}/export.csv` (`AdminDep`) streams a
-  sent period's handoff as a CSV — the smallest real thing to hand an accountant before invoicing
-  exists. `GetBillingPeriodExportRows` (`billing.py: BillingService.get_export_rows`, raising
-  `BillingPeriodNotFoundError` for an unsent period) builds one row per time entry in the period's
-  dates plus one row per approved expense line (via `expenses.ListProjectMonthExpenseReportLines`)
-  — `BillingPeriodExportRowDTO` shapes both sources identically (`unit=amount` and `currency` set
-  only for an expense row), sorted by date then user name. The router (`csv.writer` over an
-  `io.StringIO`, `StreamingResponse`) never touches the database beyond that one query.
+- `GET /timesheets/billing-periods/{project_id}/{period_start}/export.csv`
+  (`require_roles(admin, accountant)`) streams a sent period's handoff as a CSV — the smallest real
+  thing to hand an accountant before invoicing exists. `GetBillingPeriodExportRows`
+  (`billing.py: BillingService.get_export_rows`, raising `BillingPeriodNotFoundError` for an unsent
+  period) builds one row per time entry in the period's dates plus one row per approved expense
+  line (via `expenses.ListProjectMonthExpenseReportLines`) — `BillingPeriodExportRowDTO` shapes
+  both sources identically (`unit=amount` and `currency` set only for an expense row, both also
+  carrying `project_id`/`billing_item_id` — not rendered in the CSV, kept so the future `invoices`
+  module can aggregate lines from this same query instead of a separate one), sorted by date then
+  user name. The router (`csv.writer` over an `io.StringIO`, `StreamingResponse`) never touches the
+  database beyond that one query.

@@ -6,7 +6,16 @@ from decimal import Decimal
 import pytest
 from httpx import AsyncClient
 
-from support import ADMIN, ADMIN_ONLY, EMPLOYEE, MANAGER, AuthHeaders, ProjectFactory, UserFactory
+from support import (
+    ACCOUNTANT,
+    ADMIN,
+    ADMIN_ONLY,
+    EMPLOYEE,
+    MANAGER,
+    AuthHeaders,
+    ProjectFactory,
+    UserFactory,
+)
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.expenses.contracts import (
     ApproveExpenseReport,
@@ -989,6 +998,84 @@ async def test_export_billing_period_csv_requires_admin(
         headers=manager_headers,
     )
     assert forbidden.status_code == 403
+
+
+async def test_accountant_can_list_billing_periods(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    manager = await make_user(roles=MANAGER)
+    manager_headers = auth_headers(manager)
+    worker = await make_user(roles=EMPLOYEE)
+    worker_headers = auth_headers(worker)
+    project = await make_project(manager_id=manager.id)
+    await _add_member(client, manager_headers, str(project.id), str(worker.id))
+    item_id = await _normal_hours_item_id(client, manager_headers, str(project.id))
+    await client.put(
+        f"/api/v1/timesheets/weeks/{A_MONDAY}/entries",
+        headers=worker_headers,
+        json={"changes": [{"billing_item_id": item_id, "date": A_MONDAY, "quantity": "8.00"}]},
+    )
+    await client.post(f"/api/v1/timesheets/weeks/{A_MONDAY}/submit", headers=worker_headers)
+    worker_id = (await client.get("/api/v1/users/me", headers=worker_headers)).json()["id"]
+    await client.post(
+        f"/api/v1/timesheets/weeks/{A_MONDAY}/approve",
+        headers=manager_headers,
+        params={"user_id": worker_id},
+    )
+    await client.post(
+        "/api/v1/timesheets/billing-periods",
+        headers=manager_headers,
+        json={"project_id": str(project.id), "year": 2026, "month": 9},
+    )
+
+    accountant_headers = auth_headers(await make_user(roles=ACCOUNTANT))
+    response = await client.get("/api/v1/timesheets/billing-periods", headers=accountant_headers)
+
+    assert response.status_code == 200
+    assert response.json()["total"] == 1
+
+
+async def test_accountant_can_export_billing_period_csv(
+    client: AsyncClient,
+    make_user: UserFactory,
+    make_project: ProjectFactory,
+    auth_headers: AuthHeaders,
+) -> None:
+    manager = await make_user(roles=MANAGER)
+    manager_headers = auth_headers(manager)
+    worker = await make_user(roles=EMPLOYEE)
+    worker_headers = auth_headers(worker)
+    project = await make_project(manager_id=manager.id)
+    await _add_member(client, manager_headers, str(project.id), str(worker.id))
+    item_id = await _normal_hours_item_id(client, manager_headers, str(project.id))
+    await client.put(
+        f"/api/v1/timesheets/weeks/{A_MONDAY}/entries",
+        headers=worker_headers,
+        json={"changes": [{"billing_item_id": item_id, "date": A_MONDAY, "quantity": "8.00"}]},
+    )
+    await client.post(f"/api/v1/timesheets/weeks/{A_MONDAY}/submit", headers=worker_headers)
+    worker_id = (await client.get("/api/v1/users/me", headers=worker_headers)).json()["id"]
+    await client.post(
+        f"/api/v1/timesheets/weeks/{A_MONDAY}/approve",
+        headers=manager_headers,
+        params={"user_id": worker_id},
+    )
+    await client.post(
+        "/api/v1/timesheets/billing-periods",
+        headers=manager_headers,
+        json={"project_id": str(project.id), "year": 2026, "month": 9},
+    )
+
+    accountant_headers = auth_headers(await make_user(roles=ACCOUNTANT))
+    response = await client.get(
+        f"/api/v1/timesheets/billing-periods/{project.id}/2026-09-01/export.csv",
+        headers=accountant_headers,
+    )
+
+    assert response.status_code == 200
 
 
 async def test_export_billing_period_csv_unknown_period_returns_404(

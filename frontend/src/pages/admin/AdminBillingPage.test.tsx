@@ -72,6 +72,20 @@ describe("AdminBillingPage", () => {
     await screen.findByText("No billing periods found.");
   });
 
+  it("shows an Invoiced badge and hides Reopen for an invoiced period", async () => {
+    vi.mocked(listBillingPeriods).mockResolvedValue({
+      ...testBillingPeriodPage,
+      items: [{ ...testBillingPeriodListItem, invoice_id: "inv-1" }],
+    });
+
+    renderApp("/admin/billing");
+
+    const nameCell = await screen.findByText(testBillingPeriodListItem.project_name);
+    const row = nameCell.closest("tr")!;
+    expect(within(row).getByText("Invoiced")).toBeTruthy();
+    expect(within(row).queryByRole("button", { name: "Reopen…" })).toBeNull();
+  });
+
   it("reopens a billing period from its row", async () => {
     vi.mocked(reopenProjectBillingPeriod).mockResolvedValue(undefined);
     renderApp("/admin/billing");

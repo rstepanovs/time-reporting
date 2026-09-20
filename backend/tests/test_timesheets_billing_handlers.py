@@ -25,15 +25,20 @@ from time_reporting.modules.projects.contracts import (
 )
 from time_reporting.modules.timesheets.contracts import (
     ApproveTimesheetWeek,
+    BillingPeriodAlreadyInvoicedError,
     BillingPeriodAlreadySentError,
+    BillingPeriodInvoicedError,
     BillingPeriodLockedError,
     BillingPeriodNotFoundError,
     BillingPeriodNotReadyError,
+    BillingPeriodRef,
     BillingPeriodStatus,
+    ClearBillingPeriodsInvoiced,
     CurrencyAmountDTO,
     GetBillingPeriodExportRows,
     GetTimesheetWeek,
     ListBillingPeriods,
+    MarkBillingPeriodsInvoiced,
     ProjectIsInternalError,
     ReopenProjectBillingPeriod,
     ReturnTimesheetWeek,
@@ -804,6 +809,192 @@ async def test_list_billing_periods_includes_project_and_sender_names(
     assert item.customer_name == "Acme"
     assert item.sent_by_id == manager.id
     assert item.sent_by_name == "Manager One"
+
+
+# --- Invoicing marks (nested-only commands, used by the future invoices module) ---
+
+
+async def test_mark_and_clear_billing_periods_invoiced(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    manager = await make_user(roles=MANAGER)
+    admin = await make_user(roles=ADMIN)
+    worker = await make_user()
+    project = await make_project(manager_id=manager.id)
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
+    item_id = await _normal_hours_item_id(bus, project.id)
+    await _book_and_approve(
+        bus,
+        worker_id=worker.id,
+        admin_id=admin.id,
+        item_id=item_id,
+        entry_date=WEEK_1,
+        week_start=WEEK_1,
+    )
+    await bus.execute(
+        SendProjectMonthToBilling(project_id=project.id, year=2026, month=9, sent_by_id=manager.id)
+    )
+    invoice_id = uuid4()
+
+    await bus.execute(
+        MarkBillingPeriodsInvoiced(
+            periods=(BillingPeriodRef(project_id=project.id, period_start=date(2026, 9, 1)),),
+            invoice_id=invoice_id,
+        )
+    )
+
+    page = await bus.query(ListBillingPeriods(limit=50, offset=0))
+    assert page.items[0].invoice_id == invoice_id
+
+    with pytest.raises(BillingPeriodInvoicedError):
+        await bus.execute(
+            ReopenProjectBillingPeriod(
+                project_id=project.id, period_start=date(2026, 9, 1), actor_id=admin.id
+            )
+        )
+
+    await bus.execute(ClearBillingPeriodsInvoiced(invoice_id=invoice_id))
+
+    page = await bus.query(ListBillingPeriods(limit=50, offset=0))
+    assert page.items[0].invoice_id is None
+
+    # No longer invoiced, so it can be reopened again.
+    await bus.execute(
+        ReopenProjectBillingPeriod(
+            project_id=project.id, period_start=date(2026, 9, 1), actor_id=admin.id
+        )
+    )
+
+
+async def test_mark_billing_periods_invoiced_unknown_period_raises(
+    bus: Bus, make_project: ProjectFactory
+) -> None:
+    project = await make_project()
+
+    with pytest.raises(BillingPeriodNotFoundError):
+        await bus.execute(
+            MarkBillingPeriodsInvoiced(
+                periods=(BillingPeriodRef(project_id=project.id, period_start=date(2026, 9, 1)),),
+                invoice_id=uuid4(),
+            )
+        )
+
+
+async def test_mark_billing_periods_invoiced_rejects_already_invoiced(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    manager = await make_user(roles=MANAGER)
+    admin = await make_user(roles=ADMIN)
+    worker = await make_user()
+    project = await make_project(manager_id=manager.id)
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
+    item_id = await _normal_hours_item_id(bus, project.id)
+    await _book_and_approve(
+        bus,
+        worker_id=worker.id,
+        admin_id=admin.id,
+        item_id=item_id,
+        entry_date=WEEK_1,
+        week_start=WEEK_1,
+    )
+    await bus.execute(
+        SendProjectMonthToBilling(project_id=project.id, year=2026, month=9, sent_by_id=manager.id)
+    )
+    ref = BillingPeriodRef(project_id=project.id, period_start=date(2026, 9, 1))
+    await bus.execute(MarkBillingPeriodsInvoiced(periods=(ref,), invoice_id=uuid4()))
+
+    with pytest.raises(BillingPeriodAlreadyInvoicedError):
+        await bus.execute(MarkBillingPeriodsInvoiced(periods=(ref,), invoice_id=uuid4()))
+
+
+async def test_mark_billing_periods_invoiced_batch_leaves_nothing_changed_on_failure(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    """One already-invoiced period in the batch must not mark the others either."""
+    manager = await make_user(roles=MANAGER)
+    admin = await make_user(roles=ADMIN)
+    worker = await make_user()
+    project = await make_project(manager_id=manager.id)
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
+    await _send_month(
+        bus,
+        project_id=project.id,
+        year=2026,
+        month=7,
+        week_start=JULY_WEEK,
+        worker_id=worker.id,
+        admin_id=admin.id,
+        sent_by_id=manager.id,
+    )
+    await _send_month(
+        bus,
+        project_id=project.id,
+        year=2026,
+        month=9,
+        week_start=SEPTEMBER_WEEK,
+        worker_id=worker.id,
+        admin_id=admin.id,
+        sent_by_id=manager.id,
+    )
+    july_ref = BillingPeriodRef(project_id=project.id, period_start=date(2026, 7, 1))
+    september_ref = BillingPeriodRef(project_id=project.id, period_start=date(2026, 9, 1))
+    await bus.execute(MarkBillingPeriodsInvoiced(periods=(july_ref,), invoice_id=uuid4()))
+
+    with pytest.raises(BillingPeriodAlreadyInvoicedError):
+        await bus.execute(
+            MarkBillingPeriodsInvoiced(periods=(september_ref, july_ref), invoice_id=uuid4())
+        )
+
+    page = await bus.query(ListBillingPeriods(limit=50, offset=0))
+    september_item = next(item for item in page.items if item.period_start == date(2026, 9, 1))
+    assert september_item.invoice_id is None
+
+
+async def test_list_billing_periods_filters_by_invoiced(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    manager = await make_user(roles=MANAGER)
+    admin = await make_user(roles=ADMIN)
+    worker = await make_user()
+    project = await make_project(manager_id=manager.id)
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=worker.id))
+    await _send_month(
+        bus,
+        project_id=project.id,
+        year=2026,
+        month=7,
+        week_start=JULY_WEEK,
+        worker_id=worker.id,
+        admin_id=admin.id,
+        sent_by_id=manager.id,
+    )
+    await _send_month(
+        bus,
+        project_id=project.id,
+        year=2026,
+        month=9,
+        week_start=SEPTEMBER_WEEK,
+        worker_id=worker.id,
+        admin_id=admin.id,
+        sent_by_id=manager.id,
+    )
+    await bus.execute(
+        MarkBillingPeriodsInvoiced(
+            periods=(BillingPeriodRef(project_id=project.id, period_start=date(2026, 7, 1)),),
+            invoice_id=uuid4(),
+        )
+    )
+
+    invoiced = await bus.query(ListBillingPeriods(invoiced=True, limit=50, offset=0))
+    assert [item.period_start for item in invoiced.items] == [date(2026, 7, 1)]
+    assert invoiced.total == 1
+
+    not_invoiced = await bus.query(ListBillingPeriods(invoiced=False, limit=50, offset=0))
+    assert [item.period_start for item in not_invoiced.items] == [date(2026, 9, 1)]
+    assert not_invoiced.total == 1
+
+    everything = await bus.query(ListBillingPeriods(limit=50, offset=0))
+    assert everything.total == 2
 
 
 # --- Expense reports feed into billing readiness and get locked ---

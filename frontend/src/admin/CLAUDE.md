@@ -29,8 +29,13 @@ Administration section. Backend: `modules/admin`.
   filters, paginated), a per-row "Reopen…" confirm modal reusing `timesheets/hooks.ts`'s
   `useReopenProjectBillingPeriod` (same mutation and modal shape as `pages/TeamPage.tsx`'s), plus a
   per-row "CSV" link (`timesheets/api.ts`'s `billingPeriodExportUrl`, a plain `<a href download>`
-  like `backupDownloadUrl`) to that period's time-entry/expense-line export. Backed by
-  `timesheets/`, not an area of its own.
+  like `backupDownloadUrl`) to that period's time-entry/expense-line export. A row whose
+  `invoice_id` is set (stamped by the future `invoices` module) shows an "Invoiced" badge instead
+  of the "Reopen…" button — the backend refuses reopening an invoiced period (409) anyway, this
+  just avoids offering a button that would fail. Backed by `timesheets/`, not an area of its own.
+  The page itself is still admin-only (`RequireRole roles={["admin"]}`); the underlying
+  `GET`/CSV-export routes also accept an accountant directly, for the future `invoices` module's own
+  UI to call.
 - `AdminCompanyPage` (`/admin/company`) — the company profile/settings form (legal identity,
   address, bank details, invoicing defaults, the `allow_self_review` workflow switch) and a logo
   upload/preview/remove control. Backed by `company/`, not an area of `admin/` itself.

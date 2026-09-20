@@ -800,6 +800,7 @@ export const testBillingPeriodListItem: BillingPeriodListItem = {
   sent_at: "2026-09-02T09:00:00Z",
   sent_by_id: testManager.id,
   sent_by_name: testManager.name,
+  invoice_id: null,
 };
 
 export const testBillingPeriodPage: BillingPeriodPage = {

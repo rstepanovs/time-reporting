@@ -1,4 +1,4 @@
-import { Alert, Anchor, Button, Group, Loader, Modal, Pagination, Select, Stack, Table, Text, Title } from "@mantine/core";
+import { Alert, Anchor, Badge, Button, Group, Loader, Modal, Pagination, Select, Stack, Table, Text, Title } from "@mantine/core";
 import { MonthPickerInput } from "@mantine/dates";
 import { useDisclosure } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
@@ -161,6 +161,7 @@ export function AdminBillingPage() {
                   <Table.Th>Sent at</Table.Th>
                   <Table.Th>Sent by</Table.Th>
                   <Table.Th />
+                  <Table.Th />
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
@@ -171,6 +172,7 @@ export function AdminBillingPage() {
                     <Table.Td>{periodLabel(period.period_start)}</Table.Td>
                     <Table.Td>{new Date(period.sent_at).toLocaleString()}</Table.Td>
                     <Table.Td>{period.sent_by_name}</Table.Td>
+                    <Table.Td>{period.invoice_id !== null && <Badge>Invoiced</Badge>}</Table.Td>
                     <Table.Td>
                       <Group gap="xs" justify="flex-end" wrap="nowrap">
                         <Anchor
@@ -180,7 +182,7 @@ export function AdminBillingPage() {
                         >
                           CSV
                         </Anchor>
-                        <ReopenButton period={period} />
+                        {period.invoice_id === null && <ReopenButton period={period} />}
                       </Group>
                     </Table.Td>
                   </Table.Tr>

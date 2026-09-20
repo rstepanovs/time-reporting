@@ -3,6 +3,7 @@
 from time_reporting.core.cqrs import HandlerRegistry
 from time_reporting.modules.timesheets.contracts import (
     ApproveTimesheetWeek,
+    ClearBillingPeriodsInvoiced,
     CountTimeEntries,
     GetBillingPeriodExportRows,
     GetMonthCalendar,
@@ -14,6 +15,7 @@ from time_reporting.modules.timesheets.contracts import (
     ListBillingPeriods,
     ListSubmittedTimesheetWeeks,
     ListTimesheetOptions,
+    MarkBillingPeriodsInvoiced,
     ReopenProjectBillingPeriod,
     ReturnTimesheetWeek,
     SaveTimesheetWeek,
@@ -22,6 +24,7 @@ from time_reporting.modules.timesheets.contracts import (
 )
 from time_reporting.modules.timesheets.handlers import (
     ApproveTimesheetWeekHandler,
+    ClearBillingPeriodsInvoicedHandler,
     CountTimeEntriesHandler,
     GetBillingPeriodExportRowsHandler,
     GetMonthCalendarHandler,
@@ -33,6 +36,7 @@ from time_reporting.modules.timesheets.handlers import (
     ListBillingPeriodsHandler,
     ListSubmittedTimesheetWeeksHandler,
     ListTimesheetOptionsHandler,
+    MarkBillingPeriodsInvoicedHandler,
     ReopenProjectBillingPeriodHandler,
     ReturnTimesheetWeekHandler,
     SaveTimesheetWeekHandler,
@@ -60,3 +64,5 @@ def register(registry: HandlerRegistry) -> None:
     registry.command(ReturnTimesheetWeek, ReturnTimesheetWeekHandler)
     registry.command(SendProjectMonthToBilling, SendProjectMonthToBillingHandler)
     registry.command(ReopenProjectBillingPeriod, ReopenProjectBillingPeriodHandler)
+    registry.command(MarkBillingPeriodsInvoiced, MarkBillingPeriodsInvoicedHandler)
+    registry.command(ClearBillingPeriodsInvoiced, ClearBillingPeriodsInvoicedHandler)

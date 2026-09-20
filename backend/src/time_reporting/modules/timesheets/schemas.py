@@ -356,6 +356,7 @@ class BillingPeriodListItemResponse(BaseModel):
     sent_at: datetime
     sent_by_id: UUID
     sent_by_name: str
+    invoice_id: UUID | None
 
 
 class BillingPeriodPageResponse(BaseModel):

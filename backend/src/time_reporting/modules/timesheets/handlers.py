@@ -23,6 +23,7 @@ from time_reporting.modules.timesheets.contracts import (
     BillingPeriodExportRowDTO,
     BillingPeriodListItemDTO,
     BillingPeriodPageDTO,
+    ClearBillingPeriodsInvoiced,
     CountTimeEntries,
     GetBillingPeriodExportRows,
     GetMonthCalendar,
@@ -34,6 +35,7 @@ from time_reporting.modules.timesheets.contracts import (
     ListBillingPeriods,
     ListSubmittedTimesheetWeeks,
     ListTimesheetOptions,
+    MarkBillingPeriodsInvoiced,
     MonthCalendarDTO,
     MonthTimeSummaryDTO,
     ProjectBillingPeriodDTO,
@@ -196,6 +198,22 @@ class ReopenProjectBillingPeriodHandler:
         await self._service.reopen_period(command)
 
 
+class MarkBillingPeriodsInvoicedHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._service = BillingService(bus)
+
+    async def handle(self, command: MarkBillingPeriodsInvoiced) -> None:
+        await self._service.mark_invoiced(command)
+
+
+class ClearBillingPeriodsInvoicedHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._service = BillingService(bus)
+
+    async def handle(self, command: ClearBillingPeriodsInvoiced) -> None:
+        await self._service.clear_invoiced(command)
+
+
 class GetBillingPeriodExportRowsHandler:
     def __init__(self, bus: Bus) -> None:
         self._service = BillingService(bus)
@@ -217,11 +235,15 @@ class ListBillingPeriodsHandler:
             project_ids=project_ids,
             month_from=query.month_from,
             month_to=query.month_to,
+            invoiced=query.invoiced,
             limit=query.limit,
             offset=query.offset,
         )
         total = await self._periods.count(
-            project_ids=project_ids, month_from=query.month_from, month_to=query.month_to
+            project_ids=project_ids,
+            month_from=query.month_from,
+            month_to=query.month_to,
+            invoiced=query.invoiced,
         )
 
         projects_by_id = {
@@ -246,6 +268,7 @@ class ListBillingPeriodsHandler:
                 sent_at=period.sent_at,
                 sent_by_id=period.sent_by_id,
                 sent_by_name=users_by_id[period.sent_by_id].name,
+                invoice_id=period.invoice_id,
             )
             for period in periods
         )

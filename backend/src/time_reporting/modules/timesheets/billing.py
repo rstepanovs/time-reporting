@@ -27,12 +27,16 @@ from time_reporting.modules.projects.contracts import (
     GetProjectById,
 )
 from time_reporting.modules.timesheets.contracts import (
+    BillingPeriodAlreadyInvoicedError,
     BillingPeriodAlreadySentError,
     BillingPeriodExportRowDTO,
+    BillingPeriodInvoicedError,
     BillingPeriodNotFoundError,
     BillingPeriodNotReadyError,
     BillingPeriodStatus,
+    ClearBillingPeriodsInvoiced,
     GetBillingPeriodExportRows,
+    MarkBillingPeriodsInvoiced,
     ProjectBillingPeriodDTO,
     ProjectIsInternalError,
     ReopenProjectBillingPeriod,
@@ -149,6 +153,8 @@ class BillingService:
         )
         if period is None:
             raise BillingPeriodNotFoundError(command.project_id, command.period_start)
+        if period.invoice_id is not None:
+            raise BillingPeriodInvoicedError(command.project_id, command.period_start)
         # `ON DELETE RESTRICT` on `project_billing_periods.project_id` guarantees the project
         # still exists while any of its periods (including this one, until the delete below) do.
         project = await self._bus.query(GetProjectById(project_id=command.project_id))
@@ -171,6 +177,26 @@ class BillingService:
                 ),
             )
         )
+
+    async def mark_invoiced(self, command: MarkBillingPeriodsInvoiced) -> None:
+        periods = []
+        for ref in command.periods:
+            period = await self._periods.get(
+                project_id=ref.project_id, period_start=ref.period_start
+            )
+            if period is None:
+                raise BillingPeriodNotFoundError(ref.project_id, ref.period_start)
+            if period.invoice_id is not None:
+                raise BillingPeriodAlreadyInvoicedError(ref.project_id, ref.period_start)
+            periods.append(period)
+        for period in periods:
+            period.invoice_id = command.invoice_id
+            await self._periods.save(period)
+
+    async def clear_invoiced(self, command: ClearBillingPeriodsInvoiced) -> None:
+        for period in await self._periods.list_by_invoice_id(command.invoice_id):
+            period.invoice_id = None
+            await self._periods.save(period)
 
     async def get_export_rows(
         self, query: GetBillingPeriodExportRows
@@ -205,6 +231,8 @@ class BillingService:
                 entry_date=entry.entry_date,
                 user_name=users_by_id[entry.user_id].name,
                 user_email=users_by_id[entry.user_id].email,
+                project_id=entry.project_id,
+                billing_item_id=entry.billing_item_id,
                 billing_item_name=items_by_id[entry.billing_item_id].name,
                 unit=entry.unit,
                 quantity=entry.quantity,
@@ -226,6 +254,8 @@ class BillingService:
                 entry_date=line.expense_date,
                 user_name=line.user.name,
                 user_email=line.user.email,
+                project_id=query.project_id,
+                billing_item_id=line.billing_item.id,
                 billing_item_name=line.billing_item.name,
                 unit=BillingUnit.AMOUNT,
                 quantity=line.amount,

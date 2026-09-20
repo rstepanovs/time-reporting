@@ -109,9 +109,11 @@ class ProjectBillingPeriod(TimestampMixin, Base):
     """A project's calendar month that has been sent to billing. No row for a (project, month)
     means it hasn't been sent; the timesheets module locks entries dated inside a sent period
     (``TimesheetWeekLockedError``'s billing-period sibling), and an admin can delete this row to
-    reopen the period. ``period_start``/``period_end`` are a calendar month's bounds today, kept
-    as a range rather than a (year, month) pair so a future non-monthly period fits the same
-    table.
+    reopen the period (refused once ``invoice_id`` is set). ``period_start``/``period_end`` are a
+    calendar month's bounds today, kept as a range rather than a (year, month) pair so a future
+    non-monthly period fits the same table. ``invoice_id`` has no FK yet — the ``invoices`` table
+    doesn't exist until that module's own migration, which adds the FK (``ON DELETE SET NULL``)
+    onto this same column.
     """
 
     __tablename__ = "project_billing_periods"
@@ -130,6 +132,7 @@ class ProjectBillingPeriod(TimestampMixin, Base):
     period_end: Mapped[date] = mapped_column(Date)
     sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     sent_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    invoice_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
 
 
 class TimesheetRowComment(TimestampMixin, Base):

@@ -8,14 +8,16 @@ Backend: `modules/timesheets` (workflow statuses, locks and billing readiness ar
   `listSubmittedTimesheetWeeks` (an optional `{ scope: "mine" | "all" }`), the caller's
   project/billing-item picker, the dashboard's `getMonthCalendar`/`getYearHours`/
   `getMonthTimeSummary`/`getWeeklyHours`, the manager team dashboard's `getTeamMonthOverview` (also
-  `scope`-aware) and `sendProjectMonthToBilling`/`reopenProjectBillingPeriod`, admin-only
-  `listBillingPeriods` (project/customer/month-range filters, pagination — backs
-  `pages/admin/AdminBillingPage.tsx`) and `billingPeriodExportUrl(projectId, periodStart)` (a plain
-  relative URL for that page's per-row "CSV" `<a href download>`, never fetched through `api` —
-  following `system/api.ts`'s `backupDownloadUrl`), plus `TimesheetRuleError` covering 400/403/404
-  and `TimesheetConflictError` for a 409 — the week's status changed underneath the caller, or a
-  billing period isn't ready yet / was already sent — both with the backend's `detail` as the
-  message.
+  `scope`-aware) and `sendProjectMonthToBilling`/`reopenProjectBillingPeriod`,
+  `listBillingPeriods` (admin or accountant; project/customer/month-range/`invoiced` filters,
+  pagination — backs `pages/admin/AdminBillingPage.tsx`; each `BillingPeriodListItem` carries an
+  `invoice_id`, `null` until the future `invoices` module marks it) and
+  `billingPeriodExportUrl(projectId, periodStart)` (a plain relative URL for that page's per-row
+  "CSV" `<a href download>`, never fetched through `api` — following `system/api.ts`'s
+  `backupDownloadUrl`), plus `TimesheetRuleError` covering 400/403/404 and `TimesheetConflictError`
+  for a 409 — the week's status changed underneath the caller, a billing period isn't ready yet /
+  was already sent, or (`reopenProjectBillingPeriod`) it's invoiced — all with the backend's
+  `detail` as the message.
 - `hooks.ts` — `timesheetKeys` + `useTimesheetWeek`/`useTimesheetOptions`/`useMonthCalendar`/
   `useYearHours`/`useMonthTimeSummary`/`useWeeklyHours`/`useSubmittedTimesheetWeeks`/
   `useTeamMonthOverview`/`useBillingPeriods` queries and `useSaveTimesheetWeek`/

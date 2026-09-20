@@ -1254,6 +1254,8 @@ export interface components {
             sent_by_id: string;
             /** Sent By Name */
             sent_by_name: string;
+            /** Invoice Id */
+            invoice_id: string | null;
         };
         /** BillingPeriodPageResponse */
         BillingPeriodPageResponse: {
@@ -4684,6 +4686,7 @@ export interface operations {
                 customer_id?: string | null;
                 month_from?: string | null;
                 month_to?: string | null;
+                invoiced?: boolean | null;
                 limit?: number;
                 offset?: number;
             };
@@ -4788,6 +4791,13 @@ export interface operations {
             };
             /** @description No sent period found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The period is invoiced */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

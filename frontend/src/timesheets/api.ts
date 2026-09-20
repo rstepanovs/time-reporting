@@ -238,13 +238,14 @@ export async function sendProjectMonthToBilling(params: {
   return data;
 }
 
-/** Admin only: every sent billing period, newest first, filterable by project/customer/month
- * range and paginated. */
+/** Admin or accountant: every sent billing period, newest first, filterable by
+ * project/customer/month range and whether it's invoiced, paginated. */
 export async function listBillingPeriods(params: {
   projectId?: string;
   customerId?: string;
   monthFrom?: string;
   monthTo?: string;
+  invoiced?: boolean;
   limit?: number;
   offset?: number;
 } = {}): Promise<BillingPeriodPage> {
@@ -255,6 +256,7 @@ export async function listBillingPeriods(params: {
         customer_id: params.customerId,
         month_from: params.monthFrom,
         month_to: params.monthTo,
+        invoiced: params.invoiced,
         limit: params.limit,
         offset: params.offset,
       },
@@ -264,7 +266,8 @@ export async function listBillingPeriods(params: {
   return data;
 }
 
-/** Admin only: delete a sent billing period, unlocking it again. */
+/** Admin only: delete a sent billing period, unlocking it again. Throws `TimesheetConflictError`
+ * if the period is invoiced. */
 export async function reopenProjectBillingPeriod(params: {
   projectId: string;
   periodStart: string;
