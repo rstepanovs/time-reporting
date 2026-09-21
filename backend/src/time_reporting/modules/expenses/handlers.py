@@ -6,17 +6,21 @@ Handlers translate between bus messages and the service/repository and never ret
 from collections import defaultdict
 from collections.abc import Sequence
 from decimal import Decimal
+from uuid import UUID
 
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.expenses.contracts import (
     AddExpenseAttachment,
     ApproveExpenseReport,
     AttachmentFileDTO,
+    CountMonthReportsNotApproved,
     CreateExpenseReport,
     DeleteExpenseAttachment,
     DeleteExpenseReport,
     ExpenseAttachmentDTO,
     ExpenseCurrencyTotalDTO,
+    ExpenseMonthLineDTO,
+    ExpenseMonthReportDTO,
     ExpenseReportDTO,
     ExpenseReportLineExportDTO,
     ExpenseReportStatus,
@@ -26,6 +30,7 @@ from time_reporting.modules.expenses.contracts import (
     GetMonthExpenseTotals,
     ListAttachmentStorageKeys,
     ListExpenseOptions,
+    ListMonthExpenseLines,
     ListMyExpenseReports,
     ListProjectMonthExpenseReportLines,
     ListProjectMonthExpenseReports,
@@ -306,6 +311,80 @@ class ListProjectMonthExpenseReportLinesHandler:
             )
             for row in report_rows
             for line in lines_by_report_id[row.id]
+        )
+
+
+class ListMonthExpenseLinesHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._bus = bus
+        self._reports = ExpenseReportRepository(bus.session)
+        self._lines = ExpenseReportLineRepository(bus.session)
+        self._attachments = ExpenseAttachmentRepository(bus.session)
+
+    async def handle(self, query: ListMonthExpenseLines) -> tuple[ExpenseMonthReportDTO, ...]:
+        period_start, _period_end = _month_bounds(query.year, query.month)
+        report_rows = [
+            row
+            for row in await self._reports.list_for_period(period_start)
+            if row.status is ExpenseReportStatus.APPROVED
+        ]
+        if not report_rows:
+            return ()
+        projects_by_id = {
+            project.id: project
+            for project in await self._bus.query(
+                GetProjectsByIds(project_ids=frozenset(row.project_id for row in report_rows))
+            )
+        }
+        users_by_id = {
+            user.id: user
+            for user in await self._bus.query(
+                GetUsersByIds(user_ids=frozenset(row.user_id for row in report_rows))
+            )
+        }
+
+        result: list[ExpenseMonthReportDTO] = []
+        for row in report_rows:
+            project = projects_by_id.get(row.project_id)
+            user = users_by_id.get(row.user_id)
+            if project is None or user is None:
+                continue
+            lines = await self._lines.list_for_report(row.id)
+            attachments = await self._attachments.list_for_report(row.id)
+            attachment_ids_by_line: dict[UUID | None, list[UUID]] = defaultdict(list)
+            for attachment in attachments:
+                attachment_ids_by_line[attachment.line_id].append(attachment.id)
+            result.append(
+                ExpenseMonthReportDTO(
+                    id=row.id,
+                    user=user,
+                    project=project,
+                    lines=tuple(
+                        ExpenseMonthLineDTO(
+                            id=line.id,
+                            expense_date=line.expense_date,
+                            amount=line.amount,
+                            description=line.description,
+                            vendor=line.vendor,
+                            document_no=line.document_no,
+                            attachment_ids=tuple(attachment_ids_by_line.get(line.id, [])),
+                        )
+                        for line in lines
+                    ),
+                    unlinked_attachment_ids=tuple(attachment_ids_by_line.get(None, [])),
+                )
+            )
+        return tuple(result)
+
+
+class CountMonthReportsNotApprovedHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._reports = ExpenseReportRepository(bus.session)
+
+    async def handle(self, query: CountMonthReportsNotApproved) -> int:
+        period_start, _period_end = _month_bounds(query.year, query.month)
+        return await self._reports.count_for_period_excluding_status(
+            period_start=period_start, status=ExpenseReportStatus.APPROVED
         )
 
 

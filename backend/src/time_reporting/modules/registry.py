@@ -1,6 +1,7 @@
 """Composition root of the CQRS bus: collects the handlers of every feature module."""
 
 from time_reporting.core.cqrs import HandlerRegistry
+from time_reporting.modules.accounting import module as accounting_module
 from time_reporting.modules.admin import module as admin_module
 from time_reporting.modules.audit import module as audit_module
 from time_reporting.modules.company import module as company_module
@@ -25,6 +26,7 @@ def build_registry() -> HandlerRegistry:
     timesheets_module.register(registry)
     expenses_module.register(registry)
     invoices_module.register(registry)
+    accounting_module.register(registry)
     admin_module.register(registry)
     system_module.register(registry)
     registry.freeze()

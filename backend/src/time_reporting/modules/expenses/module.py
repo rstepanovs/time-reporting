@@ -4,6 +4,7 @@ from time_reporting.core.cqrs import HandlerRegistry
 from time_reporting.modules.expenses.contracts import (
     AddExpenseAttachment,
     ApproveExpenseReport,
+    CountMonthReportsNotApproved,
     CreateExpenseReport,
     DeleteExpenseAttachment,
     DeleteExpenseReport,
@@ -12,6 +13,7 @@ from time_reporting.modules.expenses.contracts import (
     GetMonthExpenseTotals,
     ListAttachmentStorageKeys,
     ListExpenseOptions,
+    ListMonthExpenseLines,
     ListMyExpenseReports,
     ListProjectMonthExpenseReportLines,
     ListProjectMonthExpenseReports,
@@ -26,6 +28,7 @@ from time_reporting.modules.expenses.contracts import (
 from time_reporting.modules.expenses.handlers import (
     AddExpenseAttachmentHandler,
     ApproveExpenseReportHandler,
+    CountMonthReportsNotApprovedHandler,
     CreateExpenseReportHandler,
     DeleteExpenseAttachmentHandler,
     DeleteExpenseReportHandler,
@@ -34,6 +37,7 @@ from time_reporting.modules.expenses.handlers import (
     GetMonthExpenseTotalsHandler,
     ListAttachmentStorageKeysHandler,
     ListExpenseOptionsHandler,
+    ListMonthExpenseLinesHandler,
     ListMyExpenseReportsHandler,
     ListProjectMonthExpenseReportLinesHandler,
     ListProjectMonthExpenseReportsHandler,
@@ -55,6 +59,8 @@ def register(registry: HandlerRegistry) -> None:
     registry.query(ListSubmittedExpenseReports, ListSubmittedExpenseReportsHandler)
     registry.query(ListProjectMonthExpenseReports, ListProjectMonthExpenseReportsHandler)
     registry.query(ListProjectMonthExpenseReportLines, ListProjectMonthExpenseReportLinesHandler)
+    registry.query(ListMonthExpenseLines, ListMonthExpenseLinesHandler)
+    registry.query(CountMonthReportsNotApproved, CountMonthReportsNotApprovedHandler)
     registry.query(GetAttachmentPath, GetAttachmentPathHandler)
     registry.query(ListAttachmentStorageKeys, ListAttachmentStorageKeysHandler)
 

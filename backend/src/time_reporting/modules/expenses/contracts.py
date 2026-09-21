@@ -200,6 +200,58 @@ class ListProjectMonthExpenseReportLines(Query[tuple[ExpenseReportLineExportDTO,
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class ExpenseMonthLineDTO:
+    """One line of an *approved* report, for the accountant package (``accounting.
+    BuildAccountantPackage``). ``attachment_ids`` are this line's own linked receipts, in upload
+    order — the package numbers and files them under ``receipts/<NNN>_...``."""
+
+    id: UUID
+    expense_date: date
+    amount: Decimal
+    description: str
+    vendor: str | None
+    document_no: str | None
+    attachment_ids: tuple[UUID, ...]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ExpenseMonthReportDTO:
+    """One *approved* report whose period is the queried month, for the accountant package.
+    ``project`` (not just its id) carries ``is_internal`` (rebilled vs. internal cost) and
+    ``customer.currency`` — the two things the package groups and totals by.
+    ``unlinked_attachment_ids`` are the report's own receipts that aren't tied to any one line
+    (filed under ``receipts/<report_id>/...`` instead of a numbered line receipt)."""
+
+    id: UUID
+    user: UserDTO
+    project: ProjectDTO
+    lines: tuple[ExpenseMonthLineDTO, ...]
+    unlinked_attachment_ids: tuple[UUID, ...]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ListMonthExpenseLines(Query[tuple[ExpenseMonthReportDTO, ...]]):
+    """Every *approved* report whose ``period_start`` falls in ``year``/``month``, across every
+    project — including internal ones (unlike this module's other batch queries, which are scoped
+    to one project or a manager's own projects). For ``accounting.BuildAccountantPackage``; see
+    ``CountMonthReportsNotApproved`` for the reports this deliberately leaves out."""
+
+    year: int
+    month: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CountMonthReportsNotApproved(Query[int]):
+    """How many reports (any project, including internal) have ``period_start`` in ``year``/
+    ``month`` and are *not* ``APPROVED`` (``draft``/``submitted``/``returned`` all count) — their
+    lines are missing from ``ListMonthExpenseLines`` until approved. For
+    ``accounting.GetAccountantPackageStatus``'s "not yet approved" warning."""
+
+    year: int
+    month: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class ExpenseCurrencyTotalDTO:
     currency: str
     amount: Decimal

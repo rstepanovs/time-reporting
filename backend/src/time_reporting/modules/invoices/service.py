@@ -6,9 +6,10 @@ their ``contracts.py`` messages, dispatched on the shared ``Bus``.
 
 import base64
 import hashlib
+from calendar import monthrange
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from uuid import UUID
@@ -59,10 +60,12 @@ from time_reporting.modules.invoices.contracts import (
     InvoicePeriodNotEligibleError,
     InvoiceStatus,
     InvoiceSummaryDTO,
+    InvoiceWithPdfDTO,
     InvoicingSummaryDTO,
     IssueInvoice,
     ListInvoiceablePeriods,
     ListInvoices,
+    ListInvoicesForMonth,
     MarkInvoicePaid,
     UpdateInvoiceDraft,
     VoidInvoice,
@@ -164,6 +167,12 @@ class _GeneratedLine:
 
 def _quantize(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _month_bounds(year: int, month: int) -> tuple[date, date]:
+    first = date(year, month, 1)
+    last_day = monthrange(year, month)[1]
+    return first, date(year, month, last_day)
 
 
 def _generate_lines(
@@ -543,6 +552,17 @@ class InvoiceService:
             unpaid_totals=unpaid_totals,
             overdue_count=overdue_count,
         )
+
+    async def list_for_month(self, query: ListInvoicesForMonth) -> tuple[InvoiceWithPdfDTO, ...]:
+        date_from, date_to = _month_bounds(query.year, query.month)
+        invoices = await self._invoices.list_for_month_non_draft(date_from, date_to)
+        result: list[InvoiceWithPdfDTO] = []
+        for invoice in invoices:
+            # Every non-draft invoice was rendered and stored at IssueInvoice time.
+            assert invoice.pdf is not None
+            dto = await self.get_invoice(invoice.id)
+            result.append(InvoiceWithPdfDTO(invoice=dto, pdf=invoice.pdf))
+        return tuple(result)
 
     async def count_invoices(self, query: CountInvoices) -> int:
         return await self._invoices.count_for_customer(query.customer_id)

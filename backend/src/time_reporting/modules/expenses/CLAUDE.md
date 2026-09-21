@@ -125,6 +125,23 @@ per-report: only *approved* reports' lines are returned (a report created for th
 project/month after the period was already sent is never approved against it and is excluded), for
 `timesheets`' billing-period CSV export (`GetBillingPeriodExportRows`).
 
+## Reads for `accounting`
+
+Two more batch queries, read only by `accounting.BuildAccountantPackage`/
+`GetAccountantPackageStatus` (see `accounting/CLAUDE.md`) — the other direction this module is
+depended on, alongside `timesheets` above:
+
+- `ListMonthExpenseLines(year, month)` → `tuple[ExpenseMonthReportDTO, ...]` — every **approved**
+  report (any project, **internal ones included** — unlike every other batch query in this
+  module, which is scoped to a manager's own projects or one project at a time) whose
+  `period_start` is in the month. Each report carries its own `user`/`project` (so `is_internal`
+  and `project.customer.currency` travel with it), its lines (each with the ids of its own linked
+  attachments, via `ExpenseMonthLineDTO.attachment_ids`) and the report's own attachments not
+  linked to any line (`unlinked_attachment_ids`).
+- `CountMonthReportsNotApproved(year, month)` — how many reports (any project, including internal)
+  have `period_start` in the month and are *not* `APPROVED` — kept as a separate, lean count
+  rather than folded into `ListMonthExpenseLines`, so that query stays exactly what its name says.
+
 ## HTTP API (`router.py`, `schemas.py`)
 
 All routes live under `/expenses`, `CurrentUserDep` unless noted. `GET/POST /reports`,

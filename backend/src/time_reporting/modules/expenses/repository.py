@@ -80,6 +80,27 @@ class ExpenseReportRepository:
         )
         return result.all()
 
+    async def list_for_period(self, period_start: date) -> Sequence[ExpenseReport]:
+        """Every report (any user, any project, any status) whose ``period_start`` is this month —
+        unlike ``list_for_projects_period``, not scoped to a set of projects, since the accountant
+        package (``ListMonthExpenseLines``) spans every project including internal ones."""
+        result = await self._session.scalars(
+            select(ExpenseReport).where(ExpenseReport.period_start == period_start)
+        )
+        return result.all()
+
+    async def count_for_period_excluding_status(
+        self, *, period_start: date, status: ExpenseReportStatus
+    ) -> int:
+        """How many reports at ``period_start`` are *not* ``status`` — used for
+        ``CountMonthReportsNotApproved`` (``status=APPROVED``)."""
+        result = await self._session.execute(
+            select(func.count())
+            .select_from(ExpenseReport)
+            .where(ExpenseReport.period_start == period_start, ExpenseReport.status != status)
+        )
+        return result.scalar_one()
+
     async def save(self, report: ExpenseReport) -> None:
         """Add ``report`` to the session (if new) and flush pending changes."""
         self._session.add(report)

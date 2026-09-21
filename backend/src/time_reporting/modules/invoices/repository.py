@@ -88,6 +88,21 @@ class InvoiceRepository:
             statement = statement.where(Invoice.invoice_date <= date_to)
         return statement
 
+    async def list_for_month_non_draft(self, date_from: date, date_to: date) -> Sequence[Invoice]:
+        """Every non-draft invoice (``issued``/``paid``/``void``) whose ``invoice_date`` falls
+        between ``date_from`` and ``date_to`` inclusive — for the accountant package
+        (``ListInvoicesForMonth``); a draft has no stored PDF to include."""
+        result = await self._session.scalars(
+            select(Invoice)
+            .where(
+                Invoice.invoice_date >= date_from,
+                Invoice.invoice_date <= date_to,
+                Invoice.status != InvoiceStatus.DRAFT,
+            )
+            .order_by(Invoice.invoice_date, Invoice.id)
+        )
+        return result.all()
+
     async def sum_unpaid_by_currency(self) -> Sequence[tuple[str, Decimal]]:
         """Every ``ISSUED`` invoice's ``total``, grouped by currency."""
         result = await self._session.execute(

@@ -4,11 +4,12 @@ Owns three tables: `invoices`, `invoice_lines`, `invoice_billing_periods`. Depen
 `timesheets.contracts` (billing periods and their export rows), `customers.contracts` (VAT/locale/
 currency/reference), `projects.contracts` (billing items, for rates and markup),
 `company.contracts` (the default invoice locale, `AllocateInvoiceNumber`, `GetCompanyLogo` — see
-"Issuing" below) and `audit.contracts`; nothing depends on `invoices` except `admin`
-(`CountInvoices`, for a customer's removal impact) — see `timesheets/CLAUDE.md`'s "Billing handoff
-and locking" for the other side of the link (`ProjectBillingPeriod.invoice_id`,
+"Issuing" below) and `audit.contracts`; depended on by `admin` (`CountInvoices`, for a customer's
+removal impact) and `accounting` (`ListInvoicesForMonth`, `ListInvoices`, `ListInvoiceablePeriods`
+— the monthly accountant package, see `accounting/CLAUDE.md`) — see `timesheets/CLAUDE.md`'s
+"Billing handoff and locking" for the other side of the link (`ProjectBillingPeriod.invoice_id`,
 `MarkBillingPeriodsInvoiced`/`ClearBillingPeriodsInvoiced`). Registered after `expenses`, before
-`admin`, in `modules/registry.py`.
+`accounting`/`admin`, in `modules/registry.py`.
 
 `faktura-printer` (`faktura-printer @ git+https://github.com/rstepanovs/faktura-printer@v0.3.0` in
 `backend/pyproject.toml`, `tool.hatch.metadata.allow-direct-references = true` alongside it since
@@ -94,6 +95,13 @@ only file in the whole app importing it — see "Issuing" below.
   the same "Overdue" definition `ListInvoices`'s callers already compute client-side, there is no
   separate persisted status for it. `today` is supplied by the router (`date.today()`), like
   `CreateInvoiceDraft.invoice_date`.
+- `ListInvoicesForMonth(year, month)` — every **non-draft** invoice (`issued`/`paid`/`void`) whose
+  `invoice_date` falls in the month, each paired with the PDF bytes stored on it at `IssueInvoice`
+  time (`InvoiceWithPdfDTO`; `InvoiceRepository.list_for_month_non_draft`). A draft has no stored
+  PDF, so it's excluded here — `accounting.GetAccountantPackageStatus`'s "draft invoices dated in
+  the month" warning is built from the existing `ListInvoices(status=DRAFT, ...)` instead. Used
+  only by `accounting.BuildAccountantPackage`, the one thing outside `admin` that reads this
+  module's contracts.
 
 ## Issuing, paid, void
 

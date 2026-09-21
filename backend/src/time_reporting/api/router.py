@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from time_reporting.api.routes import health
+from time_reporting.modules.accounting.router import router as accounting_router
 from time_reporting.modules.admin.router import router as admin_router
 from time_reporting.modules.audit.router import router as audit_router
 from time_reporting.modules.auth.router import router as auth_router
@@ -28,6 +29,7 @@ api_router.include_router(work_calendar_router)
 api_router.include_router(timesheets_router)
 api_router.include_router(expenses_router)
 api_router.include_router(invoices_router)
+api_router.include_router(accounting_router)
 api_router.include_router(admin_router)
 api_router.include_router(system_router)
 api_router.include_router(system_backups_router)

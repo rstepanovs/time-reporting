@@ -185,6 +185,16 @@ class CurrencyTotalDTO:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class InvoiceWithPdfDTO:
+    """An issued (or later paid/void) invoice plus its stored PDF bytes — for the accountant
+    package (``accounting.BuildAccountantPackage``), which files each one at
+    ``invoices/<number>.pdf``."""
+
+    invoice: InvoiceDTO
+    pdf: bytes
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class InvoicingSummaryDTO:
     """The dashboard "Billing" section's data — one aggregate query rather than the frontend
     paging through every invoice/period itself."""
@@ -234,6 +244,18 @@ class GetInvoicingSummary(Query[InvoicingSummaryDTO]):
     (``date.today()``), like ``CreateInvoiceDraft.invoice_date``, so tests can pin it."""
 
     today: date
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ListInvoicesForMonth(Query[tuple[InvoiceWithPdfDTO, ...]]):
+    """Every non-draft invoice (``issued``, ``paid`` or ``void``) whose ``invoice_date`` falls in
+    ``year``/``month``, each with the PDF bytes stored at issue time — for the accountant package.
+    A draft has no stored PDF and isn't part of the handoff; see
+    ``accounting.GetAccountantPackageStatus``'s "draft invoices dated in the month" warning
+    instead, built from the existing ``ListInvoices(status=DRAFT, ...)``."""
+
+    year: int
+    month: int
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

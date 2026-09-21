@@ -18,6 +18,9 @@ dependencies = [
     "python-multipart>=0.0.32",
     "holidays>=0.104",
     "faktura-printer @ git+https://github.com/rstepanovs/faktura-printer@v0.3.0",
+    "jinja2>=3.1.6",
+    "weasyprint>=70.0",
+    "openpyxl>=3.1.5",
 ]
 
 [project.scripts]
