@@ -11,7 +11,7 @@ Backend: `modules/timesheets` (workflow statuses, locks and billing readiness ar
   `scope`-aware) and `sendProjectMonthToBilling`/`reopenProjectBillingPeriod`,
   `listBillingPeriods` (admin or accountant; project/customer/month-range/`invoiced` filters,
   pagination — backs `pages/admin/AdminBillingPage.tsx`; each `BillingPeriodListItem` carries an
-  `invoice_id`, `null` until the future `invoices` module marks it) and
+  `invoice_id`, `null` until `invoices.CreateInvoiceDraft` marks it) and
   `billingPeriodExportUrl(projectId, periodStart)` (a plain relative URL for that page's per-row
   "CSV" `<a href download>`, never fetched through `api` — following `system/api.ts`'s
   `backupDownloadUrl`), plus `TimesheetRuleError` covering 400/403/404 and `TimesheetConflictError`

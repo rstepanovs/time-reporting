@@ -20,14 +20,6 @@ Year = Annotated[int, Path(ge=2000, le=2100)]
 Month = Annotated[int, Path(ge=1, le=12)]
 
 
-@router.get("/packages/{year}/{month}")
-async def get_accountant_package_status(
-    year: Year, month: Month, _accountant: AccountantDep, bus: BusDep
-) -> AccountantPackageStatusResponse:
-    status_dto = await bus.query(GetAccountantPackageStatus(year=year, month=month))
-    return AccountantPackageStatusResponse.model_validate(status_dto)
-
-
 @router.get("/packages/{year}/{month}.zip")
 async def download_accountant_package(
     year: Year, month: Month, current_user: AccountantDep, bus: BusDep
@@ -41,3 +33,11 @@ async def download_accountant_package(
         media_type="application/zip",
         background=BackgroundTask(package.path.unlink, missing_ok=True),
     )
+
+
+@router.get("/packages/{year}/{month}")
+async def get_accountant_package_status(
+    year: Year, month: Month, _accountant: AccountantDep, bus: BusDep
+) -> AccountantPackageStatusResponse:
+    status_dto = await bus.query(GetAccountantPackageStatus(year=year, month=month))
+    return AccountantPackageStatusResponse.model_validate(status_dto)

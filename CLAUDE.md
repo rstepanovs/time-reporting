@@ -4,11 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Time tracking with subsequent billing. Monorepo containing a Python API (`backend/`) and a React web
-client (`frontend/`). Infrastructure, a health-check endpoint, user accounts with JWT authentication,
-customers and their projects, a shared non-working-day calendar, weekly timesheets and expense
-reports (with receipt/invoice attachments) all exist; the remaining domain model (invoices) does not
-yet.
+Time tracking with subsequent billing, invoicing and a monthly external-accountant handoff — sized
+for a one-person consultancy (self-approval, internal/non-billed projects, per-customer VAT).
+Monorepo containing a Python API (`backend/`) and a React web client (`frontend/`). Infrastructure,
+a health-check endpoint, user accounts with JWT authentication (`admin`/`manager`/`accountant`
+access levels), a company profile, customers and their projects (including internal ones, never
+billed), a shared non-working-day calendar, weekly timesheets and expense reports (with receipt/
+invoice attachments), invoices (drafted from sent billing periods, issued/PDF-rendered via
+`faktura-printer`, paid or void) and the accountant's monthly package (`summary.pdf`/`summary.xlsx`
+plus every invoice and receipt, zipped) all exist.
 
 Detailed notes live next to the code and load only when files in that directory are read:
 `backend/src/time_reporting/modules/<module>/CLAUDE.md` for each backend module and
@@ -141,6 +145,12 @@ Modules (each documented in its own `CLAUDE.md`):
   money spent on a project in one calendar month, with receipt/invoice scans, submitted and
   approved the same way a timesheet week is; locked in the same transaction as its project's
   timesheets billing handoff.
+- **`invoices`** — `Invoice`/`InvoiceLine`/`InvoiceBillingPeriod`: drafted from a customer's sent,
+  uninvoiced billing periods, issued (numbered, PDF rendered via `faktura-printer` and stored,
+  then immutable), later marked paid or void.
+- **`accounting`** — no tables; assembles the external accountant's monthly handoff package
+  (`summary.pdf`/`summary.xlsx` plus every issued invoice's PDF and every expense receipt,
+  zipped) purely by reading `invoices`/`expenses`/`company` through the bus.
 - **`admin`** — no tables; orchestrates archiving/permanent deletion of users, customers, projects.
 - **`system`** — no tables; backend/database version and status, non-secret configuration view, read
   from PostgreSQL catalogs and application settings, under `/admin/system/*`; `pg_dump`/`pg_restore`
@@ -161,10 +171,11 @@ owning module's `PATCH` endpoint (`ManagerDep`).
   401, marks the app signed out (sets the `currentUserQueryKey` query data to `null`).
 - **`api/queryClient.ts`** — shared TanStack Query `QueryClient`.
 - **Feature areas** — `auth/`, `customers/`, `users/`, `projects/`, `calendar/`, `timesheets/`,
-  `expenses/`, `company/`, `admin/`, `system/`, `audit/`: each typically has `api.ts` (typed calls plus the
-  area's own error classes mapped from HTTP status codes, with the backend's `detail` as the
-  message where it's user-facing), `hooks.ts` (a `<area>Keys` query-key factory plus TanStack Query
-  queries/mutations) and its modals/components. Each area's `CLAUDE.md` has the details.
+  `expenses/`, `invoices/`, `accounting/`, `company/`, `admin/`, `system/`, `audit/`: each typically
+  has `api.ts` (typed calls plus the area's own error classes mapped from HTTP status codes, with
+  the backend's `detail` as the message where it's user-facing), `hooks.ts` (a `<area>Keys`
+  query-key factory plus TanStack Query queries/mutations) and its modals/components. Each area's
+  `CLAUDE.md` has the details.
 - **`router.tsx`** — route tree (`routes`, also used by tests): `/login` is public, everything else sits
   under `RequireAuth` → `AppLayout`. Page components live in `pages/` (see `pages/CLAUDE.md`), shared
   chrome in `components/`. `/` (`DashboardPage`) is the default landing page, a list of sections
@@ -173,14 +184,17 @@ owning module's `PATCH` endpoint (`ManagerDep`).
   params `week`/`user`), `/hours` (`month`), `/expenses` (`month`) and `/expenses/:reportId`,
   `/projects`, `/projects/:projectId`, `/account/password`; `/approvals` and `/team`
   sit under `RequireRole roles={["manager"]}` (any-of, so an admin who is also a manager passes too);
+  `/invoices?tab=` and `/invoices/:invoiceId`, `/accounting?month=` sit under `RequireRole
+  roles={["accountant"]}`;
   `/admin/{users,customers,projects,calendar,billing,company,audit,backups,status}` sit under `RequireRole
   roles={["admin"]}`, with `/admin` redirecting to `/admin/users`.
 - **`components/AppLayout.tsx`** — the signed-in shell: header with the account menu (shows a badge
   per access level the user holds, or "Employee" if none) and an `AppShell.Navbar` (collapsible on
   mobile via a `Burger`) linking to the pages in `pages/` (Dashboard, Timesheet, My hours, Expenses,
   Projects, in that order — plus Approvals then Team, inserted right after Expenses, shown only when
-  `canManage(user)`), plus an "Administration" nav group (Users/Customers/Projects/Calendar/Billing/
-  Company/Audit log/Backups/System status) shown only when `isAdmin(user)`.
+  `canManage(user)`), plus a "Billing" nav group (Invoices, Accountant package) shown only when
+  `isAccountant(user)`, and an "Administration" nav group (Users/Customers/Projects/Calendar/
+  Billing/Company/Audit log/Backups/System status) shown only when `isAdmin(user)`.
   `components/DashboardCard.tsx` is the shared frame the dashboard's widget cards render inside
   (title, content, an optional "Details →" style footer link, a highlight tint via
   `data-highlighted`).

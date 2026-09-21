@@ -52,7 +52,13 @@ would (see `cli.py`), so it exercises the same module handlers as the app.
 - Active and archived customers, plus a few projects with members per
   customer — a `manager`-level demo user is set as `manager_id` on every
   active one. Projects are created for each customer *before* that customer
-  is archived, since creating a project requires an active customer.
+  is archived, since creating a project requires an active customer. One
+  project ("Company Overhead", under Acme Corporation) is internal
+  (`is_internal=True`) — never billed, its own expense reports are never
+  locked by a billing handoff.
+- The company profile (`/admin/company`), but only if it's still at the
+  migration's placeholder defaults (empty legal name/org number) — an
+  already-customized profile, even partially, is left untouched.
 - The current and next year's public holidays, plus one demo bridge day.
 - Normal working hours booked for every demo user who is a project member
   (`admin@example.com` isn't a member of any demo project, so has none) on
@@ -67,6 +73,14 @@ would (see `cli.py`), so it exercises the same module handlers as the app.
   earlier months are fully approved, so the manager dashboard's billing card
   naturally shows both a not-ready (current month) and a ready (an earlier
   month) project, with no extra seeding needed.
+- One approved and one submitted expense report this month, for every demo
+  user who is a member of at least two projects with an active `amount`
+  billing item (today: `manager@`, `employee@` and `accountant@`, the last
+  via "Company Overhead") — so `/expenses` has an example and the manager's
+  approvals/team pages have a real expense-report blocker.
+- "Website Revamp"'s earliest booked month (of the 3 booked, never the
+  current one) is sent to billing and issued as an invoice, so a fresh
+  checkout's `/invoices` and `/accounting` aren't both empty.
 
 ## Idempotency
 

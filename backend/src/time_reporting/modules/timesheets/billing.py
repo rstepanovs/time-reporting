@@ -1,9 +1,10 @@
 """Sending a project's calendar month to billing, and reopening a sent one.
 
-A stub: "sending" records the handoff (``ProjectBillingPeriod``) and locks the period against
-further edits — invoicing itself doesn't exist yet; a future invoices module would pick up sent
-periods from here. Kept separate from ``service.py`` (week read/write) and ``team.py`` (the team
-overview's own read of the same readiness rule, which this reuses via ``billing_readiness``).
+"Sending" only records the handoff (``ProjectBillingPeriod``) and locks the period against further
+edits — drafting the invoice itself is ``invoices.CreateInvoiceDraft``'s job, reading sent periods
+from here (``ListInvoiceablePeriods``, ``timesheets/CLAUDE.md``'s "Billing handoff and locking").
+Kept separate from ``service.py`` (week read/write) and ``team.py`` (the team overview's own read
+of the same readiness rule, which this reuses via ``billing_readiness``).
 """
 
 from collections.abc import Sequence

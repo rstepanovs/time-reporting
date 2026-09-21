@@ -23,5 +23,5 @@ currency (ISO 4217) and payment terms.
   `customer_number`/`your_reference` printed on an invoice. `INVOICE_LOCALES` is a local constant in
   `customers.contracts`, deliberately duplicating `company.contracts.INVOICE_LOCALES` rather than
   importing it — a module may only import another module's `contracts.py`, and neither of these two
-  needs the other; both independently mirror `faktura_printer.available_locales()`. Nothing here
-  reads these fields yet; the future `invoices` module will.
+  needs the other; both independently mirror `faktura_printer.available_locales()`. Read by
+  `invoices` (`CreateInvoiceDraft`, `IssueInvoice`) — see `invoices/CLAUDE.md`.

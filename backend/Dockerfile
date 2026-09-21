@@ -34,7 +34,8 @@ ARG GIT_SHA
 
 # Debian bookworm ships only PostgreSQL 15's client, which can't `pg_dump`/`pg_restore` against a
 # 17 server (`db`'s image, compose.yaml) — pull `postgresql-client-17` from the PGDG apt repo
-# instead. Also: WeasyPrint's runtime libraries (Pango/HarfBuzz/fonts), for `invoices.rendering`.
+# instead. Also: WeasyPrint's runtime libraries (Pango/HarfBuzz/fonts), for `invoices.rendering`
+# and `accounting.rendering` (the accountant package's summary.pdf).
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates gnupg \
     && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
         | gpg --dearmor -o /usr/share/keyrings/postgresql.gpg \

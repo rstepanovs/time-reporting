@@ -103,8 +103,21 @@ since this module imports them itself rather than through `faktura-printer`.
 
 `APIRouter(prefix="/accounting", tags=["accounting"])`, both routes `AccountantDep`-only, `year`/
 `month` as `Path(ge=.., le=..)` (the `timesheets./team/{year}/{month}` precedent, not query
-params): `GET /accounting/packages/{year}/{month}` (`GetAccountantPackageStatus`) and
-`GET /accounting/packages/{year}/{month}.zip` (`BuildAccountantPackage`, streamed as a raw
-`FileResponse` — no response schema, like `invoices.GetInvoicePdf`'s route). Neither route has a
+params): `GET /accounting/packages/{year}/{month}.zip` (`BuildAccountantPackage`, streamed as a raw
+`FileResponse` — no response schema, like `invoices.GetInvoicePdf`'s route) and
+`GET /accounting/packages/{year}/{month}` (`GetAccountantPackageStatus`). Neither route has a
 domain error to map: any `year`/`month` combination is valid, even one with nothing in it (the
 status DTO and the ZIP are just empty/mostly-empty in that case).
+
+**The `.zip` route is declared first in `router.py`, and this order matters.** Starlette compiles
+`{month}` (no `:int` in the path *template* itself — the `int` typing lives only in the endpoint's
+`Annotated` parameter, which FastAPI validates after routing, not before) to the unconstrained
+regex `[^/]+`, and tries a request's registered routes in declaration order. With the status route
+declared first, `GET .../packages/2026/9.zip` matched *that* route instead — its `{month}` pattern
+has nothing after it to stop `[^/]+` from swallowing `"9.zip"` whole, so FastAPI received the
+literal string `"9.zip"` for an `int` field and rejected it with a 422 — caught only by hand-testing
+against a live server, since there is no `test_accounting_api.py` (bus-level tests never go through
+FastAPI's router at all). Declaring the `.zip` route first fixes it: its own pattern ends in the
+literal `\.zip`, so regex backtracking
+correctly splits `"9.zip"` into `month="9"` plus the suffix, and a plain `"9"` (no `.zip`) simply
+doesn't match that route at all and falls through to the status route beneath it.

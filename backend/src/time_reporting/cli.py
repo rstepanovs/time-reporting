@@ -174,12 +174,16 @@ def _seed_demo_command(args: argparse.Namespace) -> int:
         print(f"Imported {report.imported_holidays} public holiday(s)")
     if report.created_bridge_day:
         print("Added a demo bridge day")
+    if report.seeded_company_profile:
+        print("Filled in the demo company profile")
     for email in report.seeded_time_entries_for:
         print(f"Booked demo time entries for {email}")
     for email in report.submitted_weeks_for:
         print(f"Submitted/approved demo timesheet weeks for {email}")
     for email in report.seeded_expense_reports_for:
         print(f"Created demo expense reports for {email}")
+    if report.seeded_invoice:
+        print("Sent a demo project month to billing and issued an invoice for it")
     if report.created_users:
         shown = "the one read from stdin" if args.password_stdin else DEFAULT_DEMO_PASSWORD
         print(f"New demo users sign in with password: {shown}")

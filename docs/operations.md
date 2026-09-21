@@ -21,7 +21,15 @@ docker compose up --build -d
 `invoices/rendering.py`) is pinned to a tag straight from GitHub rather than an index (see
 `backend/pyproject.toml`), so the builder stage installs `git` and `uv sync` fetches it from there;
 the runtime stage also installs WeasyPrint's system libraries (Pango/HarfBuzz/fonts) alongside the
-PostgreSQL client. None of this needs network access again after the image is built.
+PostgreSQL client — the accountant package's `summary.pdf` (`accounting/rendering.py`) uses the
+same libraries directly, not through `faktura-printer`. None of this needs network access again
+after the image is built.
+
+To pick up a new `faktura-printer` release (a new invoice/company-profile field, a template fix,
+…): bump the tag in `backend/pyproject.toml`'s `faktura-printer @ git+https://github.com/
+rstepanovs/faktura-printer@<tag>` dependency line, then `uv sync` at the repository root to update
+`uv.lock` to the new commit and commit both files together. There is no compatibility range to
+respect — pin exactly one tag, the same one every environment installs from the lock file.
 
 `compose.yaml` brings the stack up in dependency order: `db` → `migrate` (creates the schema, since
 there's nothing to back up yet) → `backend`/`backup` → `frontend`. Create the first administrator

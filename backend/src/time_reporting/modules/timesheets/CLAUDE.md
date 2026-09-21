@@ -128,8 +128,9 @@ project `manager_id` manages (`manager_id=None` covers every active project — 
   reported as `0` regardless of what's actually booked. Hours still book normally on it and its
   expense reports still follow the normal workflow — this only ever changes what
   `ProjectBillingPeriodDTO.status` reports, never what's allowed on the timesheet/expenses side.
-- Sending is a stub — invoicing doesn't exist yet. `SendProjectMonthToBilling(project_id, year,
-  month, sent_by_id)` inserts a `ProjectBillingPeriod` row (`project_id`, `period_start`/`period_end`
+- Sending only records the handoff; drafting the invoice itself is `invoices.CreateInvoiceDraft`'s
+  job (see `invoices/CLAUDE.md`). `SendProjectMonthToBilling(project_id, year, month, sent_by_id)`
+  inserts a `ProjectBillingPeriod` row (`project_id`, `period_start`/`period_end`
   = the calendar month, `sent_at`, `sent_by_id`; unique per `(project_id, period_start)`) once ready,
   raising `ProjectIsInternalError` (400) for an internal project — checked first, before readiness
   — `BillingPeriodNotReadyError` (carries `blocking_weeks` *and* `blocking_reports`) or

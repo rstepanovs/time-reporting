@@ -620,9 +620,10 @@ class ReturnTimesheetWeek(Command[TimesheetWeekDTO]):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class SendProjectMonthToBilling(Command[ProjectBillingPeriodDTO]):
-    """Send ``project_id``'s ``year``/``month`` to billing: a stub that records the handoff
-    (``ProjectBillingPeriod``) and locks the period — invoicing itself doesn't exist yet. Allowed
-    on any day, not only after the month ends, and by any manager regardless of the project's
+    """Send ``project_id``'s ``year``/``month`` to billing: records the handoff
+    (``ProjectBillingPeriod``) and locks the period — drafting the invoice itself is a later,
+    separate step (``invoices.CreateInvoiceDraft``). Allowed on any day, not only after the month
+    ends, and by any manager regardless of the project's
     ``manager_id`` (the router's ``ManagerDep`` is the only check). Raises
     ``TimesheetProjectNotFoundError``, ``UserNotFoundError`` (``sent_by_id``),
     ``BillingPeriodNotReadyError`` (some week in scope isn't approved yet, or there is nothing to
