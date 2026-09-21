@@ -175,6 +175,29 @@ class InvoicePdfDTO:
     filename: str
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CurrencyTotalDTO:
+    """A monetary total in one currency — invoices in different currencies are never summed
+    together."""
+
+    currency: str
+    amount: Decimal
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class InvoicingSummaryDTO:
+    """The dashboard "Billing" section's data — one aggregate query rather than the frontend
+    paging through every invoice/period itself."""
+
+    # The number of periods `ListInvoiceablePeriods` would offer, summed across every customer.
+    periods_to_invoice: int
+    # Every `ISSUED` invoice's `total`, grouped by currency (a `PAID`/`VOID`/draft invoice is
+    # excluded — nothing left to collect).
+    unpaid_totals: tuple[CurrencyTotalDTO, ...]
+    # `ISSUED` invoices whose `due_date` is before `today`.
+    overdue_count: int
+
+
 # --- Queries ---
 
 
@@ -203,6 +226,14 @@ class ListInvoiceablePeriods(Query[tuple[InvoiceableCustomerDTO, ...]]):
     """Every sent, uninvoiced, non-internal billing period, grouped by customer — built on
     ``timesheets.contracts.ListBillingPeriods(invoiced=False)``. A customer with no such period is
     absent from the result."""
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetInvoicingSummary(Query[InvoicingSummaryDTO]):
+    """The dashboard "Billing" section's data. ``today`` is supplied by the router
+    (``date.today()``), like ``CreateInvoiceDraft.invoice_date``, so tests can pin it."""
+
+    today: date
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

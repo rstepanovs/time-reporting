@@ -2,6 +2,7 @@
 
 from collections.abc import Sequence
 from datetime import date
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import Select, func, select
@@ -86,6 +87,25 @@ class InvoiceRepository:
         if date_to is not None:
             statement = statement.where(Invoice.invoice_date <= date_to)
         return statement
+
+    async def sum_unpaid_by_currency(self) -> Sequence[tuple[str, Decimal]]:
+        """Every ``ISSUED`` invoice's ``total``, grouped by currency."""
+        result = await self._session.execute(
+            select(Invoice.currency, func.sum(Invoice.total))
+            .where(Invoice.status == InvoiceStatus.ISSUED)
+            .group_by(Invoice.currency)
+            .order_by(Invoice.currency)
+        )
+        return result.tuples().all()
+
+    async def count_overdue(self, today: date) -> int:
+        """``ISSUED`` invoices whose ``due_date`` is before ``today``."""
+        result = await self._session.execute(
+            select(func.count())
+            .select_from(Invoice)
+            .where(Invoice.status == InvoiceStatus.ISSUED, Invoice.due_date < today)
+        )
+        return result.scalar_one()
 
     async def save(self, invoice: Invoice) -> None:
         """Add ``invoice`` to the session (if new) and flush pending changes."""

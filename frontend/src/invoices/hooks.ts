@@ -4,6 +4,7 @@ import {
   createInvoiceDraft,
   deleteInvoiceDraft,
   getInvoice,
+  getInvoicingSummary,
   issueInvoice,
   listInvoiceablePeriods,
   listInvoices,
@@ -15,6 +16,7 @@ import {
 export const invoiceKeys = {
   all: ["invoices"] as const,
   invoiceablePeriods: () => [...invoiceKeys.all, "invoiceable-periods"] as const,
+  summary: () => [...invoiceKeys.all, "summary"] as const,
   // A shared prefix over every list variant, so a mutation can invalidate "every list" without
   // also invalidating `detail(invoiceId)` — that entry is instead kept in sync directly via
   // `setQueryData`, and invalidating it too would trigger a refetch that could momentarily
@@ -30,6 +32,14 @@ export function useInvoiceablePeriods() {
   return useQuery({
     queryKey: invoiceKeys.invoiceablePeriods(),
     queryFn: listInvoiceablePeriods,
+  });
+}
+
+/** The dashboard "Billing" section's data. */
+export function useInvoicingSummary() {
+  return useQuery({
+    queryKey: invoiceKeys.summary(),
+    queryFn: getInvoicingSummary,
   });
 }
 
@@ -90,6 +100,7 @@ export function useIssueInvoice(invoiceId: string) {
     onSuccess: (invoice) => {
       queryClient.setQueryData(invoiceKeys.detail(invoiceId), invoice);
       void queryClient.invalidateQueries({ queryKey: invoiceKeys.lists() });
+      void queryClient.invalidateQueries({ queryKey: invoiceKeys.summary() });
     },
   });
 }
@@ -101,6 +112,7 @@ export function useMarkInvoicePaid(invoiceId: string) {
     onSuccess: (invoice) => {
       queryClient.setQueryData(invoiceKeys.detail(invoiceId), invoice);
       void queryClient.invalidateQueries({ queryKey: invoiceKeys.lists() });
+      void queryClient.invalidateQueries({ queryKey: invoiceKeys.summary() });
     },
   });
 }
@@ -115,6 +127,7 @@ export function useVoidInvoice(invoiceId: string) {
       queryClient.setQueryData(invoiceKeys.detail(invoiceId), invoice);
       void queryClient.invalidateQueries({ queryKey: invoiceKeys.invoiceablePeriods() });
       void queryClient.invalidateQueries({ queryKey: invoiceKeys.lists() });
+      void queryClient.invalidateQueries({ queryKey: invoiceKeys.summary() });
     },
   });
 }

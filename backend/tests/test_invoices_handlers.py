@@ -25,9 +25,11 @@ from time_reporting.modules.invoices.contracts import (
     CompanyProfileIncompleteError,
     CountInvoices,
     CreateInvoiceDraft,
+    CurrencyTotalDTO,
     DeleteInvoiceDraft,
     GetInvoice,
     GetInvoicePdf,
+    GetInvoicingSummary,
     InvoiceCustomerNotFoundError,
     InvoiceEmptyError,
     InvoiceLineChange,
@@ -1256,3 +1258,102 @@ async def test_void_invoice_raises_when_not_found(bus: Bus, make_user: UserFacto
 
     with pytest.raises(InvoiceNotFoundError):
         await bus.execute(VoidInvoice(invoice_id=uuid4(), actor_id=admin.id, reason="x"))
+
+
+# --- GetInvoicingSummary ---
+
+
+async def test_invoicing_summary_counts_periods_to_invoice(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    await _sent_period(bus, make_project, make_user)
+
+    summary = await bus.query(GetInvoicingSummary(today=date(2026, 10, 1)))
+
+    assert summary.periods_to_invoice == 1
+    assert summary.unpaid_totals == ()
+    assert summary.overdue_count == 0
+
+
+async def test_invoicing_summary_sums_unpaid_by_currency(
+    bus: Bus,
+    make_project: ProjectFactory,
+    make_user: UserFactory,
+    make_customer: CustomerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    invoice_id, _admin = await _issued_invoice(
+        bus, make_project, make_user, make_customer, monkeypatch
+    )
+    invoice = await bus.query(GetInvoice(invoice_id=invoice_id))
+
+    summary = await bus.query(GetInvoicingSummary(today=invoice.invoice_date))
+
+    assert summary.unpaid_totals == (
+        CurrencyTotalDTO(currency=invoice.currency, amount=invoice.total),
+    )
+    # The invoice's own period is no longer offered — it's already invoiced.
+    assert summary.periods_to_invoice == 0
+    assert summary.overdue_count == 0
+
+
+async def test_invoicing_summary_excludes_paid_and_void_invoices(
+    bus: Bus,
+    make_project: ProjectFactory,
+    make_user: UserFactory,
+    make_customer: CustomerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two issued invoices sharing one company profile — see
+    ``test_issue_invoice_allocates_consecutive_numbers`` for why the profile is only completed
+    once (``UpdateCompanySettings`` resets the invoice number sequence)."""
+    _stub_renderer(monkeypatch)
+    customer = await make_customer()
+    admin_id: UUID | None = None
+    invoice_ids: list[UUID] = []
+    for _ in range(2):
+        project_id, _manager, admin, _worker = await _sent_period(
+            bus, make_project, make_user, customer_id=customer.id
+        )
+        admin_id = admin.id
+        if not invoice_ids:
+            await _complete_company_profile(bus, admin.id)
+        draft = await bus.execute(
+            CreateInvoiceDraft(
+                customer_id=customer.id,
+                periods=(BillingPeriodRef(project_id=project_id, period_start=PERIOD_START),),
+                invoice_date=date(2026, 10, 1),
+                actor_id=admin.id,
+            )
+        )
+        issued = await bus.execute(IssueInvoice(invoice_id=draft.id, actor_id=admin.id))
+        invoice_ids.append(issued.id)
+    assert admin_id is not None
+    paid_id, void_id = invoice_ids
+    await bus.execute(
+        MarkInvoicePaid(invoice_id=paid_id, actor_id=admin_id, paid_on=date(2026, 10, 15))
+    )
+    await bus.execute(VoidInvoice(invoice_id=void_id, actor_id=admin_id, reason="Mistake"))
+
+    summary = await bus.query(GetInvoicingSummary(today=date(2026, 10, 1)))
+
+    assert summary.unpaid_totals == ()
+
+
+async def test_invoicing_summary_counts_overdue_invoices(
+    bus: Bus,
+    make_project: ProjectFactory,
+    make_user: UserFactory,
+    make_customer: CustomerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    invoice_id, _admin = await _issued_invoice(
+        bus, make_project, make_user, make_customer, monkeypatch
+    )
+    invoice = await bus.query(GetInvoice(invoice_id=invoice_id))
+
+    not_yet_due = await bus.query(GetInvoicingSummary(today=invoice.due_date))
+    overdue = await bus.query(GetInvoicingSummary(today=invoice.due_date + timedelta(days=1)))
+
+    assert not_yet_due.overdue_count == 0
+    assert overdue.overdue_count == 1

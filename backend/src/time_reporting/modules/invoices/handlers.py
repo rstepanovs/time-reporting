@@ -10,10 +10,12 @@ from time_reporting.modules.invoices.contracts import (
     DeleteInvoiceDraft,
     GetInvoice,
     GetInvoicePdf,
+    GetInvoicingSummary,
     InvoiceableCustomerDTO,
     InvoiceDTO,
     InvoicePageDTO,
     InvoicePdfDTO,
+    InvoicingSummaryDTO,
     IssueInvoice,
     ListInvoiceablePeriods,
     ListInvoices,
@@ -54,6 +56,14 @@ class ListInvoiceablePeriodsHandler:
 
     async def handle(self, query: ListInvoiceablePeriods) -> tuple[InvoiceableCustomerDTO, ...]:
         return await self._service.list_invoiceable_periods(query)
+
+
+class GetInvoicingSummaryHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._service = InvoiceService(bus)
+
+    async def handle(self, query: GetInvoicingSummary) -> InvoicingSummaryDTO:
+        return await self._service.get_invoicing_summary(query)
 
 
 class CountInvoicesHandler:

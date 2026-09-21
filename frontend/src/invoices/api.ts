@@ -13,6 +13,8 @@ export type InvoicePage = components["schemas"]["InvoicePageResponse"];
 export type InvoiceablePeriod = components["schemas"]["InvoiceablePeriodResponse"];
 export type InvoiceableCustomer = components["schemas"]["InvoiceableCustomerResponse"];
 export type ClearableInvoiceField = components["schemas"]["ClearableInvoiceField"];
+export type CurrencyTotal = components["schemas"]["CurrencyTotalResponse"];
+export type InvoicingSummary = components["schemas"]["InvoicingSummaryResponse"];
 
 /** A rule was violated creating/updating/issuing an invoice, or it doesn't exist (400/404), or the
  * caller lost the `accountant` level mid-session (403, body-less). The backend's message, or a
@@ -49,6 +51,14 @@ async function invoiceAwareError(response: Response): Promise<Error> {
  * tab's source. A customer with no such period is absent from the result. */
 export async function listInvoiceablePeriods(): Promise<InvoiceableCustomer[]> {
   const { data, response } = await api.GET("/api/v1/invoices/invoiceable-periods");
+  if (!data) throw await invoiceAwareError(response);
+  return data;
+}
+
+/** The dashboard "Billing" section's data — one aggregate call rather than paging through every
+ * invoice/period itself. */
+export async function getInvoicingSummary(): Promise<InvoicingSummary> {
+  const { data, response } = await api.GET("/api/v1/invoices/summary");
   if (!data) throw await invoiceAwareError(response);
   return data;
 }

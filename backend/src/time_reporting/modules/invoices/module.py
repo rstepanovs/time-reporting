@@ -7,6 +7,7 @@ from time_reporting.modules.invoices.contracts import (
     DeleteInvoiceDraft,
     GetInvoice,
     GetInvoicePdf,
+    GetInvoicingSummary,
     IssueInvoice,
     ListInvoiceablePeriods,
     ListInvoices,
@@ -20,6 +21,7 @@ from time_reporting.modules.invoices.handlers import (
     DeleteInvoiceDraftHandler,
     GetInvoiceHandler,
     GetInvoicePdfHandler,
+    GetInvoicingSummaryHandler,
     IssueInvoiceHandler,
     ListInvoiceablePeriodsHandler,
     ListInvoicesHandler,
@@ -33,6 +35,7 @@ def register(registry: HandlerRegistry) -> None:
     registry.query(GetInvoice, GetInvoiceHandler)
     registry.query(ListInvoices, ListInvoicesHandler)
     registry.query(ListInvoiceablePeriods, ListInvoiceablePeriodsHandler)
+    registry.query(GetInvoicingSummary, GetInvoicingSummaryHandler)
     registry.query(CountInvoices, CountInvoicesHandler)
     registry.query(GetInvoicePdf, GetInvoicePdfHandler)
 

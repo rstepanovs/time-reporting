@@ -85,6 +85,15 @@ only file in the whole app importing it — see "Issuing" below.
   `admin.GetCustomerRemovalImpact` as a new `RemovalBlockerKind.INVOICES` blocker (see
   `admin/CLAUDE.md`) — a customer with any invoice can never be permanently deleted, matching how a
   customer with any project already couldn't be.
+- `GetInvoicingSummary(today)` — the dashboard "Billing" section's data in one query rather than
+  the frontend paging through `ListInvoiceablePeriods`/`ListInvoices` itself: `periods_to_invoice`
+  reuses `list_invoiceable_periods` and sums the periods across every customer; `unpaid_totals`
+  (`InvoiceRepository.sum_unpaid_by_currency`, a `SELECT ... GROUP BY currency`) sums every
+  `ISSUED` invoice's `total` grouped by currency (`PAID`/`VOID`/draft excluded); `overdue_count`
+  (`InvoiceRepository.count_overdue`) counts `ISSUED` invoices whose `due_date` is before `today` —
+  the same "Overdue" definition `ListInvoices`'s callers already compute client-side, there is no
+  separate persisted status for it. `today` is supplied by the router (`date.today()`), like
+  `CreateInvoiceDraft.invoice_date`.
 
 ## Issuing, paid, void
 
@@ -139,12 +148,13 @@ only file in the whole app importing it — see "Issuing" below.
 ## HTTP API
 
 `APIRouter(prefix="/invoices", tags=["invoices"])`, every route `AccountantDep`-only:
-`GET /invoiceable-periods`, `GET /invoices` (filters as query params, `status` aliased from the
-`InvoiceStatus` enum), `POST /invoices` (400 on any `InvoiceNoPeriodsError`/
-`InvoicePeriodNotEligibleError`/`BillingItemRateMissingError`, 404 on
-`InvoiceCustomerNotFoundError`), `GET /invoices/{id}`, `PUT /invoices/{id}` (404/409 as above),
-`DELETE /invoices/{id}` (204), `POST /invoices/{id}/issue` (404/409/400 on
-`InvoiceEmptyError`/`CompanyProfileIncompleteError`), `POST /invoices/{id}/pay`
+`GET /invoiceable-periods`, `GET /invoices/summary` (`GetInvoicingSummary`, `today=date.today()` —
+registered before `GET /invoices/{id}` so `"summary"` is never matched as a path param), `GET
+/invoices` (filters as query params, `status` aliased from the `InvoiceStatus` enum), `POST
+/invoices` (400 on any `InvoiceNoPeriodsError`/`InvoicePeriodNotEligibleError`/
+`BillingItemRateMissingError`, 404 on `InvoiceCustomerNotFoundError`), `GET /invoices/{id}`, `PUT
+/invoices/{id}` (404/409 as above), `DELETE /invoices/{id}` (204), `POST /invoices/{id}/issue`
+(404/409/400 on `InvoiceEmptyError`/`CompanyProfileIncompleteError`), `POST /invoices/{id}/pay`
 (`{paid_on}`, 404/409), `POST /invoices/{id}/void` (`{reason}`, 404/409), `GET /invoices/{id}/pdf`
 (404 — a raw `fastapi.Response(media_type="application/pdf")`, not a schema-typed route, with a
 `Content-Disposition: attachment` filename). Error mapping follows `expenses/router.py`: the

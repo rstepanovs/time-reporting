@@ -135,6 +135,21 @@ class InvoiceableCustomerResponse(BaseModel):
     periods: list[InvoiceablePeriodResponse]
 
 
+class CurrencyTotalResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    currency: str
+    amount: Decimal
+
+
+class InvoicingSummaryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    periods_to_invoice: int
+    unpaid_totals: list[CurrencyTotalResponse]
+    overdue_count: int
+
+
 class BillingPeriodRefRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

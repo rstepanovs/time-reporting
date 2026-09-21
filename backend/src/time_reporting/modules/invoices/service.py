@@ -33,9 +33,11 @@ from time_reporting.modules.invoices.contracts import (
     CompanyProfileIncompleteError,
     CountInvoices,
     CreateInvoiceDraft,
+    CurrencyTotalDTO,
     DeleteInvoiceDraft,
     GetInvoice,
     GetInvoicePdf,
+    GetInvoicingSummary,
     InvoiceableCustomerDTO,
     InvoiceablePeriodDTO,
     InvoiceCustomerDTO,
@@ -57,6 +59,7 @@ from time_reporting.modules.invoices.contracts import (
     InvoicePeriodNotEligibleError,
     InvoiceStatus,
     InvoiceSummaryDTO,
+    InvoicingSummaryDTO,
     IssueInvoice,
     ListInvoiceablePeriods,
     ListInvoices,
@@ -524,6 +527,22 @@ class InvoiceService:
                 )
             )
         return tuple(sorted(customers, key=lambda customer: customer.customer_name))
+
+    async def get_invoicing_summary(self, query: GetInvoicingSummary) -> InvoicingSummaryDTO:
+        periods_to_invoice = sum(
+            len(customer.periods)
+            for customer in await self.list_invoiceable_periods(ListInvoiceablePeriods())
+        )
+        unpaid_totals = tuple(
+            CurrencyTotalDTO(currency=currency, amount=amount)
+            for currency, amount in await self._invoices.sum_unpaid_by_currency()
+        )
+        overdue_count = await self._invoices.count_overdue(query.today)
+        return InvoicingSummaryDTO(
+            periods_to_invoice=periods_to_invoice,
+            unpaid_totals=unpaid_totals,
+            overdue_count=overdue_count,
+        )
 
     async def count_invoices(self, query: CountInvoices) -> int:
         return await self._invoices.count_for_customer(query.customer_id)

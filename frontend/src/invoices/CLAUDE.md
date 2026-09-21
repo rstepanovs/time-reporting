@@ -17,6 +17,27 @@ Backend: `modules/invoices` (draft generation, issuing/PDF/paid/void are documen
   status doesn't allow the action, e.g. editing/deleting/issuing a non-draft or paying/voiding
   from the wrong status). Both carry the backend's `detail` as the message where present.
 
+## Dashboard card (`InvoicingCard.tsx`)
+
+- Backing query: `getInvoicingSummary()` → `invoices.GetInvoicingSummary` (backend `GET
+  /invoices/summary`, `today=date.today()` supplied by the router). One aggregate query rather
+  than the card paging through `ListInvoiceablePeriods`/`ListInvoices` itself: `periods_to_invoice`
+  reuses `list_invoiceable_periods` and sums the periods across every customer;
+  `unpaid_totals` sums every `ISSUED` invoice's `total` grouped by currency (`PAID`/`VOID`/draft
+  excluded — a `SELECT ... GROUP BY currency` in `InvoiceRepository.sum_unpaid_by_currency`, never
+  loading the rows themselves); `overdue_count` counts `ISSUED` invoices whose `due_date` is before
+  `today`, the same "Overdue" definition the list/detail pages compute client-side (there is no
+  separate persisted status for it — see `ListInvoicesTab`/`InvoicePage` above).
+- `invoiceKeys.summary()` is its own leaf under `all` (a sibling of `lists()`/`detail(invoiceId)`,
+  not a child of either), so invalidating it never touches `detail`'s `setQueryData` race (see
+  below) — every mutation that can change any of the three numbers
+  (`useCreateInvoiceDraft`/`useDeleteInvoiceDraft` via the broad `all` invalidation they already
+  do; `useIssueInvoice`/`useMarkInvoicePaid`/`useVoidInvoice` with an explicit extra
+  `invalidateQueries({ queryKey: invoiceKeys.summary() })`) keeps the dashboard card in sync.
+- Money is formatted with `timesheets/week.ts`'s `formatHours` (drops trailing zeros), the same
+  reuse `MonthTimeCard.formatExpenses` already relies on — amounts here are already grouped by
+  currency, never summed across them.
+
 ## Query keys and cache rules (`hooks.ts`)
 
 - `invoiceKeys.lists()` is a shared prefix over every `list(params)` variant, kept **separate**

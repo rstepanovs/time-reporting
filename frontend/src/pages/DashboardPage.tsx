@@ -4,7 +4,7 @@ import { useState } from "react";
 import { AdminShortcutsCard } from "@/admin/AdminShortcutsCard";
 import { useAuthenticatedUser } from "@/auth/hooks";
 import { canManage, isAccountant, isAdmin } from "@/auth/roles";
-import { AccountantPlaceholderCard } from "@/timesheets/AccountantPlaceholderCard";
+import { InvoicingCard } from "@/invoices/InvoicingCard";
 import type { TeamScope } from "@/timesheets/api";
 import { MonthTimeCard } from "@/timesheets/MonthTimeCard";
 import { MyProjectsCard } from "@/timesheets/MyProjectsCard";
@@ -60,7 +60,7 @@ export function DashboardPage() {
         <>
           <Title order={3}>Billing</Title>
           <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
-            <AccountantPlaceholderCard />
+            <InvoicingCard />
           </SimpleGrid>
         </>
       )}

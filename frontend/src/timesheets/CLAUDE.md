@@ -99,9 +99,10 @@ All render inside `components/DashboardCard.tsx`, in a responsive `SimpleGrid`.
 
 ### Billing (`accountant`)
 
-- `AccountantPlaceholderCard.tsx` — a single `DashboardCard` noting that invoicing tools are coming;
-  static text only, no data calls. The accountant level is only a flag until the invoices module
-  lands.
+- `invoices/InvoicingCard.tsx` — periods still waiting to be invoiced, the unpaid total per
+  currency and an overdue count, all from `invoices.GetInvoicingSummary` (one aggregate query
+  rather than paging through every invoice/period on the dashboard), linking to `/invoices`. See
+  `invoices/CLAUDE.md`.
 
 The Administration section (`admin`) is `admin/AdminShortcutsCard.tsx`, documented in
 `admin/CLAUDE.md`.

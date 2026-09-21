@@ -895,6 +895,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/invoices/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Invoicing Summary */
+        get: operations["get_invoicing_summary_api_v1_invoices_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/invoices": {
         parameters: {
             query?: never;
@@ -1709,6 +1726,13 @@ export interface components {
             /** Amount */
             amount: string;
         };
+        /** CurrencyTotalResponse */
+        CurrencyTotalResponse: {
+            /** Currency */
+            currency: string;
+            /** Amount */
+            amount: string;
+        };
         /** CustomerCreateRequest */
         CustomerCreateRequest: {
             /** Name */
@@ -2357,6 +2381,15 @@ export interface components {
              * Format: date-time
              */
             sent_at: string;
+        };
+        /** InvoicingSummaryResponse */
+        InvoicingSummaryResponse: {
+            /** Periods To Invoice */
+            periods_to_invoice: number;
+            /** Unpaid Totals */
+            unpaid_totals: components["schemas"]["CurrencyTotalResponse"][];
+            /** Overdue Count */
+            overdue_count: number;
         };
         /** MarkInvoicePaidRequest */
         MarkInvoicePaidRequest: {
@@ -6032,6 +6065,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InvoiceableCustomerResponse"][];
+                };
+            };
+        };
+    };
+    get_invoicing_summary_api_v1_invoices_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoicingSummaryResponse"];
                 };
             };
         };

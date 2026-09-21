@@ -15,6 +15,7 @@ import type {
   InvoiceablePeriod,
   InvoiceLine,
   InvoicePage as InvoicePageType,
+  InvoicingSummary,
   InvoiceSummary,
 } from "@/invoices/api";
 import type { BillingItem, Project, ProjectMember } from "@/projects/api";
@@ -899,6 +900,12 @@ export const testInvoiceIssued: Invoice = {
   status: "issued",
   number: "2026-1",
   issued_at: "2026-10-02T10:00:00Z",
+};
+
+export const testInvoicingSummary: InvoicingSummary = {
+  periods_to_invoice: 2,
+  unpaid_totals: [{ currency: "EUR", amount: "1250.00" }],
+  overdue_count: 1,
 };
 
 export const testAuditEvent: AuditEvent = {

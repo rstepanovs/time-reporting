@@ -15,6 +15,7 @@ from time_reporting.modules.invoices.contracts import (
     DeleteInvoiceDraft,
     GetInvoice,
     GetInvoicePdf,
+    GetInvoicingSummary,
     InvoiceCustomerNotFoundError,
     InvoiceEmptyError,
     InvoiceLineChange,
@@ -38,6 +39,7 @@ from time_reporting.modules.invoices.schemas import (
     InvoiceableCustomerResponse,
     InvoicePageResponse,
     InvoiceResponse,
+    InvoicingSummaryResponse,
     MarkInvoicePaidRequest,
     UpdateInvoiceDraftRequest,
     VoidInvoiceRequest,
@@ -75,6 +77,14 @@ async def list_invoiceable_periods(
 ) -> list[InvoiceableCustomerResponse]:
     customers = await bus.query(ListInvoiceablePeriods())
     return [InvoiceableCustomerResponse.model_validate(customer) for customer in customers]
+
+
+@router.get("/summary")
+async def get_invoicing_summary(
+    _accountant: AccountantDep, bus: BusDep
+) -> InvoicingSummaryResponse:
+    summary = await bus.query(GetInvoicingSummary(today=date.today()))
+    return InvoicingSummaryResponse.model_validate(summary)
 
 
 @router.get("")
