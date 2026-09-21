@@ -37,6 +37,9 @@ Backend: `modules/invoices` (draft generation, issuing/PDF/paid/void are documen
 - Money is formatted with `timesheets/week.ts`'s `formatHours` (drops trailing zeros), the same
   reuse `MonthTimeCard.formatExpenses` already relies on — amounts here are already grouped by
   currency, never summed across them.
+- The card also links to `/accounting?month=<last month>` ("Accountant package (last month) →"),
+  a second `Anchor` in the card body rather than `DashboardCard`'s single `footer` link — that
+  stays pointed at `/invoices` ("Details →"). See `accounting/CLAUDE.md`.
 
 ## Query keys and cache rules (`hooks.ts`)
 

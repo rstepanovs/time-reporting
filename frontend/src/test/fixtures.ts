@@ -1,3 +1,4 @@
+import type { AccountantPackageStatus } from "@/accounting/api";
 import type { AuditEvent, AuditEventPage } from "@/audit/api";
 import type { CurrentUser } from "@/auth/api";
 import type { CalendarDay, NonWorkingDay } from "@/calendar/api";
@@ -908,6 +909,17 @@ export const testInvoicingSummary: InvoicingSummary = {
   periods_to_invoice: 2,
   unpaid_totals: [{ currency: "EUR", amount: "1250.00" }],
   overdue_count: 1,
+};
+
+export const testAccountantPackageStatus: AccountantPackageStatus = {
+  year: 2026,
+  month: 9,
+  invoice_count: 2,
+  expense_line_count: 3,
+  totals: [{ currency: "EUR", invoiced_total: "1250.00", expense_total: "42.50" }],
+  draft_invoice_count: 0,
+  unapproved_expense_report_count: 0,
+  uninvoiced_sent_period_count: 0,
 };
 
 export const testAuditEvent: AuditEvent = {

@@ -1,9 +1,16 @@
-import { Alert, Group, Loader, Stack, Text } from "@mantine/core";
+import { Alert, Anchor, Group, Loader, Stack, Text } from "@mantine/core";
+import { Link } from "react-router";
 
 import { DashboardCard } from "@/components/DashboardCard";
 import type { CurrencyTotal } from "@/invoices/api";
 import { useInvoicingSummary } from "@/invoices/hooks";
-import { formatHours } from "@/timesheets/week";
+import { formatHours, previousMonth, todayIso } from "@/timesheets/week";
+
+function lastMonthParam(): string {
+  const today = todayIso();
+  const { year, month } = previousMonth(Number(today.slice(0, 4)), Number(today.slice(5, 7)));
+  return `${year}-${String(month).padStart(2, "0")}`;
+}
 
 function formatTotals(totals: CurrencyTotal[]): string {
   if (totals.length === 0) return "—";
@@ -59,6 +66,9 @@ export function InvoicingCard() {
           warn={summary.overdue_count > 0}
         />
       </Stack>
+      <Anchor component={Link} to={`/accounting?month=${lastMonthParam()}`} size="sm">
+        Accountant package (last month) →
+      </Anchor>
     </DashboardCard>
   );
 }

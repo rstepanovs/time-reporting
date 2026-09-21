@@ -11,6 +11,7 @@ area's `CLAUDE.md` before changing a page:
 | `HoursPage` | `/hours?month=` | `timesheets/CLAUDE.md` (hours views) |
 | `ExpensesPage`, `ExpenseReportPage` | `/expenses?month=`, `/expenses/:reportId` | `expenses/CLAUDE.md` |
 | `InvoicesPage`, `InvoicePage` | `/invoices?tab=`, `/invoices/:invoiceId` | `invoices/CLAUDE.md` |
+| `AccountingPage` | `/accounting?month=` | `accounting/CLAUDE.md` |
 | `ApprovalsPage` | `/approvals?scope=` | `timesheets/CLAUDE.md` (manager views) |
 | `TeamPage` | `/team?scope=&month=` | `timesheets/CLAUDE.md` (manager views) |
 | `ProjectsPage`, `ProjectDetailsPage` | `/projects`, `/projects/:projectId` | `projects/CLAUDE.md` |

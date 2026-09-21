@@ -1034,6 +1034,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/accounting/packages/{year}/{month}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Accountant Package Status */
+        get: operations["get_accountant_package_status_api_v1_accounting_packages__year___month__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/accounting/packages/{year}/{month}.zip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Accountant Package */
+        get: operations["download_accountant_package_api_v1_accounting_packages__year___month__zip_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/users/{user_id}/removal-impact": {
         parameters: {
             query?: never;
@@ -1226,6 +1260,34 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AccountantPackageStatusResponse */
+        AccountantPackageStatusResponse: {
+            /** Year */
+            year: number;
+            /** Month */
+            month: number;
+            /** Invoice Count */
+            invoice_count: number;
+            /** Expense Line Count */
+            expense_line_count: number;
+            /** Totals */
+            totals: components["schemas"]["AccountantPackageTotalResponse"][];
+            /** Draft Invoice Count */
+            draft_invoice_count: number;
+            /** Unapproved Expense Report Count */
+            unapproved_expense_report_count: number;
+            /** Uninvoiced Sent Period Count */
+            uninvoiced_sent_period_count: number;
+        };
+        /** AccountantPackageTotalResponse */
+        AccountantPackageTotalResponse: {
+            /** Currency */
+            currency: string;
+            /** Invoiced Total */
+            invoiced_total: string;
+            /** Expense Total */
+            expense_total: string;
+        };
         /**
          * AuditAction
          * @description What happened. New members are expected to be added regularly as more of the app grows
@@ -6546,6 +6608,70 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_accountant_package_status_api_v1_accounting_packages__year___month__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                year: number;
+                month: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountantPackageStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_accountant_package_api_v1_accounting_packages__year___month__zip_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                year: number;
+                month: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
             };
             /** @description Validation Error */
             422: {

@@ -76,8 +76,11 @@ const NAV_ITEMS = [
 const APPROVALS_NAV_ITEM = { to: "/approvals", label: "Approvals" };
 const TEAM_NAV_ITEM = { to: "/team", label: "Team" };
 
-// Shown only to accountants; T14 adds a second item ("Accountant package") to this group.
-const BILLING_NAV_ITEMS = [{ to: "/invoices", label: "Invoices" }];
+// Shown only to accountants.
+const BILLING_NAV_ITEMS = [
+  { to: "/invoices", label: "Invoices" },
+  { to: "/accounting", label: "Accountant package" },
+];
 
 const ADMIN_NAV_ITEMS = [
   { to: "/admin/users", label: "Users" },
@@ -113,7 +116,10 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
         />
       ))}
       {isAccountant(user) && (
-        <NavLink label="Billing" defaultOpened={location.pathname.startsWith("/invoices")}>
+        <NavLink
+          label="Billing"
+          defaultOpened={BILLING_NAV_ITEMS.some((item) => location.pathname.startsWith(item.to))}
+        >
           {BILLING_NAV_ITEMS.map((item) => (
             <NavLink
               key={item.to}

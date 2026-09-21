@@ -3,6 +3,7 @@ import { createBrowserRouter, Navigate, type RouteObject } from "react-router";
 import { RequireAuth } from "@/auth/RequireAuth";
 import { RequireRole } from "@/auth/RequireRole";
 import { AppLayout } from "@/components/AppLayout";
+import { AccountingPage } from "@/pages/AccountingPage";
 import { AdminAuditPage } from "@/pages/admin/AdminAuditPage";
 import { AdminBackupsPage } from "@/pages/admin/AdminBackupsPage";
 import { AdminBillingPage } from "@/pages/admin/AdminBillingPage";
@@ -60,6 +61,11 @@ export const routes: RouteObject[] = [
               { index: true, element: <InvoicesPage /> },
               { path: ":invoiceId", element: <InvoicePage /> },
             ],
+          },
+          {
+            path: "accounting",
+            element: <RequireRole roles={["accountant"]} />,
+            children: [{ index: true, element: <AccountingPage /> }],
           },
           { path: "account/password", element: <ChangePasswordPage /> },
           {
