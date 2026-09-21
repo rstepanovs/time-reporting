@@ -1,4 +1,15 @@
-import { ActionIcon, Alert, Anchor, FileInput, Group, Stack, Table, Text, Title } from "@mantine/core";
+import {
+  ActionIcon,
+  Alert,
+  Anchor,
+  FileInput,
+  Group,
+  Select,
+  Stack,
+  Table,
+  Text,
+  Title,
+} from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useState } from "react";
 
@@ -10,7 +21,11 @@ import {
   ExpenseRuleError,
   type ExpenseReport,
 } from "@/expenses/api";
-import { useAddExpenseAttachment, useDeleteExpenseAttachment } from "@/expenses/hooks";
+import {
+  useAddExpenseAttachment,
+  useDeleteExpenseAttachment,
+  useSetExpenseAttachmentLine,
+} from "@/expenses/hooks";
 import { formatBytes } from "@/system/format";
 
 type Props = {
@@ -20,7 +35,16 @@ type Props = {
 export function AttachmentsCard({ report }: Props) {
   const addAttachment = useAddExpenseAttachment(report.id);
   const deleteAttachment = useDeleteExpenseAttachment(report.id);
+  const setAttachmentLine = useSetExpenseAttachmentLine(report.id);
   const [uploadError, setUploadError] = useState<string | null>(null);
+
+  // Labeled with the line's date too (not just its description) so the picker's value never
+  // collides, in tests or in the DOM, with the line's own description text field above it.
+  function lineLabel(line: (typeof report.lines)[number]): string {
+    return `${line.expense_date} · ${line.description}`;
+  }
+  const lineOptions = report.lines.map((line) => ({ value: line.id, label: lineLabel(line) }));
+  const lineNameById = new Map(report.lines.map((line) => [line.id, lineLabel(line)]));
 
   async function handleUpload(files: File[]) {
     setUploadError(null);
@@ -46,6 +70,10 @@ export function AttachmentsCard({ report }: Props) {
   async function handleDelete(attachmentId: string) {
     await deleteAttachment.mutateAsync(attachmentId);
     notifications.show({ title: "Attachment deleted", message: "" });
+  }
+
+  async function handleLineChange(attachmentId: string, lineId: string | null) {
+    await setAttachmentLine.mutateAsync({ attachmentId, lineId });
   }
 
   return (
@@ -76,6 +104,24 @@ export function AttachmentsCard({ report }: Props) {
                   <Text size="sm" c="dimmed">
                     {formatBytes(attachment.size_bytes)}
                   </Text>
+                </Table.Td>
+                <Table.Td>
+                  {report.can_edit ? (
+                    <Select
+                      aria-label={`Line for ${attachment.file_name}`}
+                      placeholder="No line"
+                      data={lineOptions}
+                      value={attachment.line_id}
+                      onChange={(value) => void handleLineChange(attachment.id, value)}
+                      clearable
+                      clearButtonProps={{ "aria-label": `Unlink ${attachment.file_name}` }}
+                      w={200}
+                    />
+                  ) : (
+                    <Text size="sm" c="dimmed">
+                      {attachment.line_id ? lineNameById.get(attachment.line_id) : ""}
+                    </Text>
+                  )}
                 </Table.Td>
                 {report.can_edit && (
                   <Table.Td>

@@ -336,6 +336,8 @@ export const testExpenseOption: ExpenseOption = {
 
 export const testExpenseAttachment: ExpenseAttachment = {
   id: "e3a3a3a3-3333-3333-3333-333333333333",
+  // Linked to testExpenseReport's one line ("e2a2a2a2-...") below.
+  line_id: "e2a2a2a2-2222-2222-2222-222222222222",
   file_name: "receipt.pdf",
   content_type: "application/pdf",
   size_bytes: 204_800,

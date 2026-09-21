@@ -12,6 +12,7 @@ import {
   listSubmittedExpenseReports,
   returnExpenseReport,
   saveExpenseReportLines,
+  setExpenseAttachmentLine,
   submitExpenseReport,
   type ExpenseLineChange,
   type ExpenseScope,
@@ -137,7 +138,7 @@ export function useSubmittedExpenseReports(scope?: ExpenseScope) {
 export function useAddExpenseAttachment(reportId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (params: { file: File; fileName?: string }) =>
+    mutationFn: (params: { file: File; fileName?: string; lineId?: string | null }) =>
       addExpenseAttachment({ reportId, ...params }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: expenseKeys.report(reportId) });
@@ -149,6 +150,17 @@ export function useDeleteExpenseAttachment(reportId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (attachmentId: string) => deleteExpenseAttachment(attachmentId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: expenseKeys.report(reportId) });
+    },
+  });
+}
+
+export function useSetExpenseAttachmentLine(reportId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { attachmentId: string; lineId: string | null }) =>
+      setExpenseAttachmentLine(params),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: expenseKeys.report(reportId) });
     },

@@ -89,12 +89,14 @@ class ExpenseReportLine(TimestampMixin, Base):
 
 
 class ExpenseAttachment(Base):
-    """Metadata for one uploaded receipt/invoice scan, hanging off the report as a whole (not a
-    specific line). The file itself lives on disk under ``storage_key``
-    (``ExpenseAttachmentStorage``, in ``storage.py``); this row is the source of truth for which
-    files are still referenced — ``time-reporting prune-attachments`` deletes orphaned files whose
-    row a rolled-back write never committed. No ``updated_at``: a row is written once and only ever
-    deleted, never modified.
+    """Metadata for one uploaded receipt/invoice scan, hanging off the report as a whole and,
+    optionally, one of its lines (``line_id`` — the only field a write ever changes after
+    creation, via ``SetAttachmentLine``; everything else is written once and never modified). The
+    file itself lives on disk under ``storage_key`` (``ExpenseAttachmentStorage``, in
+    ``storage.py``); this row is the source of truth for which files are still referenced —
+    ``time-reporting prune-attachments`` deletes orphaned files whose row a rolled-back write never
+    committed. No ``updated_at``: linking/unlinking a line doesn't need one, since nothing reads
+    when an attachment was last relinked.
     """
 
     __tablename__ = "expense_attachments"
@@ -102,6 +104,12 @@ class ExpenseAttachment(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     report_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("expense_reports.id", ondelete="CASCADE"), index=True
+    )
+    # Which line this receipt substantiates, if the uploader (or a later edit) said so — `None`
+    # until linked. `SET NULL` rather than `CASCADE`: deleting a line unlinks its receipts instead
+    # of deleting them, since the file may still matter to the report as a whole.
+    line_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("expense_report_lines.id", ondelete="SET NULL"), index=True
     )
     file_name: Mapped[str] = mapped_column(String(255))
     content_type: Mapped[str] = mapped_column(String(100))

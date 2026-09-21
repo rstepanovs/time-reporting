@@ -67,17 +67,31 @@ report owner's; re-query with `viewer_id=<owner>` to see the owner's view. Advis
 ## Attachments
 
 - `ExpenseAttachment` metadata (`file_name`, `content_type`, `size_bytes`, `sha256`,
-  `storage_key`, `uploaded_by_id`) lives in the database; the file itself lives on disk under
-  `settings.attachment_dir`, managed by `storage.py: ExpenseAttachmentStorage` — modelled closely on
-  `system.backup_service.BackupService` (dotfile-then-rename writes, a filename/key pattern that
-  doubles as path-traversal validation). Attachments hang off the **report**, not a specific line.
-- `AddExpenseAttachment(report_id, actor_id, file_name, content_type, content: bytes)` validates
-  the report is editable and unlocked, then the content type/size
-  (`AttachmentTypeNotAllowedError`/`AttachmentTooLargeError` — allowed types are the
+  `storage_key`, `uploaded_by_id`, `line_id`) lives in the database; the file itself lives on disk
+  under `settings.attachment_dir`, managed by `storage.py: ExpenseAttachmentStorage` — modelled
+  closely on `system.backup_service.BackupService` (dotfile-then-rename writes, a filename/key
+  pattern that doubles as path-traversal validation). Attachments hang off the **report** as a
+  whole; `line_id` (nullable, `ON DELETE SET NULL` — deleting a line unlinks its receipts rather
+  than deleting them) optionally says which of the report's own lines a receipt substantiates. It
+  is the one field a write ever changes after creation, via `SetAttachmentLine` — everything else
+  is written once and never modified.
+- `AddExpenseAttachment(report_id, actor_id, file_name, content_type, content: bytes, line_id=None)`
+  validates the report is editable and unlocked, then (if given) that `line_id` is one of the
+  report's own lines (`ExpenseLineNotFoundError` otherwise — the same check `SetAttachmentLine`
+  and `SaveExpenseReportLines` use, via `ExpenseService._resolve_own_line`), then the content
+  type/size (`AttachmentTypeNotAllowedError`/`AttachmentTooLargeError` — allowed types are the
   `ALLOWED_ATTACHMENT_CONTENT_TYPES` frozenset in `contracts.py`: PDF, JPEG, PNG, WebP, HEIC), then
   writes the file and the row. `content` is the already-fully-read request body — the HTTP layer
-  (added later) is responsible for rejecting an oversize upload while streaming it in, so a huge
-  file is never buffered here in full just to be rejected.
+  is responsible for rejecting an oversize upload while streaming it in, so a huge file is never
+  buffered here in full just to be rejected.
+- `SetAttachmentLine(attachment_id, actor_id, line_id)` links (`line_id` given) or unlinks
+  (`line_id=None`) an existing attachment to one of the report's own lines, after the report — like
+  every other write to it — resolves through `ExpenseService._get_own_attachment` (the same
+  information-hiding `_get_own_report` documents: someone else's attachment 404s, not 403s) and
+  `_ensure_editable`. Since a locked report is always `approved`, not draft/returned, linking a
+  locked report's attachment surfaces as `ExpenseReportNotEditableError` (the status check runs
+  first), never `ExpenseReportLockedError` — the same as any other line edit on a locked report
+  (`SaveExpenseReportLines`).
 - `DeleteExpenseAttachment(attachment_id, actor_id)` requires the report to still be editable and
   unlocked; it unlinks the file before deleting the row.
 - `GetAttachmentPath(attachment_id, viewer_id)` → `Path`, the same shape as
@@ -115,21 +129,24 @@ project/month after the period was already sent is never approved against it and
 
 All routes live under `/expenses`, `CurrentUserDep` unless noted. `GET/POST /reports`,
 `GET/PUT/DELETE /reports/{id}(/lines)`, `POST /reports/{id}/{submit,attachments}`,
-`GET/DELETE /attachments/{id}`, `GET /options` — own data (or, for reads, a manager's/accountant's,
-enforced in the service per "Attachments"/read-access above, not the router: an opaque `report_id`
-carries no owner in its URL the way `timesheets`' `(user_id, week_start)` does, so there's nowhere
-for the router to check ownership *before* asking the service). `POST/GET /reports/{id}/approve`,
-`/return` and `GET /submissions` are `ManagerDep`.
+`GET/DELETE /attachments/{id}`, `PUT /attachments/{id}/line`, `GET /options` — own data (or, for
+reads, a manager's/accountant's, enforced in the service per "Attachments"/read-access above, not
+the router: an opaque `report_id` carries no owner in its URL the way `timesheets`'
+`(user_id, week_start)` does, so there's nowhere for the router to check ownership *before* asking
+the service). `POST/GET /reports/{id}/approve`, `/return` and `GET /submissions` are `ManagerDep`.
 
 - A write against someone else's report — not just an unknown id — surfaces as the *same* 404
   (`ExpenseReportNotFoundError`/`AttachmentNotFoundError`) a router-level `_not_found` renders, even
   for a manager who could legitimately `GET` that same report a moment earlier. This is deliberate
   information-hiding, not a bug: see `ExpenseService._get_own_report`.
 - `POST /reports/{id}/attachments` is the one `multipart/form-data` route in the API (`UploadFile`
-  via `File()`, an optional `file_name` via `Form()`); its content type is checked against
-  `ALLOWED_ATTACHMENT_CONTENT_TYPES` **before** `await file.read()`, so a disallowed upload never
-  gets buffered. Oversize (`AttachmentTooLargeError`) → 413, disallowed type
-  (`AttachmentTypeNotAllowedError`) → 415.
+  via `File()`, an optional `file_name` and `line_id` via `Form()`); its content type is checked
+  against `ALLOWED_ATTACHMENT_CONTENT_TYPES` **before** `await file.read()`, so a disallowed upload
+  never gets buffered. Oversize (`AttachmentTooLargeError`) → 413, disallowed type
+  (`AttachmentTypeNotAllowedError`) → 415, an unknown/foreign `line_id`
+  (`ExpenseLineNotFoundError`) → 404.
+- `PUT /attachments/{id}/line` (`{line_id: UUID | None}`) is `SetAttachmentLine` — 404 for an
+  unknown attachment or foreign `line_id`, 409 for a non-editable/locked report.
 - `GET /attachments/{id}` returns a `FileResponse` built from `AttachmentFileDTO` (path + the
   original `file_name`/`content_type` — `GetAttachmentPath` returns this small DTO rather than a
   bare `Path`, unlike `system.contracts.GetBackupPath`, because a backup's generated file name

@@ -89,6 +89,7 @@ class ExpenseAttachmentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    line_id: UUID | None
     file_name: str
     content_type: str
     size_bytes: int
@@ -169,3 +170,9 @@ class ReturnExpenseReportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     comment: ReturnComment
+
+
+class SetAttachmentLineRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    line_id: UUID | None

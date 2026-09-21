@@ -10,7 +10,9 @@ there).
   `getExpenseReport`, `saveExpenseReportLines` (one batch: changed lines plus `deleteLineIds`),
   `deleteExpenseReport` (draft only), `submitExpenseReport`/`approveExpenseReport`/
   `returnExpenseReport`, `listSubmittedExpenseReports` (`{ scope: "mine" | "all" }`, the manager's
-  Expenses tab of `/approvals`), `addExpenseAttachment`/`deleteExpenseAttachment` and
+  Expenses tab of `/approvals`), `addExpenseAttachment` (optional `lineId`, to upload a receipt
+  already linked to a line) / `deleteExpenseAttachment` / `setExpenseAttachmentLine` (`{
+  attachmentId, lineId: string | null }`, link or unlink an existing attachment) and
   `attachmentDownloadUrl(id)` (a plain relative URL for an `<a href download>`, never fetched
   through `api` — following `system/api.ts`'s `backupDownloadUrl`).
 - Errors: `ExpenseRuleError` (400/403/404 — a rule was violated, or the backend's generic message
@@ -31,8 +33,8 @@ there).
   to writing the mutated report straight into its own `report(reportId)` cache entry.
 - `expenseKeys.allSubmissions()` is the same pattern for `submissions(scope)`, invalidated by
   submit/approve/return so every cached scope in `/approvals` drops the row.
-- Attachment mutations only invalidate the owning report's `report(reportId)` — the list/summary
-  views don't show attachments.
+- Attachment mutations (including `useSetExpenseAttachmentLine`) only invalidate the owning
+  report's `report(reportId)` — the list/summary views don't show attachments.
 
 ## Pages (`pages/ExpensesPage.tsx`, `pages/ExpenseReportPage.tsx`)
 
@@ -49,9 +51,17 @@ there).
   temp-id-keyed list for not-yet-saved rows) with an explicit Save/Discard and Submit (behind a
   confirming modal that auto-saves first, as `TimesheetGrid`'s does) — all gated on `can_edit`/
   `can_submit`, which the backend already reflects `is_locked` into, so the frontend never checks
-  it separately when deciding whether a control is editable. `AttachmentsCard.tsx` is a Mantine
-  `FileInput multiple` upload (each file uploaded immediately, one request per file) plus a list
-  with size, a download link and per-row delete, all gated on `can_edit` too.
+  it separately when deciding whether a control is editable. A line with at least one linked
+  attachment (`report.attachments.some(a => a.line_id === line.id)`) shows a 📎 next to its
+  description, in both the editable and read-only cells — computed from `report.attachments`, not
+  a field on the line DTO itself. `AttachmentsCard.tsx` is a Mantine `FileInput multiple` upload
+  (each file uploaded immediately, one request per file, unlinked — `addExpenseAttachment` accepts
+  a `lineId` but the upload control here never passes one) plus a list with size, a download link,
+  a per-row `Select` (`useSetExpenseAttachmentLine`) picking which of the report's own lines the
+  receipt substantiates — labeled `"<date> · <description>"` rather than just the description, so
+  its display value never collides with `ExpenseLinesTable`'s own description field showing the
+  same line's text elsewhere on the page — and per-row delete, all gated on `can_edit` too (the
+  picker itself becomes read-only plain text when not `can_edit`).
 - The "← Back to expenses" link on `/expenses/:reportId` guards against `ExpenseLinesTable`'s dirty
   state the same way `TimesheetPage` guards its own in-page navigation: a confirming modal instead
   of navigating away, offered by `ExpenseLinesTable`'s `onDirtyChange` callback bubbling up to the

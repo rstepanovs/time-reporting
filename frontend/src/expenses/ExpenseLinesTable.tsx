@@ -108,6 +108,9 @@ export function ExpenseLinesTable({ report, billingItems, onDirtyChange }: Props
   }, [isDirty, onDirtyChange]);
 
   const visibleLines = report.lines.filter((line) => !deletedLineIds.has(line.id));
+  const linkedLineIds = new Set(
+    report.attachments.flatMap((attachment) => (attachment.line_id ? [attachment.line_id] : [])),
+  );
 
   // The item currently on an existing line is always selectable, even if it has since been
   // archived — otherwise editing any other field of that line would silently drop it.
@@ -256,10 +259,15 @@ export function ExpenseLinesTable({ report, billingItems, onDirtyChange }: Props
                       periodStart={report.period_start}
                       periodEnd={report.period_end}
                       selectData={selectData}
+                      hasAttachment={linkedLineIds.has(line.id)}
                       onChange={(patch) => setFields(line.id, patch)}
                     />
                   ) : (
-                    <ReadOnlyCells fields={fields} itemName={line.billing_item.name} />
+                    <ReadOnlyCells
+                      fields={fields}
+                      itemName={line.billing_item.name}
+                      hasAttachment={linkedLineIds.has(line.id)}
+                    />
                   )}
                   {report.can_edit && (
                     <Table.Td>
@@ -373,12 +381,14 @@ function EditableCells({
   periodStart,
   periodEnd,
   selectData,
+  hasAttachment,
   onChange,
 }: {
   fields: LineFields;
   periodStart: string;
   periodEnd: string;
   selectData: { value: string; label: string }[];
+  hasAttachment?: boolean;
   onChange: (patch: Partial<LineFields>) => void;
 }) {
   return (
@@ -415,13 +425,20 @@ function EditableCells({
         />
       </Table.Td>
       <Table.Td>
-        <TextInput
-          aria-label="Description"
-          value={fields.description}
-          onChange={(event) => onChange({ description: event.currentTarget.value })}
-          maxLength={255}
-          w={200}
-        />
+        <Group gap={4} wrap="nowrap">
+          <TextInput
+            aria-label="Description"
+            value={fields.description}
+            onChange={(event) => onChange({ description: event.currentTarget.value })}
+            maxLength={255}
+            w={200}
+          />
+          {hasAttachment && (
+            <Text span title="Has a receipt attached" aria-label="Has a receipt attached">
+              📎
+            </Text>
+          )}
+        </Group>
       </Table.Td>
       <Table.Td>
         <TextInput
@@ -445,13 +462,30 @@ function EditableCells({
   );
 }
 
-function ReadOnlyCells({ fields, itemName }: { fields: LineFields; itemName: string }) {
+function ReadOnlyCells({
+  fields,
+  itemName,
+  hasAttachment,
+}: {
+  fields: LineFields;
+  itemName: string;
+  hasAttachment?: boolean;
+}) {
   return (
     <>
       <Table.Td>{fields.expenseDate}</Table.Td>
       <Table.Td>{itemName}</Table.Td>
       <Table.Td>{fields.amount}</Table.Td>
-      <Table.Td>{fields.description}</Table.Td>
+      <Table.Td>
+        <Group gap={4} wrap="nowrap">
+          <Text span>{fields.description}</Text>
+          {hasAttachment && (
+            <Text span title="Has a receipt attached" aria-label="Has a receipt attached">
+              📎
+            </Text>
+          )}
+        </Group>
+      </Table.Td>
       <Table.Td>{fields.vendor}</Table.Td>
       <Table.Td>{fields.documentNo}</Table.Td>
     </>

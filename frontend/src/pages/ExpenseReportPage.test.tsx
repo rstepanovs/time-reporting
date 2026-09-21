@@ -12,6 +12,7 @@ import {
   listExpenseOptions,
   returnExpenseReport,
   saveExpenseReportLines,
+  setExpenseAttachmentLine,
   submitExpenseReport,
 } from "@/expenses/api";
 import { testEmployee, testExpenseOption, testExpenseReport, testManager } from "@/test/fixtures";
@@ -33,6 +34,7 @@ vi.mock("@/expenses/api", async (importOriginal) => ({
   deleteExpenseReport: vi.fn(),
   addExpenseAttachment: vi.fn(),
   deleteExpenseAttachment: vi.fn(),
+  setExpenseAttachmentLine: vi.fn(),
 }));
 
 beforeEach(() => {
@@ -49,6 +51,31 @@ describe("ExpenseReportPage", () => {
     await screen.findByDisplayValue("Client dinner");
     expect(screen.getByText("120.00 EUR")).toBeTruthy();
     expect(screen.getByText("receipt.pdf")).toBeTruthy();
+    // testExpenseAttachment is linked to the report's one line — the paperclip marks it.
+    expect(screen.getByLabelText("Has a receipt attached")).toBeTruthy();
+  });
+
+  it("unlinks a receipt from its line via the picker", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
+    vi.mocked(setExpenseAttachmentLine).mockResolvedValue({
+      ...testExpenseReport.attachments[0],
+      line_id: null,
+    });
+    renderApp(`/expenses/${testExpenseReport.id}`);
+    await screen.findByDisplayValue("Client dinner");
+
+    expect(screen.getByRole("combobox", { name: "Line for receipt.pdf" })).toBeTruthy();
+    // Mantine's Select clear button renders `aria-hidden="true"` (it sits inside the combobox's
+    // own input, not a separately focusable control), so it has no accessible name to query by
+    // role — even with `hidden: true` — and must be found by its `aria-label` attribute directly.
+    fireEvent.click(document.querySelector('[aria-label="Unlink receipt.pdf"]')!);
+
+    await waitFor(() => {
+      expect(setExpenseAttachmentLine).toHaveBeenCalledWith({
+        attachmentId: testExpenseReport.attachments[0].id,
+        lineId: null,
+      });
+    });
   });
 
   it("edits an existing line and saves", async () => {
@@ -130,6 +157,7 @@ describe("ExpenseReportPage", () => {
     vi.mocked(fetchCurrentUser).mockResolvedValue(testEmployee);
     vi.mocked(addExpenseAttachment).mockResolvedValue({
       id: "new-attachment",
+      line_id: null,
       file_name: "invoice.pdf",
       content_type: "application/pdf",
       size_bytes: 100,

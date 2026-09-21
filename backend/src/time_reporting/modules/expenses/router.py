@@ -41,6 +41,7 @@ from time_reporting.modules.expenses.contracts import (
     ListSubmittedExpenseReports,
     ReturnExpenseReport,
     SaveExpenseReportLines,
+    SetAttachmentLine,
     SubmitExpenseReport,
 )
 from time_reporting.modules.expenses.schemas import (
@@ -51,6 +52,7 @@ from time_reporting.modules.expenses.schemas import (
     ExpenseReportSummaryResponse,
     ReturnExpenseReportRequest,
     SaveExpenseReportLinesRequest,
+    SetAttachmentLineRequest,
 )
 from time_reporting.modules.users.contracts import UserRole
 
@@ -280,6 +282,7 @@ async def add_expense_attachment(
     bus: BusDep,
     file: Annotated[UploadFile, File()],
     file_name: Annotated[str | None, Form()] = None,
+    line_id: Annotated[UUID | None, Form()] = None,
 ) -> ExpenseAttachmentResponse:
     content_type = file.content_type or "application/octet-stream"
     if content_type not in ALLOWED_ATTACHMENT_CONTENT_TYPES:
@@ -296,9 +299,10 @@ async def add_expense_attachment(
                 file_name=file_name or file.filename or "attachment",
                 content_type=content_type,
                 content=content,
+                line_id=line_id,
             )
         )
-    except ExpenseReportNotFoundError as exc:
+    except (ExpenseReportNotFoundError, ExpenseLineNotFoundError) as exc:
         raise _not_found(str(exc)) from exc
     except (ExpenseReportNotEditableError, ExpenseReportLockedError) as exc:
         raise _conflict(str(exc)) from exc
@@ -340,3 +344,26 @@ async def delete_expense_attachment(
         raise _not_found(str(exc)) from exc
     except (ExpenseReportNotEditableError, ExpenseReportLockedError) as exc:
         raise _conflict(str(exc)) from exc
+
+
+@router.put(
+    "/attachments/{attachment_id}/line",
+    responses={**_NOT_FOUND_RESPONSE, **_STATUS_CONFLICT_RESPONSE},
+)
+async def set_expense_attachment_line(
+    attachment_id: UUID,
+    body: SetAttachmentLineRequest,
+    current_user: CurrentUserDep,
+    bus: BusDep,
+) -> ExpenseAttachmentResponse:
+    try:
+        attachment = await bus.execute(
+            SetAttachmentLine(
+                attachment_id=attachment_id, actor_id=current_user.id, line_id=body.line_id
+            )
+        )
+    except (AttachmentNotFoundError, ExpenseLineNotFoundError) as exc:
+        raise _not_found(str(exc)) from exc
+    except (ExpenseReportNotEditableError, ExpenseReportLockedError) as exc:
+        raise _conflict(str(exc)) from exc
+    return ExpenseAttachmentResponse.model_validate(attachment)

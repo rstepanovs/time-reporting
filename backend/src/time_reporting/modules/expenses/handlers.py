@@ -33,6 +33,7 @@ from time_reporting.modules.expenses.contracts import (
     LockProjectMonthExpenseReports,
     ReturnExpenseReport,
     SaveExpenseReportLines,
+    SetAttachmentLine,
     SubmitExpenseReport,
     UnlockProjectMonthExpenseReports,
 )
@@ -140,6 +141,14 @@ class DeleteExpenseAttachmentHandler:
 
     async def handle(self, command: DeleteExpenseAttachment) -> None:
         await self._service.delete_attachment(command)
+
+
+class SetAttachmentLineHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._service = ExpenseService(bus)
+
+    async def handle(self, command: SetAttachmentLine) -> ExpenseAttachmentDTO:
+        return await self._service.set_attachment_line(command)
 
 
 class GetAttachmentPathHandler:

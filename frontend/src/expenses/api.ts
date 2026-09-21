@@ -194,15 +194,21 @@ function formDataBodySerializer(body: Record<string, unknown>): FormData {
   return formData;
 }
 
-/** Upload a receipt/invoice scan to a report the caller owns and can still edit. */
+/** Upload a receipt/invoice scan to a report the caller owns and can still edit, optionally
+ * already linked to one of its lines. */
 export async function addExpenseAttachment(params: {
   reportId: string;
   file: File;
   fileName?: string;
+  lineId?: string | null;
 }): Promise<ExpenseAttachment> {
   const { data, response } = await api.POST("/api/v1/expenses/reports/{report_id}/attachments", {
     params: { path: { report_id: params.reportId } },
-    body: { file: params.file as unknown as string, file_name: params.fileName ?? null },
+    body: {
+      file: params.file as unknown as string,
+      file_name: params.fileName ?? null,
+      line_id: params.lineId ?? null,
+    },
     bodySerializer: formDataBodySerializer,
   });
   if (!data) throw await attachmentAwareError(response);
@@ -220,4 +226,17 @@ export async function deleteExpenseAttachment(attachmentId: string): Promise<voi
     params: { path: { attachment_id: attachmentId } },
   });
   if (!response.ok) throw await expenseAwareError(response);
+}
+
+/** Link (`lineId` given) or unlink (`null`) an attachment to one of its own report's lines. */
+export async function setExpenseAttachmentLine(params: {
+  attachmentId: string;
+  lineId: string | null;
+}): Promise<ExpenseAttachment> {
+  const { data, response } = await api.PUT("/api/v1/expenses/attachments/{attachment_id}/line", {
+    params: { path: { attachment_id: params.attachmentId } },
+    body: { line_id: params.lineId },
+  });
+  if (!data) throw await expenseAwareError(response);
+  return data;
 }

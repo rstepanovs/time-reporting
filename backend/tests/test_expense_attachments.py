@@ -3,30 +3,43 @@
 handlers with storage isolated to a temp directory via a patched `get_settings`.
 """
 
+from decimal import Decimal
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
-from support import ProjectFactory, UserFactory
+from support import MANAGER, ProjectFactory, UserFactory
 from time_reporting.core.config import get_settings
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.expenses.contracts import (
     AddExpenseAttachment,
+    ApproveExpenseReport,
     AttachmentNotFoundError,
     AttachmentTooLargeError,
     AttachmentTypeNotAllowedError,
     CreateExpenseReport,
     DeleteExpenseAttachment,
     DeleteExpenseReport,
+    ExpenseLineChange,
+    ExpenseLineNotFoundError,
     ExpenseReportDTO,
+    ExpenseReportNotEditableError,
     ExpenseReportNotFoundError,
     GetAttachmentPath,
     GetExpenseReport,
     ListAttachmentStorageKeys,
+    LockProjectMonthExpenseReports,
+    SaveExpenseReportLines,
+    SetAttachmentLine,
+    SubmitExpenseReport,
 )
 from time_reporting.modules.expenses.storage import ExpenseAttachmentStorage
-from time_reporting.modules.projects.contracts import AddProjectMember
+from time_reporting.modules.projects.contracts import (
+    AddProjectMember,
+    BillingItemPreset,
+    ListProjectBillingItems,
+)
 from time_reporting.modules.users.contracts import UserDTO
 
 YEAR = 2026
@@ -134,6 +147,29 @@ async def _member_project_report(
         CreateExpenseReport(user_id=user.id, project_id=project.id, year=YEAR, month=MONTH)
     )
     return user, report
+
+
+async def _add_line(bus: Bus, report: ExpenseReportDTO, actor_id: UUID) -> ExpenseReportDTO:
+    """Add one line to ``report`` and return the refreshed report."""
+    items = await bus.query(ListProjectBillingItems(project_id=report.project.id))
+    item_id = next(
+        item.id for item in items if item.preset == BillingItemPreset.PURCHASING_EXPENSES
+    )
+    return await bus.execute(
+        SaveExpenseReportLines(
+            report_id=report.id,
+            actor_id=actor_id,
+            lines=(
+                ExpenseLineChange(
+                    line_id=None,
+                    billing_item_id=item_id,
+                    expense_date=report.period_start,
+                    amount=Decimal("50.00"),
+                    description="Taxi",
+                ),
+            ),
+        )
+    )
 
 
 async def test_add_attachment_stores_the_file_and_returns_metadata(
@@ -279,3 +315,142 @@ async def test_list_attachment_storage_keys_reflects_saved_attachments(
 
     keys = await bus.query(ListAttachmentStorageKeys())
     assert len(keys) == 1
+
+
+# --- SetAttachmentLine / AddExpenseAttachment(line_id) ---
+
+
+async def test_add_attachment_with_line_id_links_it_immediately(
+    bus: Bus,
+    make_project: ProjectFactory,
+    make_user: UserFactory,
+    _isolated_attachments: Path,
+) -> None:
+    user, report = await _member_project_report(bus, make_project, make_user)
+    report = await _add_line(bus, report, user.id)
+    line_id = report.lines[0].id
+
+    attachment = await bus.execute(
+        AddExpenseAttachment(
+            report_id=report.id,
+            actor_id=user.id,
+            file_name="receipt.pdf",
+            content_type="application/pdf",
+            content=_PDF_BYTES,
+            line_id=line_id,
+        )
+    )
+
+    assert attachment.line_id == line_id
+
+
+async def test_add_attachment_rejects_a_foreign_line(
+    bus: Bus,
+    make_project: ProjectFactory,
+    make_user: UserFactory,
+    _isolated_attachments: Path,
+) -> None:
+    user, report = await _member_project_report(bus, make_project, make_user)
+
+    with pytest.raises(ExpenseLineNotFoundError):
+        await bus.execute(
+            AddExpenseAttachment(
+                report_id=report.id,
+                actor_id=user.id,
+                file_name="receipt.pdf",
+                content_type="application/pdf",
+                content=_PDF_BYTES,
+                line_id=uuid4(),
+            )
+        )
+
+
+async def test_set_attachment_line_links_and_unlinks(
+    bus: Bus,
+    make_project: ProjectFactory,
+    make_user: UserFactory,
+    _isolated_attachments: Path,
+) -> None:
+    user, report = await _member_project_report(bus, make_project, make_user)
+    report = await _add_line(bus, report, user.id)
+    line_id = report.lines[0].id
+    attachment = await bus.execute(
+        AddExpenseAttachment(
+            report_id=report.id,
+            actor_id=user.id,
+            file_name="receipt.pdf",
+            content_type="application/pdf",
+            content=_PDF_BYTES,
+        )
+    )
+    assert attachment.line_id is None
+
+    linked = await bus.execute(
+        SetAttachmentLine(attachment_id=attachment.id, actor_id=user.id, line_id=line_id)
+    )
+    assert linked.line_id == line_id
+
+    unlinked = await bus.execute(
+        SetAttachmentLine(attachment_id=attachment.id, actor_id=user.id, line_id=None)
+    )
+    assert unlinked.line_id is None
+
+
+async def test_set_attachment_line_rejects_a_foreign_line(
+    bus: Bus,
+    make_project: ProjectFactory,
+    make_user: UserFactory,
+    _isolated_attachments: Path,
+) -> None:
+    user, report = await _member_project_report(bus, make_project, make_user)
+    attachment = await bus.execute(
+        AddExpenseAttachment(
+            report_id=report.id,
+            actor_id=user.id,
+            file_name="receipt.pdf",
+            content_type="application/pdf",
+            content=_PDF_BYTES,
+        )
+    )
+
+    with pytest.raises(ExpenseLineNotFoundError):
+        await bus.execute(
+            SetAttachmentLine(attachment_id=attachment.id, actor_id=user.id, line_id=uuid4())
+        )
+
+
+async def test_set_attachment_line_rejects_when_report_is_locked(
+    bus: Bus,
+    make_project: ProjectFactory,
+    make_user: UserFactory,
+    _isolated_attachments: Path,
+) -> None:
+    user, report = await _member_project_report(bus, make_project, make_user)
+    report = await _add_line(bus, report, user.id)
+    line_id = report.lines[0].id
+    attachment = await bus.execute(
+        AddExpenseAttachment(
+            report_id=report.id,
+            actor_id=user.id,
+            file_name="receipt.pdf",
+            content_type="application/pdf",
+            content=_PDF_BYTES,
+        )
+    )
+    manager = await make_user(roles=MANAGER)
+    await bus.execute(SubmitExpenseReport(report_id=report.id, actor_id=user.id))
+    await bus.execute(ApproveExpenseReport(report_id=report.id, reviewer_id=manager.id))
+    await bus.execute(
+        LockProjectMonthExpenseReports(
+            project_id=report.project.id, period_start=report.period_start
+        )
+    )
+
+    # A locked report is always `approved`, so this surfaces as "not editable" (the status check
+    # `_ensure_editable` runs first) rather than `ExpenseReportLockedError` — the same as
+    # `SaveExpenseReportLines` on a locked report (see `test_lock_project_month_blocks_editing_
+    # and_returning`).
+    with pytest.raises(ExpenseReportNotEditableError):
+        await bus.execute(
+            SetAttachmentLine(attachment_id=attachment.id, actor_id=user.id, line_id=line_id)
+        )

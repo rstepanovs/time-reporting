@@ -65,6 +65,9 @@ class ExpenseReportLineDTO:
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ExpenseAttachmentDTO:
     id: UUID
+    # Which of the report's own lines this receipt substantiates — `None` until linked, via
+    # `AddExpenseAttachment.line_id` at upload time or a later `SetAttachmentLine`.
+    line_id: UUID | None
     file_name: str
     content_type: str
     size_bytes: int
@@ -359,17 +362,19 @@ class UnlockProjectMonthExpenseReports(Command[None]):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class AddExpenseAttachment(Command[ExpenseAttachmentDTO]):
-    """Store one uploaded file against ``report_id``. ``content`` is the already-read request
-    body — the router is responsible for enforcing ``attachment_max_bytes`` while reading it, so a
-    huge upload is rejected without ever being buffered here in full. Raises
-    ``ExpenseReportNotFoundError``, ``ExpenseReportNotEditableError``, ``ExpenseReportLockedError``,
-    ``AttachmentTypeNotAllowedError`` or ``AttachmentTooLargeError``."""
+    """Store one uploaded file against ``report_id``, optionally already linked to one of its
+    lines. ``content`` is the already-read request body — the router is responsible for enforcing
+    ``attachment_max_bytes`` while reading it, so a huge upload is rejected without ever being
+    buffered here in full. Raises ``ExpenseReportNotFoundError``, ``ExpenseReportNotEditableError``,
+    ``ExpenseReportLockedError``, ``AttachmentTypeNotAllowedError``, ``AttachmentTooLargeError`` or
+    ``ExpenseLineNotFoundError`` (``line_id`` given but not one of the report's own lines)."""
 
     report_id: UUID
     actor_id: UUID
     file_name: str
     content_type: str
     content: bytes
+    line_id: UUID | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -379,6 +384,18 @@ class DeleteExpenseAttachment(Command[None]):
 
     attachment_id: UUID
     actor_id: UUID
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class SetAttachmentLine(Command[ExpenseAttachmentDTO]):
+    """Link (``line_id`` given) or unlink (``line_id=None``) an attachment to one of its own
+    report's lines — the same editability/lock rules as any other write to the report. Raises
+    ``AttachmentNotFoundError``, ``ExpenseReportNotEditableError``, ``ExpenseReportLockedError`` or
+    ``ExpenseLineNotFoundError`` (``line_id`` given but not one of the report's own lines)."""
+
+    attachment_id: UUID
+    actor_id: UUID
+    line_id: UUID | None
 
 
 # --- Exceptions ---

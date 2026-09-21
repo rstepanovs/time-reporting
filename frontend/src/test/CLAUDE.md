@@ -22,3 +22,6 @@
 - `Select` renders an input with `role="combobox"`, not `"textbox"`.
 - A required field's `<label>` includes a trailing `*`, so match it with a prefix regex (e.g.
   `getByLabelText(/^name/i)`) rather than the exact label text.
+- A `Select`'s `clearable` "×" button (`clearButtonProps={{ "aria-label": ... }}`) renders
+  `aria-hidden="true"` — it has no accessible name to query by role even with `{ hidden: true }` —
+  so click it via `document.querySelector('[aria-label="..."]')` instead.

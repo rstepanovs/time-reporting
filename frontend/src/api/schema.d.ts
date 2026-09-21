@@ -878,6 +878,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/expenses/attachments/{attachment_id}/line": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set Expense Attachment Line */
+        put: operations["set_expense_attachment_line_api_v1_expenses_attachments__attachment_id__line_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/invoices/invoiceable-periods": {
         parameters: {
             query?: never;
@@ -1466,6 +1483,8 @@ export interface components {
             file: string;
             /** File Name */
             file_name?: string | null;
+            /** Line Id */
+            line_id?: string | null;
         };
         /** Body_login_api_v1_auth_login_post */
         Body_login_api_v1_auth_login_post: {
@@ -1892,6 +1911,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Line Id */
+            line_id: string | null;
             /** File Name */
             file_name: string;
             /** Content Type */
@@ -2839,6 +2860,11 @@ export interface components {
              * @description Session lifetime in seconds
              */
             expires_in: number;
+        };
+        /** SetAttachmentLineRequest */
+        SetAttachmentLineRequest: {
+            /** Line Id */
+            line_id: string | null;
         };
         /** SystemConfigResponse */
         SystemConfigResponse: {
@@ -6023,6 +6049,55 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Report or attachment not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The report's status does not allow this action */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_expense_attachment_line_api_v1_expenses_attachments__attachment_id__line_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetAttachmentLineRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExpenseAttachmentResponse"];
+                };
             };
             /** @description Report or attachment not found */
             404: {

@@ -42,6 +42,7 @@ from time_reporting.modules.expenses.contracts import (
     LockProjectMonthExpenseReports,
     ReturnExpenseReport,
     SaveExpenseReportLines,
+    SetAttachmentLine,
     SubmitExpenseReport,
     UnlockProjectMonthExpenseReports,
 )
@@ -155,6 +156,7 @@ class ExpenseService:
         attachment_dtos = tuple(
             ExpenseAttachmentDTO(
                 id=attachment.id,
+                line_id=attachment.line_id,
                 file_name=attachment.file_name,
                 content_type=attachment.content_type,
                 size_bytes=attachment.size_bytes,
@@ -374,6 +376,8 @@ class ExpenseService:
     async def add_attachment(self, command: AddExpenseAttachment) -> ExpenseAttachmentDTO:
         report_row = await self._get_own_report(command.report_id, command.actor_id)
         self._ensure_editable(report_row)
+        if command.line_id is not None:
+            await self._resolve_own_line(report_row.id, command.line_id)
 
         # Raised here too (not just inside `storage.save`) so a rejected upload never computes a
         # hash or touches the filesystem at all.
@@ -385,6 +389,7 @@ class ExpenseService:
 
         attachment = ExpenseAttachment(
             report_id=report_row.id,
+            line_id=command.line_id,
             file_name=command.file_name,
             content_type=command.content_type,
             size_bytes=len(command.content),
@@ -397,6 +402,7 @@ class ExpenseService:
         uploader = await self._bus.query(GetUserById(user_id=command.actor_id))
         return ExpenseAttachmentDTO(
             id=attachment.id,
+            line_id=attachment.line_id,
             file_name=attachment.file_name,
             content_type=attachment.content_type,
             size_bytes=attachment.size_bytes,
@@ -405,19 +411,39 @@ class ExpenseService:
         )
 
     async def delete_attachment(self, command: DeleteExpenseAttachment) -> None:
-        attachment = await self._attachments.get(command.attachment_id)
-        if attachment is None:
-            raise AttachmentNotFoundError(command.attachment_id)
-        report_row = await self._reports.get(attachment.report_id)
-        # `expense_attachments.report_id` is `ON DELETE CASCADE`, so the report row can only be
-        # missing if this attachment row is also gone by the time we get here.
-        assert report_row is not None
-        if report_row.user_id != command.actor_id:
-            raise AttachmentNotFoundError(command.attachment_id)
+        attachment, report_row = await self._get_own_attachment(
+            command.attachment_id, command.actor_id
+        )
         self._ensure_editable(report_row)
 
         self._storage.delete(attachment.storage_key)
         await self._attachments.delete(attachment)
+
+    async def set_attachment_line(self, command: SetAttachmentLine) -> ExpenseAttachmentDTO:
+        attachment, report_row = await self._get_own_attachment(
+            command.attachment_id, command.actor_id
+        )
+        self._ensure_editable(report_row)
+        if command.line_id is not None:
+            await self._resolve_own_line(report_row.id, command.line_id)
+
+        attachment.line_id = command.line_id
+        await self._attachments.save(attachment)
+
+        uploader = (
+            await self._bus.query(GetUserById(user_id=attachment.uploaded_by_id))
+            if attachment.uploaded_by_id is not None
+            else None
+        )
+        return ExpenseAttachmentDTO(
+            id=attachment.id,
+            line_id=attachment.line_id,
+            file_name=attachment.file_name,
+            content_type=attachment.content_type,
+            size_bytes=attachment.size_bytes,
+            uploaded_by_name=uploader.name if uploader is not None else None,
+            created_at=attachment.created_at,
+        )
 
     async def get_attachment_path(self, query: GetAttachmentPath) -> AttachmentFileDTO:
         """Raises ``AttachmentNotFoundError`` for an unknown id, a file missing from disk, *or* a
@@ -464,6 +490,29 @@ class ExpenseService:
         if report_row is None or report_row.user_id != actor_id:
             raise ExpenseReportNotFoundError(report_id)
         return report_row
+
+    async def _get_own_attachment(
+        self, attachment_id: UUID, actor_id: UUID
+    ) -> tuple[ExpenseAttachment, ExpenseReport]:
+        """Fetch an attachment (and its report) the caller must own — the same
+        information-hiding ``_get_own_report`` documents: someone else's attachment raises the
+        same ``AttachmentNotFoundError`` an unknown id would."""
+        attachment = await self._attachments.get(attachment_id)
+        if attachment is None:
+            raise AttachmentNotFoundError(attachment_id)
+        report_row = await self._reports.get(attachment.report_id)
+        # `expense_attachments.report_id` is `ON DELETE CASCADE`, so the report row can only be
+        # missing if this attachment row is also gone by the time we get here.
+        assert report_row is not None
+        if report_row.user_id != actor_id:
+            raise AttachmentNotFoundError(attachment_id)
+        return attachment, report_row
+
+    async def _resolve_own_line(self, report_id: UUID, line_id: UUID) -> ExpenseReportLine:
+        line = await self._lines.get(line_id)
+        if line is None or line.report_id != report_id:
+            raise ExpenseLineNotFoundError(line_id)
+        return line
 
     def _ensure_editable(self, report_row: ExpenseReport) -> None:
         if report_row.status not in _EDITABLE_STATUSES:
