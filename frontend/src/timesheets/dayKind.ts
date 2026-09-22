@@ -14,9 +14,8 @@ export function dayKind(day: Pick<CalendarDay, "is_weekend" | "non_working_day">
 export function dayKindBackground(kind: DayKind): string | undefined {
   switch (kind) {
     case "weekend":
-      return "var(--mantine-color-gray-light)";
     case "public_holiday":
-      return "var(--mantine-color-orange-light)";
+      return "var(--mantine-color-red-light)";
     case "bridge_day":
     case "company_day_off":
       return "var(--mantine-color-yellow-light)";
