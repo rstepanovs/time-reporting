@@ -19,6 +19,7 @@ from time_reporting.modules.admin.contracts import (
     RemovalTargetNotFoundError,
     SelfRemovalError,
 )
+from time_reporting.modules.audit.contracts import AuditAction, RecordAuditEvent
 from time_reporting.modules.customers.contracts import (
     CustomerInUseError,
     CustomerNotFoundError,
@@ -26,6 +27,7 @@ from time_reporting.modules.customers.contracts import (
     GetCustomerById,
     UpdateCustomer,
 )
+from time_reporting.modules.invoices.contracts import CountInvoices
 from time_reporting.modules.projects.contracts import (
     DeleteProject,
     GetProjectById,
@@ -101,9 +103,12 @@ class AdminRemovalService:
         projects = await self._bus.query(
             ListProjects(limit=1, offset=0, customer_id=customer_id, include_inactive=True)
         )
+        invoice_count = await self._bus.query(CountInvoices(customer_id=customer_id))
         blockers = []
         if projects.total:
             blockers.append(RemovalCountDTO(kind=RemovalBlockerKind.PROJECTS, count=projects.total))
+        if invoice_count:
+            blockers.append(RemovalCountDTO(kind=RemovalBlockerKind.INVOICES, count=invoice_count))
         return RemovalImpactDTO(
             is_active=customer.is_active,
             can_delete_permanently=not blockers,
@@ -168,6 +173,10 @@ class AdminRemovalService:
         if impact.blockers:
             raise RemovalBlockedError(impact.blockers)
 
+        # Fetched before the delete so the audit event below still has a name to show.
+        user = await self._bus.query(GetUserById(user_id=user_id))
+        assert user is not None  # confirmed to exist by the impact check above
+
         try:
             await self._bus.execute(RemoveUserFromAllProjects(user_id=user_id))
             await self._bus.execute(DeleteUser(user_id=user_id, acting_user_id=acting_user_id))
@@ -181,15 +190,39 @@ class AdminRemovalService:
             raise RemovalBlockedError(
                 (RemovalCountDTO(kind=RemovalBlockerKind.PROJECTS, count=0),)
             ) from exc
+        await self._bus.execute(
+            RecordAuditEvent(
+                actor_id=acting_user_id,
+                action=AuditAction.USER_DELETED,
+                entity_type="user",
+                entity_id=str(user_id),
+                summary=f"Permanently deleted user {user.name} ({user.email})",
+            )
+        )
         logger.info("Permanently deleted user %s (by %s)", user_id, acting_user_id)
         return RemovalOutcome.DELETED
 
-    async def remove_customer(self, customer_id: UUID, *, permanent: bool) -> RemovalOutcome:
+    async def remove_customer(
+        self, customer_id: UUID, *, acting_user_id: UUID, permanent: bool
+    ) -> RemovalOutcome:
+        customer = await self._bus.query(GetCustomerById(customer_id=customer_id))
+        if customer is None:
+            raise RemovalTargetNotFoundError(customer_id)
+
         if not permanent:
             try:
                 await self._bus.execute(UpdateCustomer(customer_id=customer_id, is_active=False))
             except CustomerNotFoundError as exc:
                 raise RemovalTargetNotFoundError(customer_id) from exc
+            await self._bus.execute(
+                RecordAuditEvent(
+                    actor_id=acting_user_id,
+                    action=AuditAction.CUSTOMER_ARCHIVED,
+                    entity_type="customer",
+                    entity_id=str(customer_id),
+                    summary=f"Archived customer {customer.name}",
+                )
+            )
             return RemovalOutcome.ARCHIVED
 
         impact = await self.get_customer_removal_impact(customer_id)
@@ -206,15 +239,40 @@ class AdminRemovalService:
             raise RemovalBlockedError(
                 (RemovalCountDTO(kind=RemovalBlockerKind.PROJECTS, count=0),)
             ) from exc
+        await self._bus.execute(
+            RecordAuditEvent(
+                actor_id=acting_user_id,
+                action=AuditAction.CUSTOMER_DELETED,
+                entity_type="customer",
+                entity_id=str(customer_id),
+                summary=f"Permanently deleted customer {customer.name}",
+            )
+        )
         logger.info("Permanently deleted customer %s", customer_id)
         return RemovalOutcome.DELETED
 
-    async def remove_project(self, project_id: UUID, *, permanent: bool) -> RemovalOutcome:
+    async def remove_project(
+        self, project_id: UUID, *, acting_user_id: UUID, permanent: bool
+    ) -> RemovalOutcome:
+        project = await self._bus.query(GetProjectById(project_id=project_id))
+        if project is None:
+            raise RemovalTargetNotFoundError(project_id)
+        project_label = f"{project.customer.name} · {project.name}"
+
         if not permanent:
             try:
                 await self._bus.execute(UpdateProject(project_id=project_id, is_active=False))
             except ProjectNotFoundError as exc:
                 raise RemovalTargetNotFoundError(project_id) from exc
+            await self._bus.execute(
+                RecordAuditEvent(
+                    actor_id=acting_user_id,
+                    action=AuditAction.PROJECT_ARCHIVED,
+                    entity_type="project",
+                    entity_id=str(project_id),
+                    summary=f"Archived project {project_label}",
+                )
+            )
             return RemovalOutcome.ARCHIVED
 
         impact = await self.get_project_removal_impact(project_id)
@@ -233,5 +291,14 @@ class AdminRemovalService:
             raise RemovalBlockedError(
                 (RemovalCountDTO(kind=RemovalBlockerKind.TIME_ENTRIES, count=0),)
             ) from exc
+        await self._bus.execute(
+            RecordAuditEvent(
+                actor_id=acting_user_id,
+                action=AuditAction.PROJECT_DELETED,
+                entity_type="project",
+                entity_id=str(project_id),
+                summary=f"Permanently deleted project {project_label}",
+            )
+        )
         logger.info("Permanently deleted project %s", project_id)
         return RemovalOutcome.DELETED

@@ -178,9 +178,16 @@ export function AdminProjectsPage() {
                     </Table.Td>
                     <Table.Td>{project.customer.name}</Table.Td>
                     <Table.Td>
-                      <Badge color={project.is_active ? "green" : "gray"} variant="light">
-                        {project.is_active ? "Active" : "Archived"}
-                      </Badge>
+                      <Group gap="xs" wrap="nowrap">
+                        <Badge color={project.is_active ? "green" : "gray"} variant="light">
+                          {project.is_active ? "Active" : "Archived"}
+                        </Badge>
+                        {project.is_internal && (
+                          <Badge color="violet" variant="light">
+                            Internal
+                          </Badge>
+                        )}
+                      </Group>
                     </Table.Td>
                     <Table.Td>
                       <ProjectRowActions project={project} />

@@ -20,11 +20,13 @@ const STATUS_LABEL: Record<BillingPeriodStatus, string> = {
   not_ready: "Not ready",
   ready: "Ready",
   sent: "Sent",
+  not_billable: "Internal — not billed",
 };
 const STATUS_COLOR: Record<BillingPeriodStatus, string> = {
   not_ready: "gray",
   ready: "blue",
   sent: "green",
+  not_billable: "violet",
 };
 
 /** The previous month during a month's first 10 days (most of a month's work is usually still
@@ -169,6 +171,8 @@ export function ProjectBillingCard({ scope }: Props) {
                   {formatHours(teamProject.billing.hours.total_hours)} h · Weeks{" "}
                   {teamProject.billing.weeks_in_scope - teamProject.billing.blocking_weeks}/
                   {teamProject.billing.weeks_in_scope} approved
+                  {teamProject.billing.blocking_reports > 0 &&
+                    ` · ${teamProject.billing.blocking_reports} expense report(s) pending`}
                 </Text>
               </div>
               {teamProject.billing.status === "ready" ? (

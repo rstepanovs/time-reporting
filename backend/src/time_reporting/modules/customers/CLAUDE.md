@@ -16,3 +16,12 @@ currency (ISO 4217) and payment terms.
   project.
 - Archiving a customer does not cascade to its projects, but creating or reactivating a project
   requires its customer to be active (enforced in `projects`).
+- Invoicing fields, all nullable and clearable the same way as `legal_name`/`tax_id`/`notes`:
+  `vat_rate` (0–100, checked both in the DB and by the Pydantic schema; null means the invoice
+  prints no VAT line — e.g. reverse charge, explained instead by `vat_note`), `vat_note`,
+  `invoice_locale` (`"sv"`/`"en"`; null falls back to the company's own default) and the free-text
+  `customer_number`/`your_reference` printed on an invoice. `INVOICE_LOCALES` is a local constant in
+  `customers.contracts`, deliberately duplicating `company.contracts.INVOICE_LOCALES` rather than
+  importing it — a module may only import another module's `contracts.py`, and neither of these two
+  needs the other; both independently mirror `faktura_printer.available_locales()`. Read by
+  `invoices` (`CreateInvoiceDraft`, `IssueInvoice`) — see `invoices/CLAUDE.md`.

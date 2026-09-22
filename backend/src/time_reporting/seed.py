@@ -5,6 +5,7 @@ Seeding is idempotent: users whose email, customers whose name, or projects whos
 already exist are left untouched.
 """
 
+import contextlib
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, timedelta
@@ -12,6 +13,11 @@ from decimal import Decimal
 from uuid import UUID
 
 from time_reporting.core.cqrs import Bus
+from time_reporting.modules.company.contracts import (
+    CompanyAddressDTO,
+    GetCompanySettings,
+    UpdateCompanySettings,
+)
 from time_reporting.modules.customers.contracts import (
     BillingAddressDTO,
     BillingIntervalUnit,
@@ -20,6 +26,21 @@ from time_reporting.modules.customers.contracts import (
     CustomerNameAlreadyExistsError,
     ListCustomers,
     UpdateCustomer,
+)
+from time_reporting.modules.expenses.contracts import (
+    ApproveExpenseReport,
+    CreateExpenseReport,
+    ExpenseLineChange,
+    ListExpenseOptions,
+    ListMyExpenseReports,
+    SaveExpenseReportLines,
+    SubmitExpenseReport,
+)
+from time_reporting.modules.invoices.contracts import (
+    CompanyProfileIncompleteError,
+    CreateInvoiceDraft,
+    InvoicePeriodNotEligibleError,
+    IssueInvoice,
 )
 from time_reporting.modules.projects.contracts import (
     AddProjectBillingItem,
@@ -37,9 +58,12 @@ from time_reporting.modules.projects.contracts import (
 )
 from time_reporting.modules.timesheets.contracts import (
     ApproveTimesheetWeek,
+    BillingPeriodAlreadySentError,
+    BillingPeriodRef,
     CountTimeEntries,
     ListTimesheetOptions,
     SaveTimesheetWeek,
+    SendProjectMonthToBilling,
     SubmitTimesheetWeek,
     TimeEntryChange,
 )
@@ -95,6 +119,10 @@ class DemoProject:
     # Give the six default billing items the rates in DEMO_BILLING_RATES/DEMO_PURCHASING_MARKUP.
     billing_rates: bool = False
     custom_billing_items: tuple[DemoBillingItem, ...] = ()
+    # Never sent to billing, no rates needed; the demo accountant's own expense report on it
+    # shows up in the accountant package as an internal cost, never rebilled — see
+    # `_seed_expense_reports`.
+    is_internal: bool = False
 
 
 DEMO_USERS: tuple[DemoUser, ...] = (
@@ -196,6 +224,14 @@ DEMO_PROJECTS: tuple[DemoProject, ...] = (
         billing_rates=True,
     ),
     DemoProject(
+        customer_name="Acme Corporation",
+        name="Company Overhead",
+        description="Internal costs, never billed to a customer.",
+        member_emails=("accountant@example.com",),
+        manager_email="manager@example.com",
+        is_internal=True,
+    ),
+    DemoProject(
         customer_name="Globex",
         name="Platform Migration",
         description="Move billing to the new platform.",
@@ -251,6 +287,17 @@ class SeedReport:
     # submit/approve workflow, so a fresh checkout also has an example of that on the Timesheet
     # page.
     submitted_weeks_for: list[str] = field(default_factory=list)
+    # Demo users who got one approved and one submitted expense report this month (a member of at
+    # least two projects with an active `amount` item), so a fresh checkout has an example on the
+    # Expenses page and a real blocker on the manager's approvals/team pages.
+    seeded_expense_reports_for: list[str] = field(default_factory=list)
+    # Set only the first time this runs: the company profile was still at the migration's
+    # placeholder defaults (empty `legal_name`/`org_number`) and was filled with demo values.
+    seeded_company_profile: bool = False
+    # Set only the first time this runs: "Website Revamp"'s earliest booked month was sent to
+    # billing and issued as an invoice, so a fresh checkout has a real one on `/invoices` and
+    # `/accounting` instead of both pages being empty.
+    seeded_invoice: bool = False
 
 
 async def _find_customer_id_by_name(bus: Bus, name: str) -> UUID:
@@ -480,11 +527,224 @@ async def _seed_time_entries(
             )
 
 
+async def _seed_expense_reports(
+    bus: Bus,
+    report: SeedReport,
+    users: tuple[DemoUser, ...],
+    user_ids_by_email: dict[str, UUID],
+    *,
+    today: date,
+) -> None:
+    """One approved and one submitted expense report this month, for every demo user who is a
+    member of at least two active projects with an active ``amount`` item (today,
+    ``manager@example.com`` and ``employee@example.com``) and doesn't already have any reports
+    this month — so a fresh checkout has an example on the Expenses page, and the manager's
+    approvals/team pages have a real expense-report blocker to show, not just the
+    always-submitted last timesheet week."""
+    for user in users:
+        user_id = user_ids_by_email.get(user.email)
+        if user_id is None:
+            continue
+        if await bus.query(
+            ListMyExpenseReports(user_id=user_id, year=today.year, month=today.month)
+        ):
+            continue
+        options = [
+            option
+            for option in await bus.query(ListExpenseOptions(user_id=user_id))
+            if option.billing_items
+        ]
+        if len(options) < 2:
+            continue
+        reviewer_id = _reviewer_id(users, user_ids_by_email, owner_email=user.email)
+        if reviewer_id is None:
+            continue
+
+        approved_option, submitted_option = options[0], options[1]
+        first_of_month = today.replace(day=1)
+
+        approved_report = await bus.execute(
+            CreateExpenseReport(
+                user_id=user_id,
+                project_id=approved_option.project.id,
+                year=today.year,
+                month=today.month,
+            )
+        )
+        await bus.execute(
+            SaveExpenseReportLines(
+                report_id=approved_report.id,
+                actor_id=user_id,
+                lines=(
+                    ExpenseLineChange(
+                        line_id=None,
+                        billing_item_id=approved_option.billing_items[0].id,
+                        expense_date=first_of_month,
+                        amount=Decimal("42.50"),
+                        description="Client dinner",
+                        vendor="Bella Italia",
+                    ),
+                ),
+            )
+        )
+        await bus.execute(SubmitExpenseReport(report_id=approved_report.id, actor_id=user_id))
+        await bus.execute(
+            ApproveExpenseReport(report_id=approved_report.id, reviewer_id=reviewer_id)
+        )
+
+        submitted_report = await bus.execute(
+            CreateExpenseReport(
+                user_id=user_id,
+                project_id=submitted_option.project.id,
+                year=today.year,
+                month=today.month,
+            )
+        )
+        await bus.execute(
+            SaveExpenseReportLines(
+                report_id=submitted_report.id,
+                actor_id=user_id,
+                lines=(
+                    ExpenseLineChange(
+                        line_id=None,
+                        billing_item_id=submitted_option.billing_items[0].id,
+                        expense_date=first_of_month,
+                        amount=Decimal("18.90"),
+                        description="Taxi to client site",
+                    ),
+                ),
+            )
+        )
+        await bus.execute(SubmitExpenseReport(report_id=submitted_report.id, actor_id=user_id))
+
+        report.seeded_expense_reports_for.append(user.email)
+
+
 async def _project_exists(bus: Bus, customer_id: UUID, name: str) -> bool:
     page = await bus.query(
         ListProjects(limit=1, offset=0, customer_id=customer_id, search=name, include_inactive=True)
     )
     return any(project.name == name for project in page.items)
+
+
+async def _find_project_id_by_name(bus: Bus, customer_id: UUID, name: str) -> UUID:
+    """Used only to resolve a project that already existed before this seeding run, so its id
+    wasn't captured when creating it — see `_find_customer_id_by_name`."""
+    page = await bus.query(
+        ListProjects(limit=1, offset=0, customer_id=customer_id, search=name, include_inactive=True)
+    )
+    for project in page.items:
+        if project.name == name:
+            return project.id
+    raise LookupError(f"No project named {name!r} found while seeding invoices")
+
+
+async def _seed_company_profile(bus: Bus, report: SeedReport, *, today: date) -> None:
+    """Fill in the singleton company profile with demo values, but only if it's still at the
+    placeholder defaults the migration inserted (empty `legal_name`/`org_number`) — an admin who
+    has already customized it, even partially, is never overwritten."""
+    settings = await bus.query(GetCompanySettings())
+    if settings.legal_name or settings.org_number:
+        return
+    await bus.execute(
+        UpdateCompanySettings(
+            actor_id=None,
+            legal_name="Demo Consulting AB",
+            org_number="556677-8899",
+            vat_number="SE556677889901",
+            address=CompanyAddressDTO(
+                street="Sveavägen 1",
+                street2=None,
+                postal_code="111 34",
+                city="Stockholm",
+                country="SE",
+            ),
+            email="hello@democonsulting.example",
+            phone="+46 8 123 45 67",
+            registered_office="Stockholm",
+            bankgiro="123-4567",
+            iban="SE35 5000 0000 0549 1000 0003",
+            bic="ESSESESS",
+            f_tax_approved=True,
+            default_invoice_locale="en",
+            late_interest="8% per annum",
+            invoice_number_prefix=f"{today.year}-",
+            next_invoice_number=1,
+            allow_self_review=False,
+        )
+    )
+    report.seeded_company_profile = True
+
+
+async def _seed_sent_invoice(
+    bus: Bus,
+    report: SeedReport,
+    users: tuple[DemoUser, ...],
+    user_ids_by_email: dict[str, UUID],
+    project_ids_by_name: dict[str, UUID],
+    customer_ids_by_name: dict[str, UUID],
+    projects: tuple[DemoProject, ...],
+    *,
+    today: date,
+) -> None:
+    """Send the earliest booked month of the first non-internal, rated demo project to billing
+    and issue an invoice for it, so a fresh checkout's `/invoices` and `/accounting` aren't both
+    empty. The earliest of the `DEMO_TIME_ENTRY_MONTHS` booked months is used, never the current
+    one — its last week is deliberately left submitted (see `_submit_and_approve_demo_weeks`), so
+    every week of the earliest month is guaranteed already approved regardless of where in the
+    month `today` falls. Picks the project/customer/reviewer/actor from the arguments (rather than
+    hardcoding "Website Revamp"/"Acme Corporation"/emails) so this also works against the
+    uniquely-renamed copies tests seed."""
+    invoice_project = next(
+        (
+            project
+            for project in projects
+            if project.billing_rates and not project.is_internal and not project.archived
+        ),
+        None,
+    )
+    if invoice_project is None:
+        return
+    project_id = project_ids_by_name.get(invoice_project.name)
+    customer_id = customer_ids_by_name.get(invoice_project.customer_name)
+    reviewer = next((user for user in users if UserRole.MANAGER in user.roles), None)
+    manager_id = user_ids_by_email.get(reviewer.email) if reviewer is not None else None
+    accountant = next((user for user in users if UserRole.ACCOUNTANT in user.roles), None)
+    accountant_id = user_ids_by_email.get(accountant.email) if accountant is not None else None
+    if project_id is None or customer_id is None or manager_id is None or accountant_id is None:
+        return
+
+    period_start = _month_start_n_months_ago(today, DEMO_TIME_ENTRY_MONTHS - 1)
+    with contextlib.suppress(BillingPeriodAlreadySentError):
+        await bus.execute(
+            SendProjectMonthToBilling(
+                project_id=project_id,
+                year=period_start.year,
+                month=period_start.month,
+                sent_by_id=manager_id,
+            )
+        )
+
+    try:
+        invoice = await bus.execute(
+            CreateInvoiceDraft(
+                customer_id=customer_id,
+                periods=(BillingPeriodRef(project_id=project_id, period_start=period_start),),
+                invoice_date=today,
+                actor_id=accountant_id,
+            )
+        )
+    except InvoicePeriodNotEligibleError:
+        # Already invoiced by an earlier run of this function.
+        return
+
+    try:
+        await bus.execute(IssueInvoice(invoice_id=invoice.id, actor_id=accountant_id))
+    except CompanyProfileIncompleteError:
+        # The profile is customized (so `_seed_company_profile` left it alone) but missing an
+        # essential field — leave the draft as-is rather than failing the whole seeding run.
+        return
+    report.seeded_invoice = True
 
 
 async def seed_demo_data(
@@ -500,9 +760,11 @@ async def seed_demo_data(
     report = SeedReport()
     user_ids_by_email: dict[str, UUID] = {}
     customer_ids_by_name: dict[str, UUID] = {}
+    project_ids_by_name: dict[str, UUID] = {}
     today = today or date.today()
 
     await _seed_calendar(bus, report, today=today)
+    await _seed_company_profile(bus, report, today=today)
 
     for user in users:
         try:
@@ -543,11 +805,15 @@ async def seed_demo_data(
                     customer_id=customer_id,
                     name=project.name,
                     description=project.description,
+                    is_internal=project.is_internal,
                     manager_id=manager_id,
                 )
             )
         except ProjectNameAlreadyExistsError:
             report.existing_projects.append(project.name)
+            project_ids_by_name[project.name] = await _find_project_id_by_name(
+                bus, customer_id, project.name
+            )
             continue
         except ProjectCustomerArchivedError:
             # The customer was archived by an earlier run of this function (see below) after
@@ -557,8 +823,12 @@ async def seed_demo_data(
             if not await _project_exists(bus, customer_id, project.name):
                 raise
             report.existing_projects.append(project.name)
+            project_ids_by_name[project.name] = await _find_project_id_by_name(
+                bus, customer_id, project.name
+            )
             continue
         report.created_projects.append(project.name)
+        project_ids_by_name[project.name] = created_project.id
         # The project was just created, so it cannot already have these members or billing items.
         for email in project.member_emails:
             await bus.execute(
@@ -587,5 +857,16 @@ async def seed_demo_data(
             )
 
     await _seed_time_entries(bus, report, users, user_ids_by_email, today=today)
+    await _seed_expense_reports(bus, report, users, user_ids_by_email, today=today)
+    await _seed_sent_invoice(
+        bus,
+        report,
+        users,
+        user_ids_by_email,
+        project_ids_by_name,
+        customer_ids_by_name,
+        projects,
+        today=today,
+    )
 
     return report

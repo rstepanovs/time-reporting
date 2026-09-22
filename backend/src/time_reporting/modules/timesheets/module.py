@@ -3,15 +3,19 @@
 from time_reporting.core.cqrs import HandlerRegistry
 from time_reporting.modules.timesheets.contracts import (
     ApproveTimesheetWeek,
+    ClearBillingPeriodsInvoiced,
     CountTimeEntries,
+    GetBillingPeriodExportRows,
     GetMonthCalendar,
     GetMonthTimeSummary,
     GetTeamMonthOverview,
     GetTimesheetWeek,
     GetWeeklyHours,
     GetYearHours,
+    ListBillingPeriods,
     ListSubmittedTimesheetWeeks,
     ListTimesheetOptions,
+    MarkBillingPeriodsInvoiced,
     ReopenProjectBillingPeriod,
     ReturnTimesheetWeek,
     SaveTimesheetWeek,
@@ -20,15 +24,19 @@ from time_reporting.modules.timesheets.contracts import (
 )
 from time_reporting.modules.timesheets.handlers import (
     ApproveTimesheetWeekHandler,
+    ClearBillingPeriodsInvoicedHandler,
     CountTimeEntriesHandler,
+    GetBillingPeriodExportRowsHandler,
     GetMonthCalendarHandler,
     GetMonthTimeSummaryHandler,
     GetTeamMonthOverviewHandler,
     GetTimesheetWeekHandler,
     GetWeeklyHoursHandler,
     GetYearHoursHandler,
+    ListBillingPeriodsHandler,
     ListSubmittedTimesheetWeeksHandler,
     ListTimesheetOptionsHandler,
+    MarkBillingPeriodsInvoicedHandler,
     ReopenProjectBillingPeriodHandler,
     ReturnTimesheetWeekHandler,
     SaveTimesheetWeekHandler,
@@ -47,6 +55,8 @@ def register(registry: HandlerRegistry) -> None:
     registry.query(GetWeeklyHours, GetWeeklyHoursHandler)
     registry.query(GetTeamMonthOverview, GetTeamMonthOverviewHandler)
     registry.query(ListSubmittedTimesheetWeeks, ListSubmittedTimesheetWeeksHandler)
+    registry.query(ListBillingPeriods, ListBillingPeriodsHandler)
+    registry.query(GetBillingPeriodExportRows, GetBillingPeriodExportRowsHandler)
 
     registry.command(SaveTimesheetWeek, SaveTimesheetWeekHandler)
     registry.command(SubmitTimesheetWeek, SubmitTimesheetWeekHandler)
@@ -54,3 +64,5 @@ def register(registry: HandlerRegistry) -> None:
     registry.command(ReturnTimesheetWeek, ReturnTimesheetWeekHandler)
     registry.command(SendProjectMonthToBilling, SendProjectMonthToBillingHandler)
     registry.command(ReopenProjectBillingPeriod, ReopenProjectBillingPeriodHandler)
+    registry.command(MarkBillingPeriodsInvoiced, MarkBillingPeriodsInvoicedHandler)
+    registry.command(ClearBillingPeriodsInvoiced, ClearBillingPeriodsInvoicedHandler)

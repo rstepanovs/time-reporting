@@ -53,7 +53,9 @@ class UserService:
         email: str | None = None,
         roles: frozenset[UserRole] | None = None,
         is_active: bool | None = None,
-    ) -> User:
+    ) -> tuple[User, bool, bool | None]:
+        """Returns the updated user, whether ``roles`` actually changed, and, if ``is_active``
+        actually changed, its new value (``None`` if it was left as-is or already matched)."""
         user = await self.get_user(user_id)
         # Deactivating oneself, or dropping one's own admin level, could lock the last admin out.
         if user.id == acting_user_id and (
@@ -68,15 +70,26 @@ class UserService:
             email = normalize_email(email)
             await self._ensure_email_available(email)
             user.email = email
-        if roles is not None:
-            user.roles = sorted(roles)
-        if is_active is not None:
-            user.is_active = is_active
-        await self._users.save(user)
-        return user
 
-    async def reset_password(self, user_id: UUID, new_password: str) -> None:
-        await self._set_password(await self.get_user(user_id), new_password)
+        roles_changed = False
+        if roles is not None:
+            new_roles = sorted(roles)
+            if new_roles != user.roles:
+                roles_changed = True
+                user.roles = new_roles
+
+        activated: bool | None = None
+        if is_active is not None and is_active != user.is_active:
+            activated = is_active
+            user.is_active = is_active
+
+        await self._users.save(user)
+        return user, roles_changed, activated
+
+    async def reset_password(self, user_id: UUID, new_password: str) -> User:
+        user = await self.get_user(user_id)
+        await self._set_password(user, new_password)
+        return user
 
     async def change_own_password(
         self, user_id: UUID, *, current_password: str, new_password: str

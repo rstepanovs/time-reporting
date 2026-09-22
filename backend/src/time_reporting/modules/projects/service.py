@@ -58,6 +58,7 @@ class ProjectService:
         name: str,
         description: str | None,
         normal_working_hours: Decimal,
+        is_internal: bool,
         manager_id: UUID | None,
     ) -> Project:
         await self._ensure_customer_active(customer_id)
@@ -69,6 +70,7 @@ class ProjectService:
             name=name,
             description=description,
             normal_working_hours=normal_working_hours,
+            is_internal=is_internal,
             manager_id=manager_id,
         )
         await self._projects.save(project)
@@ -101,6 +103,8 @@ class ProjectService:
             project.is_active = data.is_active
         if data.normal_working_hours is not None:
             project.normal_working_hours = data.normal_working_hours
+        if data.is_internal is not None:
+            project.is_internal = data.is_internal
         if "manager_id" in data.clear_fields:
             project.manager_id = None
         elif data.manager_id is not None:

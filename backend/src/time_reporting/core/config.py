@@ -18,6 +18,25 @@ class Settings(BaseSettings):
     )
     database_echo: bool = False
 
+    # The commit the running image was built from, baked in via the `GIT_SHA` Docker build arg;
+    # `None` outside Docker. Shown on the system status page, never used for anything else.
+    app_git_sha: str | None = None
+    # Passed to `alembic.config.Config` to find the migration scripts' head revision. The default
+    # resolves correctly both from the repo root (local dev) and from the backend image's working
+    # directory (`/app`), where `backend/alembic.ini` is also copied.
+    alembic_config_path: str = "backend/alembic.ini"
+
+    # Where `pg_dump` backups are written; `/var/backups/time-reporting` (a named volume) in
+    # compose. A relative path resolves against the process's working directory.
+    backup_dir: str = "backups"
+    backup_retention_count: int = Field(default=14, gt=0)
+    backup_timeout_seconds: int = Field(default=300, gt=0)
+
+    # Where expense-report attachments are written; `/var/lib/time-reporting/attachments` (a named
+    # volume) in compose. A relative path resolves against the process's working directory.
+    attachment_dir: str = "attachments"
+    attachment_max_bytes: int = Field(default=10_485_760, gt=0)
+
     cors_origins: list[str] = ["http://localhost:5173"]
 
     # Signs and verifies JWT access tokens; generate with `openssl rand -hex 32`.

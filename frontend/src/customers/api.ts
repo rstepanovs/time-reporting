@@ -7,6 +7,8 @@ export type CustomerPage = components["schemas"]["CustomerPageResponse"];
 export type BillingAddress = components["schemas"]["BillingAddressRequest"];
 export type BillingPeriod = components["schemas"]["BillingPeriodRequest"];
 
+export type InvoiceLocale = "sv" | "en";
+
 export type CustomerCreateBody = {
   name: string;
   legal_name?: string | null;
@@ -17,6 +19,11 @@ export type CustomerCreateBody = {
   currency: string;
   payment_terms_days: number;
   notes?: string | null;
+  vat_rate?: number | null;
+  vat_note?: string | null;
+  invoice_locale?: InvoiceLocale | null;
+  customer_number?: string | null;
+  your_reference?: string | null;
 };
 
 export type CustomerUpdateBody = Partial<

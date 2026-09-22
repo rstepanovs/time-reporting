@@ -32,7 +32,9 @@ class TimeEntry(TimestampMixin, Base):
     module's own queries — filtering by project, or summing a user's hours for a day — never need
     to join into the projects module's tables. ``unit`` reuses the ``billing_unit`` Postgres enum
     already created by the projects module's migration (``create_type=False``): it is the same
-    logical enum, not a new one.
+    logical enum, not a new one. ``amount`` is excluded by a check constraint — expenses are
+    claimed through the ``expenses`` module's reports now, not a timesheet cell; existing
+    ``amount`` rows were moved there by the migration that added the constraint.
     """
 
     __tablename__ = "time_entries"
@@ -44,6 +46,7 @@ class TimeEntry(TimestampMixin, Base):
             name="uq_time_entries_user_id_billing_item_id_entry_date",
         ),
         CheckConstraint("quantity > 0", name="quantity_positive"),
+        CheckConstraint("unit <> 'amount'", name="unit_not_amount"),
         # Serves both a single user's week (user_id + a date range) and, as a prefix, a plain
         # user_id filter; no separate index on user_id alone.
         Index("ix_time_entries_user_id_entry_date", "user_id", "entry_date"),
@@ -106,9 +109,12 @@ class ProjectBillingPeriod(TimestampMixin, Base):
     """A project's calendar month that has been sent to billing. No row for a (project, month)
     means it hasn't been sent; the timesheets module locks entries dated inside a sent period
     (``TimesheetWeekLockedError``'s billing-period sibling), and an admin can delete this row to
-    reopen the period. ``period_start``/``period_end`` are a calendar month's bounds today, kept
-    as a range rather than a (year, month) pair so a future non-monthly period fits the same
-    table.
+    reopen the period (refused once ``invoice_id`` is set). ``period_start``/``period_end`` are a
+    calendar month's bounds today, kept as a range rather than a (year, month) pair so a future
+    non-monthly period fits the same table. ``invoice_id`` references ``invoices.invoices`` (table
+    name only, per the module boundary rule — this module never imports ``invoices``), ``ON DELETE
+    SET NULL`` so deleting a draft invoice (``invoices.DeleteInvoiceDraft``) never blocks on this
+    row; in practice it is always cleared first, via the nested ``ClearBillingPeriodsInvoiced``.
     """
 
     __tablename__ = "project_billing_periods"
@@ -127,6 +133,9 @@ class ProjectBillingPeriod(TimestampMixin, Base):
     period_end: Mapped[date] = mapped_column(Date)
     sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     sent_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    invoice_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("invoices.id", ondelete="SET NULL"), index=True
+    )
 
 
 class TimesheetRowComment(TimestampMixin, Base):

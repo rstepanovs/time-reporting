@@ -4,6 +4,7 @@ Handlers translate between bus messages and the service/repository and never ret
 """
 
 from time_reporting.core.cqrs import Bus
+from time_reporting.modules.audit.contracts import AuditAction, RecordAuditEvent
 from time_reporting.modules.users.contracts import (
     ChangeOwnPassword,
     CreateUser,
@@ -95,6 +96,7 @@ class ListUsersHandler(_QueryHandler):
 
 class _CommandHandler:
     def __init__(self, bus: Bus) -> None:
+        self._bus = bus
         self._service = UserService(bus.session)
 
 
@@ -103,12 +105,22 @@ class CreateUserHandler(_CommandHandler):
         user = await self._service.create_user(
             name=command.name, email=command.email, roles=command.roles, password=command.password
         )
+        await self._bus.execute(
+            RecordAuditEvent(
+                actor_id=command.actor_id,
+                action=AuditAction.USER_CREATED,
+                entity_type="user",
+                entity_id=str(user.id),
+                summary=f"Created user {user.name} ({user.email})",
+                details={"roles": sorted(role.value for role in user.roles)},
+            )
+        )
         return to_dto(user)
 
 
 class UpdateUserHandler(_CommandHandler):
     async def handle(self, command: UpdateUser) -> UserDTO:
-        user = await self._service.update_user(
+        user, roles_changed, activated = await self._service.update_user(
             command.user_id,
             acting_user_id=command.acting_user_id,
             name=command.name,
@@ -116,12 +128,44 @@ class UpdateUserHandler(_CommandHandler):
             roles=command.roles,
             is_active=command.is_active,
         )
+        if roles_changed:
+            await self._bus.execute(
+                RecordAuditEvent(
+                    actor_id=command.acting_user_id,
+                    action=AuditAction.USER_ROLES_CHANGED,
+                    entity_type="user",
+                    entity_id=str(user.id),
+                    summary=f"Changed access levels for {user.name}",
+                    details={"roles": sorted(role.value for role in user.roles)},
+                )
+            )
+        if activated is not None:
+            await self._bus.execute(
+                RecordAuditEvent(
+                    actor_id=command.acting_user_id,
+                    action=AuditAction.USER_ACTIVATED
+                    if activated
+                    else AuditAction.USER_DEACTIVATED,
+                    entity_type="user",
+                    entity_id=str(user.id),
+                    summary=f"{'Activated' if activated else 'Deactivated'} {user.name}",
+                )
+            )
         return to_dto(user)
 
 
 class ResetUserPasswordHandler(_CommandHandler):
     async def handle(self, command: ResetUserPassword) -> None:
-        await self._service.reset_password(command.user_id, command.new_password)
+        user = await self._service.reset_password(command.user_id, command.new_password)
+        await self._bus.execute(
+            RecordAuditEvent(
+                actor_id=command.actor_id,
+                action=AuditAction.USER_PASSWORD_RESET,
+                entity_type="user",
+                entity_id=str(user.id),
+                summary=f"Reset password for {user.name}",
+            )
+        )
 
 
 class ChangeOwnPasswordHandler(_CommandHandler):

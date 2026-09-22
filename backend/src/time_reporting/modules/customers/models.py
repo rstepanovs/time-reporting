@@ -2,8 +2,9 @@
 
 import uuid
 from datetime import date
+from decimal import Decimal
 
-from sqlalchemy import CheckConstraint, Date, Enum, String, Text, true
+from sqlalchemy import CheckConstraint, Date, Enum, Numeric, String, Text, true
 from sqlalchemy.orm import Mapped, mapped_column
 
 from time_reporting.db.base import Base
@@ -16,6 +17,12 @@ class Customer(TimestampMixin, Base):
     __table_args__ = (
         CheckConstraint("billing_interval_count > 0", name="billing_interval_count_positive"),
         CheckConstraint("payment_terms_days >= 0", name="payment_terms_days_non_negative"),
+        CheckConstraint(
+            "vat_rate IS NULL OR (vat_rate >= 0 AND vat_rate <= 100)", name="vat_rate_range"
+        ),
+        CheckConstraint(
+            "invoice_locale IS NULL OR invoice_locale IN ('sv', 'en')", name="invoice_locale_valid"
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
@@ -49,3 +56,12 @@ class Customer(TimestampMixin, Base):
     notes: Mapped[str | None] = mapped_column(Text)
     # Customers are archived rather than deleted: billing data will reference them.
     is_active: Mapped[bool] = mapped_column(default=True, server_default=true())
+
+    # Invoicing. Null `vat_rate` means no VAT line on the invoice (e.g. reverse charge, printed via
+    # `vat_note` instead). `invoice_locale` ("sv"/"en", see customers.contracts.INVOICE_LOCALES)
+    # falls back to the company's default when null.
+    vat_rate: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    vat_note: Mapped[str | None] = mapped_column(Text)
+    invoice_locale: Mapped[str | None] = mapped_column(String(2))
+    customer_number: Mapped[str | None] = mapped_column(String(50))
+    your_reference: Mapped[str | None] = mapped_column(String(255))

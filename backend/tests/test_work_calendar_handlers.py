@@ -3,8 +3,10 @@ from uuid import uuid4
 
 import pytest
 
+from support import ADMIN, UserFactory
 from time_reporting.core.config import get_settings
 from time_reporting.core.cqrs import Bus
+from time_reporting.modules.audit.contracts import AuditAction, ListAuditEvents
 from time_reporting.modules.work_calendar.contracts import (
     AddNonWorkingDay,
     CalendarRangeTooWideError,
@@ -172,3 +174,33 @@ async def test_import_public_holidays_rejects_unsupported_country(
 
     with pytest.raises(HolidayCountryNotSupportedError):
         await bus.execute(ImportPublicHolidays(year=2026))
+
+    events = await bus.query(
+        ListAuditEvents(
+            limit=10, offset=0, action=AuditAction.PUBLIC_HOLIDAYS_IMPORTED, entity_id="2026"
+        )
+    )
+    assert events.total == 0
+
+
+async def test_import_public_holidays_records_one_audit_event(
+    bus: Bus, make_user: UserFactory
+) -> None:
+    admin = await make_user(roles=ADMIN)
+
+    added = await bus.execute(ImportPublicHolidays(year=2027, actor_id=admin.id))
+
+    events = await bus.query(
+        ListAuditEvents(
+            limit=10,
+            offset=0,
+            action=AuditAction.PUBLIC_HOLIDAYS_IMPORTED,
+            entity_type="calendar",
+            entity_id="2027",
+        )
+    )
+    assert events.total == 1
+    event = events.items[0]
+    assert event.actor_id == admin.id
+    assert event.actor_name == admin.name
+    assert event.details == {"year": 2027, "added": added}

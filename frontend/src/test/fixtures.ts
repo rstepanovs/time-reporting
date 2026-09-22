@@ -1,8 +1,29 @@
+import type { AccountantPackageStatus } from "@/accounting/api";
+import type { AuditEvent, AuditEventPage } from "@/audit/api";
 import type { CurrentUser } from "@/auth/api";
 import type { CalendarDay, NonWorkingDay } from "@/calendar/api";
+import type { CompanySettings } from "@/company/api";
 import type { Customer } from "@/customers/api";
-import type { BillingItem, Project, ProjectMember } from "@/projects/api";
 import type {
+  ExpenseAttachment,
+  ExpenseOption,
+  ExpenseReport,
+  ExpenseReportSummary,
+} from "@/expenses/api";
+import type {
+  Invoice,
+  InvoiceableCustomer,
+  InvoiceablePeriod,
+  InvoiceLine,
+  InvoicePage as InvoicePageType,
+  InvoicingSummary,
+  InvoiceSummary,
+} from "@/invoices/api";
+import type { BillingItem, Project, ProjectMember } from "@/projects/api";
+import type { Backup, BackupList, SystemConfig, SystemStatus } from "@/system/api";
+import type {
+  BillingPeriodListItem,
+  BillingPeriodPage,
   MonthCalendar,
   MonthHours,
   MonthTimeSummary,
@@ -78,6 +99,11 @@ export const testCustomer: Customer = {
   payment_terms_days: 30,
   notes: null,
   is_active: true,
+  vat_rate: null,
+  vat_note: null,
+  invoice_locale: null,
+  customer_number: null,
+  your_reference: null,
   created_at: "2026-01-01T08:00:00Z",
   updated_at: "2026-01-01T08:00:00Z",
 };
@@ -94,6 +120,7 @@ export const testProject: Project = {
   description: "Redesign the public marketing site.",
   is_active: true,
   normal_working_hours: "8.00",
+  is_internal: false,
   manager: null,
   created_at: "2026-02-01T08:00:00Z",
   updated_at: "2026-02-01T08:00:00Z",
@@ -140,6 +167,84 @@ export const testProjectMember: ProjectMember = {
 
 // 2026-09-14 is a Monday.
 export const TEST_WEEK_START = "2026-09-14";
+
+export const testSystemStatus: SystemStatus = {
+  backend_version: "1.2.3",
+  git_sha: "abc123def456",
+  database: {
+    server_version: "17.4",
+    size_bytes: 52_428_800,
+    connection_count: 3,
+    current_revision: "0010_add_audit_events",
+    head_revision: "0010_add_audit_events",
+    migrations_pending: false,
+  },
+  tables: [
+    { name: "users", estimated_rows: 5 },
+    { name: "customers", estimated_rows: 3 },
+  ],
+  started_at: "2026-09-15T08:00:00Z",
+  uptime_seconds: 93_784,
+  last_backup_at: "2026-09-16T02:00:00Z",
+};
+
+export const testSystemConfig: SystemConfig = {
+  // Deliberately distinct from AppLayout's hardcoded "Time Reporting" header title, so tests can
+  // tell the two apart.
+  app_name: "Time Reporting (staging)",
+  debug: false,
+  cors_origins: ["http://localhost:5173"],
+  access_token_expire_minutes: 60,
+  auth_cookie_secure: true,
+  holiday_country: "DE",
+  holiday_subdivision: "BE",
+  daily_working_hours: "8.00",
+  backup_dir: "/var/backups/time-reporting",
+  backup_retention_count: 14,
+  backup_timeout_seconds: 300,
+  attachment_dir: "attachments",
+  attachment_max_bytes: 10_485_760,
+};
+
+export const testBackup: Backup = {
+  name: "time-reporting-20260916T020000Z-0010_add_audit_events.dump",
+  created_at: "2026-09-16T02:00:00Z",
+  revision: "0010_add_audit_events",
+  size_bytes: 52_428_800,
+  attachments_size_bytes: null,
+};
+
+export const testBackupList: BackupList = {
+  backups: [testBackup],
+  last_backup_at: testBackup.created_at,
+};
+
+export const testCompanySettings: CompanySettings = {
+  legal_name: "Acme Consulting AB",
+  org_number: "556000-0000",
+  vat_number: "SE556000000001",
+  address: {
+    street: "Storgatan 1",
+    street2: null,
+    postal_code: "111 22",
+    city: "Stockholm",
+    country: "SE",
+  },
+  email: "billing@acme.example",
+  phone: "+46 70 000 00 00",
+  registered_office: "Stockholm",
+  bankgiro: "123-4567",
+  iban: "SE0000000000000000000000",
+  bic: "ESSESESS",
+  f_tax_approved: true,
+  default_invoice_locale: "sv",
+  late_interest: "Referensränta + 8 %",
+  invoice_number_prefix: "2026-",
+  next_invoice_number: 1,
+  allow_self_review: false,
+  has_logo: false,
+  updated_at: "2026-09-16T10:00:00Z",
+};
 
 export const testNonWorkingDay: NonWorkingDay = {
   id: "d1a1a1a1-1111-1111-1111-111111111111",
@@ -201,6 +306,87 @@ export const testTimesheetWeek: TimesheetWeek = {
   can_review: false,
   days: testCalendarDays,
   rows: [testTimesheetRow],
+};
+
+export const testExpenseBillingItem: ExpenseOption["billing_items"][number] = {
+  id: "b2a2a2a2-2222-2222-2222-222222222222",
+  project_id: testProject.id,
+  preset: null,
+  name: "On-call standby",
+  unit: "amount",
+  unit_rate: null,
+  markup_percent: "10.00",
+  position: 7,
+  is_active: true,
+};
+
+export const testExpenseOption: ExpenseOption = {
+  project: {
+    id: testProject.id,
+    customer: {
+      id: testCustomer.id,
+      name: testCustomer.name,
+      is_active: true,
+      currency: testCustomer.currency,
+    },
+    name: testProject.name,
+    is_active: true,
+  },
+  billing_items: [testExpenseBillingItem],
+};
+
+export const testExpenseAttachment: ExpenseAttachment = {
+  id: "e3a3a3a3-3333-3333-3333-333333333333",
+  // Linked to testExpenseReport's one line ("e2a2a2a2-...") below.
+  line_id: "e2a2a2a2-2222-2222-2222-222222222222",
+  file_name: "receipt.pdf",
+  content_type: "application/pdf",
+  size_bytes: 204_800,
+  uploaded_by_name: testEmployee.name,
+  created_at: "2026-09-14T09:00:00Z",
+};
+
+export const testExpenseReport: ExpenseReport = {
+  id: "e1a1a1a1-1111-1111-1111-111111111111",
+  project: testExpenseOption.project,
+  user: { id: testEmployee.id, name: testEmployee.name, email: testEmployee.email },
+  period_start: "2026-09-01",
+  period_end: "2026-09-30",
+  status: "draft",
+  submitted_at: null,
+  reviewed_at: null,
+  reviewed_by_name: null,
+  return_comment: null,
+  locked_at: null,
+  can_edit: true,
+  can_submit: true,
+  can_review: false,
+  is_locked: false,
+  total: "120.00",
+  lines: [
+    {
+      id: "e2a2a2a2-2222-2222-2222-222222222222",
+      expense_date: "2026-09-14",
+      billing_item: testExpenseBillingItem,
+      amount: "120.00",
+      description: "Client dinner",
+      vendor: "Trattoria Milano",
+      document_no: "INV-1042",
+    },
+  ],
+  attachments: [testExpenseAttachment],
+};
+
+export const testExpenseReportSummary: ExpenseReportSummary = {
+  id: testExpenseReport.id,
+  project: testExpenseReport.project,
+  user: testExpenseReport.user,
+  period_start: testExpenseReport.period_start,
+  period_end: testExpenseReport.period_end,
+  status: testExpenseReport.status,
+  submitted_at: testExpenseReport.submitted_at,
+  total: testExpenseReport.total,
+  line_count: testExpenseReport.lines.length,
 };
 
 // A two-week slice of September 2026 (real months span up to 6 weeks; the dashboard doesn't
@@ -595,6 +781,7 @@ export const testNotReadyBillingPeriod: ProjectBillingPeriod = {
   sent_at: null,
   sent_by: null,
   blocking_weeks: 1,
+  blocking_reports: 0,
   weeks_in_scope: 1,
   hours: { ...zeroHours, normal_hours: "19.00", total_hours: "19.00" },
   per_diem_days: "0",
@@ -609,10 +796,149 @@ export const testReadyBillingPeriod: ProjectBillingPeriod = {
   sent_at: null,
   sent_by: null,
   blocking_weeks: 0,
+  blocking_reports: 0,
   weeks_in_scope: 4,
   hours: { ...zeroHours, normal_hours: "160.00", total_hours: "160.00" },
   per_diem_days: "0",
   expenses: [],
+};
+
+export const testBillingPeriodListItem: BillingPeriodListItem = {
+  project_id: testReadyBillingPeriod.project_id,
+  project_name: "Platform Migration",
+  customer_name: testCustomer.name,
+  period_start: testReadyBillingPeriod.period_start,
+  period_end: testReadyBillingPeriod.period_end,
+  sent_at: "2026-09-02T09:00:00Z",
+  sent_by_id: testManager.id,
+  sent_by_name: testManager.name,
+  invoice_id: null,
+};
+
+export const testBillingPeriodPage: BillingPeriodPage = {
+  items: [testBillingPeriodListItem],
+  total: 1,
+  limit: 20,
+  offset: 0,
+};
+
+export const testInvoiceablePeriod: InvoiceablePeriod = {
+  project_id: testProject.id,
+  project_name: testProject.name,
+  period_start: "2026-09-01",
+  period_end: "2026-09-30",
+  sent_at: "2026-10-02T09:00:00Z",
+};
+
+export const testInvoiceableCustomer: InvoiceableCustomer = {
+  customer_id: testCustomer.id,
+  customer_name: testCustomer.name,
+  currency: testCustomer.currency,
+  periods: [testInvoiceablePeriod],
+};
+
+export const testInvoiceSummary: InvoiceSummary = {
+  id: "f1a1a1a1-1111-1111-1111-111111111111",
+  customer_id: testCustomer.id,
+  customer_name: testCustomer.name,
+  status: "issued",
+  number: "2026-1",
+  invoice_date: "2026-10-02",
+  due_date: "2026-11-01",
+  currency: testCustomer.currency,
+  total: "1250.00",
+};
+
+export const testInvoicePage: InvoicePageType = {
+  items: [testInvoiceSummary],
+  total: 1,
+  limit: 20,
+  offset: 0,
+};
+
+export const testInvoiceLine: InvoiceLine = {
+  id: "f3c3c3c3-3333-3333-3333-333333333333",
+  position: 1,
+  kind: "manual",
+  description: "Consulting hours",
+  quantity: "10.00",
+  unit: "hour",
+  unit_price: "100.00",
+  amount: "1000.00",
+  project_id: null,
+  billing_item_id: null,
+};
+
+export const testInvoiceDraft: Invoice = {
+  id: testInvoiceSummary.id,
+  customer: { id: testCustomer.id, name: testCustomer.name, currency: testCustomer.currency },
+  status: "draft",
+  number: null,
+  invoice_date: "2026-10-02",
+  due_date: "2026-11-01",
+  currency: testCustomer.currency,
+  locale: "sv",
+  vat_rate: "25.00",
+  vat_note: null,
+  your_reference: null,
+  notes: null,
+  subtotal: "1000.00",
+  vat_amount: "250.00",
+  total: "1250.00",
+  issued_at: null,
+  paid_on: null,
+  voided_at: null,
+  void_reason: null,
+  lines: [testInvoiceLine],
+  periods: [
+    { project_id: testProject.id, project_name: testProject.name, period_start: "2026-09-01" },
+  ],
+  created_at: "2026-10-02T09:00:00Z",
+  updated_at: "2026-10-02T09:00:00Z",
+};
+
+export const testInvoiceIssued: Invoice = {
+  ...testInvoiceDraft,
+  id: "f2b2b2b2-2222-2222-2222-222222222222",
+  status: "issued",
+  number: "2026-1",
+  issued_at: "2026-10-02T10:00:00Z",
+};
+
+export const testInvoicingSummary: InvoicingSummary = {
+  periods_to_invoice: 2,
+  unpaid_totals: [{ currency: "EUR", amount: "1250.00" }],
+  overdue_count: 1,
+};
+
+export const testAccountantPackageStatus: AccountantPackageStatus = {
+  year: 2026,
+  month: 9,
+  invoice_count: 2,
+  expense_line_count: 3,
+  totals: [{ currency: "EUR", invoiced_total: "1250.00", expense_total: "42.50" }],
+  draft_invoice_count: 0,
+  unapproved_expense_report_count: 0,
+  uninvoiced_sent_period_count: 0,
+};
+
+export const testAuditEvent: AuditEvent = {
+  id: "9c1e2f3a-4b5c-6d7e-8f90-1a2b3c4d5e6f",
+  occurred_at: "2026-09-16T10:00:00Z",
+  actor_id: testAdmin.id,
+  actor_name: testAdmin.name,
+  action: "billing_period.reopened",
+  entity_type: "billing_period",
+  entity_id: `${testReadyBillingPeriod.project_id}:${testReadyBillingPeriod.period_start}`,
+  summary: "Reopened Platform Migration's September 2026 billing period",
+  details: { project_name: "Platform Migration", period_start: testReadyBillingPeriod.period_start },
+};
+
+export const testAuditEventPage: AuditEventPage = {
+  items: [testAuditEvent],
+  total: 1,
+  limit: 20,
+  offset: 0,
 };
 
 export const testTeamMonthOverview: TeamMonthOverview = {

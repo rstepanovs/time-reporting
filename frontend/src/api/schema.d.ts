@@ -85,6 +85,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/company": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Company Settings */
+        get: operations["get_company_settings_api_v1_company_get"];
+        /** Update Company Settings */
+        put: operations["update_company_settings_api_v1_company_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/company/logo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Company Logo */
+        get: operations["get_company_logo_api_v1_company_logo_get"];
+        /** Set Company Logo */
+        put: operations["set_company_logo_api_v1_company_logo_put"];
+        post?: never;
+        /** Clear Company Logo */
+        delete: operations["clear_company_logo_api_v1_company_logo_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/me": {
         parameters: {
             query?: never;
@@ -538,7 +575,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** List Billing Periods */
+        get: operations["list_billing_periods_api_v1_timesheets_billing_periods_get"];
         put?: never;
         /** Send Project Month To Billing */
         post: operations["send_project_month_to_billing_api_v1_timesheets_billing_periods_post"];
@@ -560,6 +598,23 @@ export interface paths {
         post?: never;
         /** Reopen Project Billing Period */
         delete: operations["reopen_project_billing_period_api_v1_timesheets_billing_periods__project_id___period_start__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/timesheets/billing-periods/{project_id}/{period_start}/export.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Billing Period Csv */
+        get: operations["export_billing_period_csv_api_v1_timesheets_billing_periods__project_id___period_start__export_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -642,6 +697,369 @@ export interface paths {
         };
         /** Get Weekly Hours */
         get: operations["get_weekly_hours_api_v1_timesheets_weekly_hours_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/expenses/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Expense Options */
+        get: operations["list_expense_options_api_v1_expenses_options_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/expenses/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List My Expense Reports */
+        get: operations["list_my_expense_reports_api_v1_expenses_reports_get"];
+        put?: never;
+        /** Create Expense Report */
+        post: operations["create_expense_report_api_v1_expenses_reports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/expenses/reports/{report_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Expense Report */
+        get: operations["get_expense_report_api_v1_expenses_reports__report_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Expense Report */
+        delete: operations["delete_expense_report_api_v1_expenses_reports__report_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/expenses/reports/{report_id}/lines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Save Expense Report Lines */
+        put: operations["save_expense_report_lines_api_v1_expenses_reports__report_id__lines_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/expenses/reports/{report_id}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit Expense Report */
+        post: operations["submit_expense_report_api_v1_expenses_reports__report_id__submit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/expenses/reports/{report_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve Expense Report */
+        post: operations["approve_expense_report_api_v1_expenses_reports__report_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/expenses/reports/{report_id}/return": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Return Expense Report */
+        post: operations["return_expense_report_api_v1_expenses_reports__report_id__return_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/expenses/submissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Submitted Expense Reports */
+        get: operations["list_submitted_expense_reports_api_v1_expenses_submissions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/expenses/reports/{report_id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Expense Attachment */
+        post: operations["add_expense_attachment_api_v1_expenses_reports__report_id__attachments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/expenses/attachments/{attachment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Expense Attachment */
+        get: operations["download_expense_attachment_api_v1_expenses_attachments__attachment_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Expense Attachment */
+        delete: operations["delete_expense_attachment_api_v1_expenses_attachments__attachment_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/expenses/attachments/{attachment_id}/line": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set Expense Attachment Line */
+        put: operations["set_expense_attachment_line_api_v1_expenses_attachments__attachment_id__line_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoices/invoiceable-periods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Invoiceable Periods */
+        get: operations["list_invoiceable_periods_api_v1_invoices_invoiceable_periods_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoices/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Invoicing Summary */
+        get: operations["get_invoicing_summary_api_v1_invoices_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Invoices */
+        get: operations["list_invoices_api_v1_invoices_get"];
+        put?: never;
+        /** Create Invoice Draft */
+        post: operations["create_invoice_draft_api_v1_invoices_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoices/{invoice_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Invoice */
+        get: operations["get_invoice_api_v1_invoices__invoice_id__get"];
+        /** Update Invoice Draft */
+        put: operations["update_invoice_draft_api_v1_invoices__invoice_id__put"];
+        post?: never;
+        /** Delete Invoice Draft */
+        delete: operations["delete_invoice_draft_api_v1_invoices__invoice_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoices/{invoice_id}/issue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Issue Invoice */
+        post: operations["issue_invoice_api_v1_invoices__invoice_id__issue_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoices/{invoice_id}/pay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark Invoice Paid */
+        post: operations["mark_invoice_paid_api_v1_invoices__invoice_id__pay_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoices/{invoice_id}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Void Invoice */
+        post: operations["void_invoice_api_v1_invoices__invoice_id__void_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoices/{invoice_id}/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Invoice Pdf */
+        get: operations["get_invoice_pdf_api_v1_invoices__invoice_id__pdf_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/accounting/packages/{year}/{month}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Accountant Package Status */
+        get: operations["get_accountant_package_status_api_v1_accounting_packages__year___month__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/accounting/packages/{year}/{month}.zip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Accountant Package */
+        get: operations["download_accountant_package_api_v1_accounting_packages__year___month__zip_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -752,10 +1170,194 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/system/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get System Status */
+        get: operations["get_system_status_api_v1_admin_system_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/system/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get System Config */
+        get: operations["get_system_config_api_v1_admin_system_config_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/backups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Backups */
+        get: operations["list_backups_api_v1_admin_backups_get"];
+        put?: never;
+        /** Create Backup */
+        post: operations["create_backup_api_v1_admin_backups_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/backups/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Backup */
+        get: operations["download_backup_api_v1_admin_backups__name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/audit-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Audit Events */
+        get: operations["list_audit_events_api_v1_admin_audit_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AccountantPackageStatusResponse */
+        AccountantPackageStatusResponse: {
+            /** Year */
+            year: number;
+            /** Month */
+            month: number;
+            /** Invoice Count */
+            invoice_count: number;
+            /** Expense Line Count */
+            expense_line_count: number;
+            /** Totals */
+            totals: components["schemas"]["AccountantPackageTotalResponse"][];
+            /** Draft Invoice Count */
+            draft_invoice_count: number;
+            /** Unapproved Expense Report Count */
+            unapproved_expense_report_count: number;
+            /** Uninvoiced Sent Period Count */
+            uninvoiced_sent_period_count: number;
+        };
+        /** AccountantPackageTotalResponse */
+        AccountantPackageTotalResponse: {
+            /** Currency */
+            currency: string;
+            /** Invoiced Total */
+            invoiced_total: string;
+            /** Expense Total */
+            expense_total: string;
+        };
+        /**
+         * AuditAction
+         * @description What happened. New members are expected to be added regularly as more of the app grows
+         *     audit coverage, so this is a plain Python enum, not a Postgres one — no migration is needed to
+         *     add a value (see ``AuditEvent.action`` in ``models.py``).
+         * @enum {string}
+         */
+        AuditAction: "user.created" | "user.roles_changed" | "user.activated" | "user.deactivated" | "user.password_reset" | "user.deleted" | "customer.archived" | "customer.deleted" | "project.archived" | "project.deleted" | "billing_period.sent" | "billing_period.reopened" | "calendar.public_holidays_imported" | "backup.created" | "expense_report.approved" | "expense_report.returned" | "company.updated" | "invoice.created" | "invoice.deleted" | "invoice.issued" | "invoice.paid" | "invoice.voided";
+        /** AuditEventPageResponse */
+        AuditEventPageResponse: {
+            /** Items */
+            items: components["schemas"]["AuditEventResponse"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
+        /** AuditEventResponse */
+        AuditEventResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Actor Name */
+            actor_name: string | null;
+            action: components["schemas"]["AuditAction"];
+            /** Entity Type */
+            entity_type: string;
+            /** Entity Id */
+            entity_id: string;
+            /** Summary */
+            summary: string;
+            /** Details */
+            details: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /** BackupListResponse */
+        BackupListResponse: {
+            /** Backups */
+            backups: components["schemas"]["BackupResponse"][];
+            /** Last Backup At */
+            last_backup_at: string | null;
+        };
+        /** BackupResponse */
+        BackupResponse: {
+            /** Name */
+            name: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Revision */
+            revision: string | null;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Attachments Size Bytes */
+            attachments_size_bytes: number | null;
+        };
         /** BillingAddressRequest */
         BillingAddressRequest: {
             /** Line1 */
@@ -837,6 +1439,66 @@ export interface components {
             /** Is Active */
             is_active?: boolean | null;
         };
+        /** BillingPeriodListItemResponse */
+        BillingPeriodListItemResponse: {
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Project Name */
+            project_name: string;
+            /** Customer Name */
+            customer_name: string;
+            /**
+             * Period Start
+             * Format: date
+             */
+            period_start: string;
+            /**
+             * Period End
+             * Format: date
+             */
+            period_end: string;
+            /**
+             * Sent At
+             * Format: date-time
+             */
+            sent_at: string;
+            /**
+             * Sent By Id
+             * Format: uuid
+             */
+            sent_by_id: string;
+            /** Sent By Name */
+            sent_by_name: string;
+            /** Invoice Id */
+            invoice_id: string | null;
+        };
+        /** BillingPeriodPageResponse */
+        BillingPeriodPageResponse: {
+            /** Items */
+            items: components["schemas"]["BillingPeriodListItemResponse"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
+        /** BillingPeriodRefRequest */
+        BillingPeriodRefRequest: {
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /**
+             * Period Start
+             * Format: date
+             */
+            period_start: string;
+        };
         /**
          * BillingPeriodRequest
          * @description Consecutive billing periods of ``interval_count`` ``interval_unit``s from ``anchor_date``.
@@ -866,16 +1528,26 @@ export interface components {
          * BillingPeriodStatus
          * @description A project's month, for the manager's billing handoff. No ``ProjectBillingPeriod`` row yet
          *     (added alongside ``SendProjectMonthToBilling``) means ``NOT_READY``/``READY``; ``SENT`` is set
-         *     once one exists.
+         *     once one exists. ``NOT_BILLABLE`` overrides all of that for an internal project
+         *     (``projects.ProjectDTO.is_internal``), which can never be sent.
          * @enum {string}
          */
-        BillingPeriodStatus: "not_ready" | "ready" | "sent";
+        BillingPeriodStatus: "not_ready" | "ready" | "sent" | "not_billable";
         /**
          * BillingUnit
          * @description What a billing item's quantity is measured in. Immutable once the item exists.
          * @enum {string}
          */
         BillingUnit: "hour" | "day" | "amount";
+        /** Body_add_expense_attachment_api_v1_expenses_reports__report_id__attachments_post */
+        Body_add_expense_attachment_api_v1_expenses_reports__report_id__attachments_post: {
+            /** File */
+            file: string;
+            /** File Name */
+            file_name?: string | null;
+            /** Line Id */
+            line_id?: string | null;
+        };
         /** Body_login_api_v1_auth_login_post */
         Body_login_api_v1_auth_login_post: {
             /** Grant Type */
@@ -899,6 +1571,11 @@ export interface components {
              * Format: password
              */
             client_secret?: string | null;
+        };
+        /** Body_set_company_logo_api_v1_company_logo_put */
+        Body_set_company_logo_api_v1_company_logo_put: {
+            /** File */
+            file: string;
         };
         /** CalendarDayHoursResponse */
         CalendarDayHoursResponse: {
@@ -939,8 +1616,199 @@ export interface components {
             /** Hours */
             hours: string;
         };
+        /** @enum {string} */
+        ClearableInvoiceField: "vat_rate" | "vat_note" | "your_reference" | "notes";
+        /** CompanyAddressRequest */
+        CompanyAddressRequest: {
+            /**
+             * Street
+             * @default
+             */
+            street: string;
+            /** Street2 */
+            street2?: string | null;
+            /**
+             * Postal Code
+             * @default
+             */
+            postal_code: string;
+            /**
+             * City
+             * @default
+             */
+            city: string;
+            /**
+             * Country
+             * @description ISO 3166-1 alpha-2 country code, or "" if not yet set
+             * @default
+             * @example SE
+             */
+            country: string;
+        };
+        /** CompanyAddressResponse */
+        CompanyAddressResponse: {
+            /** Street */
+            street: string;
+            /** Street2 */
+            street2: string | null;
+            /** Postal Code */
+            postal_code: string;
+            /** City */
+            city: string;
+            /** Country */
+            country: string;
+        };
+        /** CompanySettingsResponse */
+        CompanySettingsResponse: {
+            /** Legal Name */
+            legal_name: string;
+            /** Org Number */
+            org_number: string;
+            /** Vat Number */
+            vat_number: string;
+            address: components["schemas"]["CompanyAddressResponse"];
+            /** Email */
+            email: string;
+            /** Phone */
+            phone: string;
+            /** Registered Office */
+            registered_office: string;
+            /** Bankgiro */
+            bankgiro: string;
+            /** Iban */
+            iban: string;
+            /** Bic */
+            bic: string;
+            /** F Tax Approved */
+            f_tax_approved: boolean;
+            /** Default Invoice Locale */
+            default_invoice_locale: string;
+            /** Late Interest */
+            late_interest: string;
+            /** Invoice Number Prefix */
+            invoice_number_prefix: string;
+            /** Next Invoice Number */
+            next_invoice_number: number;
+            /** Allow Self Review */
+            allow_self_review: boolean;
+            /** Has Logo */
+            has_logo: boolean;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * CompanySettingsUpdateRequest
+         * @description A full replace of the settings row — the admin page always submits the whole form.
+         */
+        CompanySettingsUpdateRequest: {
+            /**
+             * Legal Name
+             * @default
+             */
+            legal_name: string;
+            /**
+             * Org Number
+             * @default
+             */
+            org_number: string;
+            /**
+             * Vat Number
+             * @default
+             */
+            vat_number: string;
+            address?: components["schemas"]["CompanyAddressRequest"];
+            /**
+             * Email
+             * @default
+             */
+            email: string | "";
+            /**
+             * Phone
+             * @default
+             */
+            phone: string;
+            /**
+             * Registered Office
+             * @default
+             */
+            registered_office: string;
+            /**
+             * Bankgiro
+             * @default
+             */
+            bankgiro: string;
+            /**
+             * Iban
+             * @default
+             */
+            iban: string;
+            /**
+             * Bic
+             * @default
+             */
+            bic: string;
+            /**
+             * F Tax Approved
+             * @default false
+             */
+            f_tax_approved: boolean;
+            /** @default sv */
+            default_invoice_locale: components["schemas"]["InvoiceLocale"];
+            /**
+             * Late Interest
+             * @default
+             */
+            late_interest: string;
+            /**
+             * Invoice Number Prefix
+             * @default
+             */
+            invoice_number_prefix: string;
+            /**
+             * Next Invoice Number
+             * @default 1
+             */
+            next_invoice_number: number;
+            /**
+             * Allow Self Review
+             * @default false
+             */
+            allow_self_review: boolean;
+        };
+        /** CreateExpenseReportRequest */
+        CreateExpenseReportRequest: {
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Year */
+            year: number;
+            /** Month */
+            month: number;
+        };
+        /** CreateInvoiceDraftRequest */
+        CreateInvoiceDraftRequest: {
+            /**
+             * Customer Id
+             * Format: uuid
+             */
+            customer_id: string;
+            /** Periods */
+            periods: components["schemas"]["BillingPeriodRefRequest"][];
+        };
         /** CurrencyAmountResponse */
         CurrencyAmountResponse: {
+            /** Currency */
+            currency: string;
+            /** Amount */
+            amount: string;
+        };
+        /** CurrencyTotalResponse */
+        CurrencyTotalResponse: {
             /** Currency */
             currency: string;
             /** Amount */
@@ -971,6 +1839,22 @@ export interface components {
             payment_terms_days: number;
             /** Notes */
             notes?: string | null;
+            /**
+             * Vat Rate
+             * @description Null prints no VAT line
+             */
+            vat_rate?: number | string | null;
+            /** Vat Note */
+            vat_note?: string | null;
+            /**
+             * Invoice Locale
+             * @description Falls back to the company's default when null
+             */
+            invoice_locale?: ("sv" | "en") | null;
+            /** Customer Number */
+            customer_number?: string | null;
+            /** Your Reference */
+            your_reference?: string | null;
         };
         /** CustomerPageResponse */
         CustomerPageResponse: {
@@ -1008,6 +1892,16 @@ export interface components {
             notes: string | null;
             /** Is Active */
             is_active: boolean;
+            /** Vat Rate */
+            vat_rate: string | null;
+            /** Vat Note */
+            vat_note: string | null;
+            /** Invoice Locale */
+            invoice_locale: string | null;
+            /** Customer Number */
+            customer_number: string | null;
+            /** Your Reference */
+            your_reference: string | null;
             /**
              * Created At
              * Format: date-time
@@ -1023,8 +1917,9 @@ export interface components {
          * CustomerUpdateRequest
          * @description Partial update: omitted fields are left unchanged.
          *
-         *     ``null`` clears ``legal_name``, ``tax_id``, ``billing_email`` or ``notes``; it is rejected for
-         *     the other fields. ``billing_address`` and ``billing_period`` replace the whole object.
+         *     ``null`` clears ``legal_name``, ``tax_id``, ``billing_email``, ``notes``, ``vat_rate``,
+         *     ``vat_note``, ``invoice_locale``, ``customer_number`` or ``your_reference``; it is rejected
+         *     for the other fields. ``billing_address`` and ``billing_period`` replace the whole object.
          */
         CustomerUpdateRequest: {
             /** Name */
@@ -1045,6 +1940,258 @@ export interface components {
             notes?: string | null;
             /** Is Active */
             is_active?: boolean | null;
+            /** Vat Rate */
+            vat_rate?: number | string | null;
+            /** Vat Note */
+            vat_note?: string | null;
+            /** Invoice Locale */
+            invoice_locale?: ("sv" | "en") | null;
+            /** Customer Number */
+            customer_number?: string | null;
+            /** Your Reference */
+            your_reference?: string | null;
+        };
+        /** DatabaseStatusResponse */
+        DatabaseStatusResponse: {
+            /** Server Version */
+            server_version: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Connection Count */
+            connection_count: number;
+            /** Current Revision */
+            current_revision: string | null;
+            /** Head Revision */
+            head_revision: string | null;
+            /** Migrations Pending */
+            migrations_pending: boolean;
+        };
+        /** ExpenseAttachmentResponse */
+        ExpenseAttachmentResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Line Id */
+            line_id: string | null;
+            /** File Name */
+            file_name: string;
+            /** Content Type */
+            content_type: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Uploaded By Name */
+            uploaded_by_name: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** ExpenseBillingItemResponse */
+        ExpenseBillingItemResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            preset: components["schemas"]["BillingItemPreset"] | null;
+            /** Name */
+            name: string;
+            unit: components["schemas"]["BillingUnit"];
+            /** Unit Rate */
+            unit_rate: string | null;
+            /** Markup Percent */
+            markup_percent: string | null;
+            /** Position */
+            position: number;
+            /** Is Active */
+            is_active: boolean;
+        };
+        /** ExpenseCustomerResponse */
+        ExpenseCustomerResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Currency */
+            currency: string;
+        };
+        /**
+         * ExpenseLineChangeRequest
+         * @description One line's new value. ``line_id`` given updates that line; omitted (or ``null``), it
+         *     creates a new one.
+         */
+        ExpenseLineChangeRequest: {
+            /** Line Id */
+            line_id?: string | null;
+            /**
+             * Billing Item Id
+             * Format: uuid
+             */
+            billing_item_id: string;
+            /**
+             * Expense Date
+             * Format: date
+             */
+            expense_date: string;
+            /** Amount */
+            amount: number | string;
+            /** Description */
+            description: string;
+            /** Vendor */
+            vendor?: string | null;
+            /** Document No */
+            document_no?: string | null;
+        };
+        /** ExpenseLineResponse */
+        ExpenseLineResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Expense Date
+             * Format: date
+             */
+            expense_date: string;
+            billing_item: components["schemas"]["ExpenseBillingItemResponse"];
+            /** Amount */
+            amount: string;
+            /** Description */
+            description: string;
+            /** Vendor */
+            vendor: string | null;
+            /** Document No */
+            document_no: string | null;
+        };
+        /** ExpenseOptionResponse */
+        ExpenseOptionResponse: {
+            project: components["schemas"]["ExpenseProjectResponse"];
+            /** Billing Items */
+            billing_items: components["schemas"]["ExpenseBillingItemResponse"][];
+        };
+        /** ExpenseProjectResponse */
+        ExpenseProjectResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            customer: components["schemas"]["ExpenseCustomerResponse"];
+            /** Name */
+            name: string;
+            /** Is Active */
+            is_active: boolean;
+        };
+        /** ExpenseReportResponse */
+        ExpenseReportResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            project: components["schemas"]["ExpenseProjectResponse"];
+            user: components["schemas"]["ExpenseUserResponse"];
+            /**
+             * Period Start
+             * Format: date
+             */
+            period_start: string;
+            /**
+             * Period End
+             * Format: date
+             */
+            period_end: string;
+            status: components["schemas"]["ExpenseReportStatus"];
+            /** Submitted At */
+            submitted_at: string | null;
+            /** Reviewed At */
+            reviewed_at: string | null;
+            /** Reviewed By Name */
+            reviewed_by_name: string | null;
+            /** Return Comment */
+            return_comment: string | null;
+            /** Locked At */
+            locked_at: string | null;
+            /** Can Edit */
+            can_edit: boolean;
+            /** Can Submit */
+            can_submit: boolean;
+            /** Can Review */
+            can_review: boolean;
+            /** Is Locked */
+            is_locked: boolean;
+            /** Total */
+            total: string;
+            /** Lines */
+            lines: components["schemas"]["ExpenseLineResponse"][];
+            /** Attachments */
+            attachments: components["schemas"]["ExpenseAttachmentResponse"][];
+        };
+        /**
+         * ExpenseReportStatus
+         * @description A report's place in the submit/review workflow.
+         *
+         *     Unlike ``timesheets.TimesheetWeekStatus``, ``DRAFT`` *is* persisted: the document (and its
+         *     lines and attachments) must exist before it has anything to submit, so there is no "no row
+         *     means draft" shortcut here.
+         * @enum {string}
+         */
+        ExpenseReportStatus: "draft" | "submitted" | "approved" | "returned";
+        /**
+         * ExpenseReportSummaryResponse
+         * @description One row of a list view (``GET /expenses/reports``, ``GET /expenses/submissions``).
+         */
+        ExpenseReportSummaryResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            project: components["schemas"]["ExpenseProjectResponse"];
+            user: components["schemas"]["ExpenseUserResponse"];
+            /**
+             * Period Start
+             * Format: date
+             */
+            period_start: string;
+            /**
+             * Period End
+             * Format: date
+             */
+            period_end: string;
+            status: components["schemas"]["ExpenseReportStatus"];
+            /** Submitted At */
+            submitted_at: string | null;
+            /** Total */
+            total: string;
+            /** Line Count */
+            line_count: number;
+        };
+        /** ExpenseUserResponse */
+        ExpenseUserResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Email */
+            email: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1081,6 +2228,259 @@ export interface components {
         ImportHolidaysResponse: {
             /** Added */
             added: number;
+        };
+        /** InvoiceCustomerResponse */
+        InvoiceCustomerResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Currency */
+            currency: string;
+        };
+        /**
+         * InvoiceLineChangeRequest
+         * @description One line's new value. ``line_id`` given updates that line (whatever its ``kind``); omitted
+         *     (or ``null``), it creates a new manual line.
+         */
+        InvoiceLineChangeRequest: {
+            /** Line Id */
+            line_id?: string | null;
+            /** Description */
+            description: string;
+            /** Quantity */
+            quantity: number | string;
+            /** Unit */
+            unit: string;
+            /** Unit Price */
+            unit_price: number | string;
+        };
+        /**
+         * InvoiceLineKind
+         * @description Where a line came from. ``TIME`` and ``EXPENSE`` lines are generated by
+         *     ``CreateInvoiceDraft`` from a billing period's export rows (see
+         *     ``timesheets.contracts.GetBillingPeriodExportRows``); ``MANUAL`` lines are added free-form
+         *     while the invoice is a draft.
+         * @enum {string}
+         */
+        InvoiceLineKind: "time" | "expense" | "manual";
+        /** InvoiceLineResponse */
+        InvoiceLineResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Position */
+            position: number;
+            kind: components["schemas"]["InvoiceLineKind"];
+            /** Description */
+            description: string;
+            /** Quantity */
+            quantity: string;
+            /** Unit */
+            unit: string;
+            /** Unit Price */
+            unit_price: string;
+            /** Amount */
+            amount: string;
+            /** Project Id */
+            project_id: string | null;
+            /** Billing Item Id */
+            billing_item_id: string | null;
+        };
+        /** @enum {string} */
+        InvoiceLocale: "sv" | "en";
+        /** InvoicePageResponse */
+        InvoicePageResponse: {
+            /** Items */
+            items: components["schemas"]["InvoiceSummaryResponse"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
+        /** InvoicePeriodResponse */
+        InvoicePeriodResponse: {
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Project Name */
+            project_name: string;
+            /**
+             * Period Start
+             * Format: date
+             */
+            period_start: string;
+        };
+        /** InvoiceResponse */
+        InvoiceResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            customer: components["schemas"]["InvoiceCustomerResponse"];
+            status: components["schemas"]["InvoiceStatus"];
+            /** Number */
+            number: string | null;
+            /**
+             * Invoice Date
+             * Format: date
+             */
+            invoice_date: string;
+            /**
+             * Due Date
+             * Format: date
+             */
+            due_date: string;
+            /** Currency */
+            currency: string;
+            /** Locale */
+            locale: string;
+            /** Vat Rate */
+            vat_rate: string | null;
+            /** Vat Note */
+            vat_note: string | null;
+            /** Your Reference */
+            your_reference: string | null;
+            /** Notes */
+            notes: string | null;
+            /** Subtotal */
+            subtotal: string;
+            /** Vat Amount */
+            vat_amount: string;
+            /** Total */
+            total: string;
+            /** Issued At */
+            issued_at: string | null;
+            /** Paid On */
+            paid_on: string | null;
+            /** Voided At */
+            voided_at: string | null;
+            /** Void Reason */
+            void_reason: string | null;
+            /** Lines */
+            lines: components["schemas"]["InvoiceLineResponse"][];
+            /** Periods */
+            periods: components["schemas"]["InvoicePeriodResponse"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * InvoiceStatus
+         * @description An invoice's place in its lifecycle. ``DRAFT`` is mutable (header and lines);
+         *     ``IssueInvoice`` moves it to ``ISSUED``, at which point it becomes immutable — only
+         *     ``MarkInvoicePaid`` (→ ``PAID``) and ``VoidInvoice`` (→ ``VOID``, from ``ISSUED`` or ``PAID``)
+         *     still change it, and only ``paid_on``/``voided_at``/``void_reason``.
+         * @enum {string}
+         */
+        InvoiceStatus: "draft" | "issued" | "paid" | "void";
+        /**
+         * InvoiceSummaryResponse
+         * @description One row of a list view (``GET /invoices``).
+         */
+        InvoiceSummaryResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Customer Id
+             * Format: uuid
+             */
+            customer_id: string;
+            /** Customer Name */
+            customer_name: string;
+            status: components["schemas"]["InvoiceStatus"];
+            /** Number */
+            number: string | null;
+            /**
+             * Invoice Date
+             * Format: date
+             */
+            invoice_date: string;
+            /**
+             * Due Date
+             * Format: date
+             */
+            due_date: string;
+            /** Currency */
+            currency: string;
+            /** Total */
+            total: string;
+        };
+        /** InvoiceableCustomerResponse */
+        InvoiceableCustomerResponse: {
+            /**
+             * Customer Id
+             * Format: uuid
+             */
+            customer_id: string;
+            /** Customer Name */
+            customer_name: string;
+            /** Currency */
+            currency: string;
+            /** Periods */
+            periods: components["schemas"]["InvoiceablePeriodResponse"][];
+        };
+        /** InvoiceablePeriodResponse */
+        InvoiceablePeriodResponse: {
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Project Name */
+            project_name: string;
+            /**
+             * Period Start
+             * Format: date
+             */
+            period_start: string;
+            /**
+             * Period End
+             * Format: date
+             */
+            period_end: string;
+            /**
+             * Sent At
+             * Format: date-time
+             */
+            sent_at: string;
+        };
+        /** InvoicingSummaryResponse */
+        InvoicingSummaryResponse: {
+            /** Periods To Invoice */
+            periods_to_invoice: number;
+            /** Unpaid Totals */
+            unpaid_totals: components["schemas"]["CurrencyTotalResponse"][];
+            /** Overdue Count */
+            overdue_count: number;
+        };
+        /** MarkInvoicePaidRequest */
+        MarkInvoicePaidRequest: {
+            /**
+             * Paid On
+             * Format: date
+             */
+            paid_on: string;
         };
         /** MonthCalendarResponse */
         MonthCalendarResponse: {
@@ -1251,6 +2651,8 @@ export interface components {
             sent_by: components["schemas"]["TimesheetUserResponse"] | null;
             /** Blocking Weeks */
             blocking_weeks: number;
+            /** Blocking Reports */
+            blocking_reports: number;
             /** Weeks In Scope */
             weeks_in_scope: number;
             hours: components["schemas"]["HoursTotalsResponse"];
@@ -1275,6 +2677,11 @@ export interface components {
              * @default 8.00
              */
             normal_working_hours: number | string;
+            /**
+             * Is Internal
+             * @default false
+             */
+            is_internal: boolean;
             /** Manager Id */
             manager_id?: string | null;
         };
@@ -1367,6 +2774,8 @@ export interface components {
             is_active: boolean;
             /** Normal Working Hours */
             normal_working_hours: string;
+            /** Is Internal */
+            is_internal: boolean;
             manager: components["schemas"]["ProjectManagerResponse"] | null;
             /**
              * Created At
@@ -1384,7 +2793,8 @@ export interface components {
          * @description Partial update: omitted fields are left unchanged.
          *
          *     ``customer_id`` is immutable and not part of this request. ``null`` clears ``description`` and
-         *     ``manager_id``; it is rejected for ``name``, ``is_active`` and ``normal_working_hours``.
+         *     ``manager_id``; it is rejected for ``name``, ``is_active``, ``normal_working_hours`` and
+         *     ``is_internal``.
          */
         ProjectUpdateRequest: {
             /** Name */
@@ -1395,15 +2805,17 @@ export interface components {
             is_active?: boolean | null;
             /** Normal Working Hours */
             normal_working_hours?: number | string | null;
+            /** Is Internal */
+            is_internal?: boolean | null;
             /** Manager Id */
             manager_id?: string | null;
         };
         /**
          * RemovalBlockerKind
-         * @description What prevents a permanent delete. More kinds arrive with invoices.
+         * @description What prevents a permanent delete.
          * @enum {string}
          */
-        RemovalBlockerKind: "self" | "projects" | "time_entries";
+        RemovalBlockerKind: "self" | "projects" | "time_entries" | "invoices";
         /** RemovalCountResponse */
         RemovalCountResponse: {
             /** Kind */
@@ -1437,6 +2849,11 @@ export interface components {
         RemovalResponse: {
             outcome: components["schemas"]["RemovalOutcome"];
         };
+        /** ReturnExpenseReportRequest */
+        ReturnExpenseReportRequest: {
+            /** Comment */
+            comment: string;
+        };
         /** ReturnTimesheetWeekRequest */
         ReturnTimesheetWeekRequest: {
             /** Comment */
@@ -1455,6 +2872,19 @@ export interface components {
             billing_item_id: string;
             /** Comment */
             comment?: string | null;
+        };
+        /** SaveExpenseReportLinesRequest */
+        SaveExpenseReportLinesRequest: {
+            /**
+             * Lines
+             * @default []
+             */
+            lines: components["schemas"]["ExpenseLineChangeRequest"][];
+            /**
+             * Delete Line Ids
+             * @default []
+             */
+            delete_line_ids: string[];
         };
         /** SaveTimesheetWeekRequest */
         SaveTimesheetWeekRequest: {
@@ -1492,6 +2922,66 @@ export interface components {
              * @description Session lifetime in seconds
              */
             expires_in: number;
+        };
+        /** SetAttachmentLineRequest */
+        SetAttachmentLineRequest: {
+            /** Line Id */
+            line_id: string | null;
+        };
+        /** SystemConfigResponse */
+        SystemConfigResponse: {
+            /** App Name */
+            app_name: string;
+            /** Debug */
+            debug: boolean;
+            /** Cors Origins */
+            cors_origins: string[];
+            /** Access Token Expire Minutes */
+            access_token_expire_minutes: number;
+            /** Auth Cookie Secure */
+            auth_cookie_secure: boolean;
+            /** Holiday Country */
+            holiday_country: string;
+            /** Holiday Subdivision */
+            holiday_subdivision: string | null;
+            /** Daily Working Hours */
+            daily_working_hours: string;
+            /** Backup Dir */
+            backup_dir: string;
+            /** Backup Retention Count */
+            backup_retention_count: number;
+            /** Backup Timeout Seconds */
+            backup_timeout_seconds: number;
+            /** Attachment Dir */
+            attachment_dir: string;
+            /** Attachment Max Bytes */
+            attachment_max_bytes: number;
+        };
+        /** SystemStatusResponse */
+        SystemStatusResponse: {
+            /** Backend Version */
+            backend_version: string;
+            /** Git Sha */
+            git_sha: string | null;
+            database: components["schemas"]["DatabaseStatusResponse"];
+            /** Tables */
+            tables: components["schemas"]["TableStatsResponse"][];
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Uptime Seconds */
+            uptime_seconds: number;
+            /** Last Backup At */
+            last_backup_at: string | null;
+        };
+        /** TableStatsResponse */
+        TableStatsResponse: {
+            /** Name */
+            name: string;
+            /** Estimated Rows */
+            estimated_rows: number;
         };
         /** TeamMemberResponse */
         TeamMemberResponse: {
@@ -1755,6 +3245,37 @@ export interface components {
              */
             expires_in: number;
         };
+        /** UpdateInvoiceDraftRequest */
+        UpdateInvoiceDraftRequest: {
+            /** Invoice Date */
+            invoice_date?: string | null;
+            /** Due Date */
+            due_date?: string | null;
+            /** Vat Rate */
+            vat_rate?: number | string | null;
+            /** Vat Note */
+            vat_note?: string | null;
+            /** Your Reference */
+            your_reference?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Lines
+             * @default []
+             */
+            lines: components["schemas"]["InvoiceLineChangeRequest"][];
+            /**
+             * Delete Line Ids
+             * @default []
+             */
+            delete_line_ids: string[];
+            /**
+             * Clear Fields
+             * @description Any of: vat_rate, vat_note, your_reference, notes
+             * @default []
+             */
+            clear_fields: components["schemas"]["ClearableInvoiceField"][];
+        };
         /** UserCreateRequest */
         UserCreateRequest: {
             /** Name */
@@ -1858,6 +3379,11 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** VoidInvoiceRequest */
+        VoidInvoiceRequest: {
+            /** Reason */
+            reason: string;
         };
         /** WeekHoursResponse */
         WeekHoursResponse: {
@@ -2050,6 +3576,146 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    get_company_settings_api_v1_company_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanySettingsResponse"];
+                };
+            };
+        };
+    };
+    update_company_settings_api_v1_company_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompanySettingsUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanySettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_company_logo_api_v1_company_logo_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    set_company_logo_api_v1_company_logo_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_set_company_logo_api_v1_company_logo_put"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanySettingsResponse"];
+                };
+            };
+            /** @description The logo is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The logo type isn't allowed */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clear_company_logo_api_v1_company_logo_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanySettingsResponse"];
+                };
             };
         };
     };
@@ -3559,6 +5225,43 @@ export interface operations {
             };
         };
     };
+    list_billing_periods_api_v1_timesheets_billing_periods_get: {
+        parameters: {
+            query?: {
+                project_id?: string | null;
+                customer_id?: string | null;
+                month_from?: string | null;
+                month_to?: string | null;
+                invoiced?: boolean | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingPeriodPageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     send_project_month_to_billing_api_v1_timesheets_billing_periods_post: {
         parameters: {
             query?: never;
@@ -3580,6 +5283,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ProjectBillingPeriodResponse"];
                 };
+            };
+            /** @description The project is internal and never billed */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description User not found */
             404: {
@@ -3624,6 +5334,52 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description No sent period found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The period is invoiced */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_billing_period_csv_api_v1_timesheets_billing_periods__project_id___period_start__export_csv_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                period_start: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
             };
             /** @description No sent period found */
             404: {
@@ -3818,6 +5574,1104 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_expense_options_api_v1_expenses_options_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExpenseOptionResponse"][];
+                };
+            };
+        };
+    };
+    list_my_expense_reports_api_v1_expenses_reports_get: {
+        parameters: {
+            query: {
+                year: number;
+                month: number;
+                user_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExpenseReportSummaryResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_expense_report_api_v1_expenses_reports_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateExpenseReportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExpenseReportResponse"];
+                };
+            };
+            /** @description The report/lines violate an expenses rule */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_expense_report_api_v1_expenses_reports__report_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExpenseReportResponse"];
+                };
+            };
+            /** @description Report or attachment not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_expense_report_api_v1_expenses_reports__report_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Report or attachment not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The report's status does not allow this action */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_expense_report_lines_api_v1_expenses_reports__report_id__lines_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveExpenseReportLinesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExpenseReportResponse"];
+                };
+            };
+            /** @description The report/lines violate an expenses rule */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Report or attachment not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The report's status does not allow this action */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_expense_report_api_v1_expenses_reports__report_id__submit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExpenseReportResponse"];
+                };
+            };
+            /** @description Report or attachment not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The report's status does not allow this action */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_expense_report_api_v1_expenses_reports__report_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExpenseReportResponse"];
+                };
+            };
+            /** @description Report or attachment not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The report's status does not allow this action */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    return_expense_report_api_v1_expenses_reports__report_id__return_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReturnExpenseReportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExpenseReportResponse"];
+                };
+            };
+            /** @description The report/lines violate an expenses rule */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Report or attachment not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The report's status does not allow this action */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_submitted_expense_reports_api_v1_expenses_submissions_get: {
+        parameters: {
+            query?: {
+                scope?: "mine" | "all";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExpenseReportSummaryResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_expense_attachment_api_v1_expenses_reports__report_id__attachments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_add_expense_attachment_api_v1_expenses_reports__report_id__attachments_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExpenseAttachmentResponse"];
+                };
+            };
+            /** @description Report or attachment not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The report's status does not allow this action */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The file is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The file type isn't allowed */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_expense_attachment_api_v1_expenses_attachments__attachment_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Report or attachment not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_expense_attachment_api_v1_expenses_attachments__attachment_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Report or attachment not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The report's status does not allow this action */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_expense_attachment_line_api_v1_expenses_attachments__attachment_id__line_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetAttachmentLineRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExpenseAttachmentResponse"];
+                };
+            };
+            /** @description Report or attachment not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The report's status does not allow this action */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_invoiceable_periods_api_v1_invoices_invoiceable_periods_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceableCustomerResponse"][];
+                };
+            };
+        };
+    };
+    get_invoicing_summary_api_v1_invoices_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoicingSummaryResponse"];
+                };
+            };
+        };
+    };
+    list_invoices_api_v1_invoices_get: {
+        parameters: {
+            query?: {
+                customer_id?: string | null;
+                status?: components["schemas"]["InvoiceStatus"] | null;
+                date_from?: string | null;
+                date_to?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoicePageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_invoice_draft_api_v1_invoices_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateInvoiceDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceResponse"];
+                };
+            };
+            /** @description The draft violates an invoicing rule */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_invoice_api_v1_invoices__invoice_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invoice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceResponse"];
+                };
+            };
+            /** @description Invoice not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_invoice_draft_api_v1_invoices__invoice_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invoice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateInvoiceDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceResponse"];
+                };
+            };
+            /** @description Invoice not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The invoice is not a draft */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_invoice_draft_api_v1_invoices__invoice_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invoice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invoice not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The invoice is not a draft */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    issue_invoice_api_v1_invoices__invoice_id__issue_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invoice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceResponse"];
+                };
+            };
+            /** @description The draft violates an invoicing rule */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invoice not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The invoice is not a draft */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_invoice_paid_api_v1_invoices__invoice_id__pay_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invoice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkInvoicePaidRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceResponse"];
+                };
+            };
+            /** @description Invoice not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The invoice is not a draft */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    void_invoice_api_v1_invoices__invoice_id__void_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invoice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoidInvoiceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceResponse"];
+                };
+            };
+            /** @description Invoice not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The invoice is not a draft */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_invoice_pdf_api_v1_invoices__invoice_id__pdf_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invoice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Invoice not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_accountant_package_status_api_v1_accounting_packages__year___month__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                year: number;
+                month: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountantPackageStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_accountant_package_api_v1_accounting_packages__year___month__zip_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                year: number;
+                month: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
             };
             /** @description Validation Error */
             422: {
@@ -4080,6 +6934,155 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_system_status_api_v1_admin_system_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemStatusResponse"];
+                };
+            };
+        };
+    };
+    get_system_config_api_v1_admin_system_config_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemConfigResponse"];
+                };
+            };
+        };
+    };
+    list_backups_api_v1_admin_backups_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupListResponse"];
+                };
+            };
+        };
+    };
+    create_backup_api_v1_admin_backups_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupResponse"];
+                };
+            };
+        };
+    };
+    download_backup_api_v1_admin_backups__name__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_audit_events_api_v1_admin_audit_events_get: {
+        parameters: {
+            query?: {
+                action?: components["schemas"]["AuditAction"] | null;
+                entity_type?: string | null;
+                entity_id?: string | null;
+                actor_id?: string | null;
+                occurred_from?: string | null;
+                occurred_to?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditEventPageResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

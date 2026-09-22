@@ -15,7 +15,10 @@ Backend: `modules/projects`.
   callback lets the admin page stay put instead of navigating to the new project. A searchable,
   clearable "Manager" picker (`useUserDirectory` with `roles: ["manager"]`)
   sets/clears `manager_id`, keeping the current manager selectable even when a search narrows the
-  directory past them.
+  directory past them. An "Internal project" checkbox sets `is_internal` (default unchecked); an
+  internal project shows a violet "Internal" badge next to its status badge on all three of these
+  pages, and `timesheets/ProjectBillingCard.tsx`/`pages/TeamPage.tsx` report its month as "Internal
+  — not billed" instead of a billing status — see `timesheets/CLAUDE.md`'s "Manager views".
 - `BillingItemFormModal.tsx` — create/edit a billing item; the unit is locked once editing, and its
   rate/markup field swaps by unit.
 

@@ -9,11 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from time_reporting.modules.customers.contracts import (
     CLEARABLE_CUSTOMER_FIELDS,
+    INVOICE_LOCALES,
     BillingAddressDTO,
     BillingPeriodDTO,
     CreateCustomer,
     CustomerNameAlreadyExistsError,
     CustomerNotFoundError,
+    InvalidInvoiceLocaleError,
     UpdateCustomer,
 )
 from time_reporting.modules.customers.models import Customer
@@ -32,6 +34,7 @@ class CustomerService:
 
     async def create_customer(self, data: CreateCustomer) -> Customer:
         await self._ensure_name_available(data.name)
+        _validate_invoice_locale(data.invoice_locale)
         customer = Customer(
             name=data.name,
             legal_name=data.legal_name,
@@ -40,6 +43,11 @@ class CustomerService:
             currency=data.currency.upper(),
             payment_terms_days=data.payment_terms_days,
             notes=data.notes,
+            vat_rate=data.vat_rate,
+            vat_note=data.vat_note,
+            invoice_locale=data.invoice_locale,
+            customer_number=data.customer_number,
+            your_reference=data.your_reference,
         )
         _set_billing_address(customer, data.billing_address)
         _set_billing_period(customer, data.billing_period)
@@ -48,6 +56,8 @@ class CustomerService:
 
     async def update_customer(self, data: UpdateCustomer) -> Customer:
         customer = await self.get_customer(data.customer_id)
+        if "invoice_locale" not in data.clear_fields:
+            _validate_invoice_locale(data.invoice_locale)
 
         if data.name is not None and data.name != customer.name:
             await self._ensure_name_available(data.name)
@@ -91,3 +101,8 @@ def _set_billing_period(customer: Customer, period: BillingPeriodDTO) -> None:
     customer.billing_interval_count = period.interval_count
     customer.billing_interval_unit = period.interval_unit
     customer.billing_anchor_date = period.anchor_date
+
+
+def _validate_invoice_locale(locale: str | None) -> None:
+    if locale is not None and locale not in INVOICE_LOCALES:
+        raise InvalidInvoiceLocaleError(locale)

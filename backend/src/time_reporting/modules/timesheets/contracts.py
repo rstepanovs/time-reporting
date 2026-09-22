@@ -12,6 +12,7 @@ from uuid import UUID
 
 from time_reporting.core.cqrs import Command, Query
 from time_reporting.modules.projects.contracts import (
+    BillingUnit,
     ProjectBillingItemDTO,
     ProjectDTO,
     ProjectOptionDTO,
@@ -250,11 +251,13 @@ class TimesheetWeekSummaryDTO:
 class BillingPeriodStatus(StrEnum):
     """A project's month, for the manager's billing handoff. No ``ProjectBillingPeriod`` row yet
     (added alongside ``SendProjectMonthToBilling``) means ``NOT_READY``/``READY``; ``SENT`` is set
-    once one exists."""
+    once one exists. ``NOT_BILLABLE`` overrides all of that for an internal project
+    (``projects.ProjectDTO.is_internal``), which can never be sent."""
 
     NOT_READY = "not_ready"
     READY = "ready"
     SENT = "sent"
+    NOT_BILLABLE = "not_billable"
 
 
 class TeamMemberWarning(StrEnum):
@@ -307,7 +310,9 @@ class ProjectBillingPeriodDTO:
 
     ``weeks_in_scope`` is the number of distinct (user, ISO week) pairs with at least one entry on
     this project dated inside the month; ``blocking_weeks`` is how many of those aren't
-    ``approved`` yet. ``READY`` requires at least one week in scope and none blocking.
+    ``approved`` yet. ``blocking_reports`` is, likewise, how many of the project's expense reports
+    for the month aren't ``approved`` yet (see ``expenses.contracts.ExpenseReportStatus``).
+    ``READY`` requires at least one week or report in scope and none blocking.
     """
 
     project_id: UUID
@@ -317,10 +322,37 @@ class ProjectBillingPeriodDTO:
     sent_at: datetime | None
     sent_by: UserDTO | None
     blocking_weeks: int
+    blocking_reports: int
     weeks_in_scope: int
     hours: HoursTotalsDTO
     per_diem_days: Decimal
     expenses: tuple[CurrencyAmountDTO, ...]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class BillingPeriodListItemDTO:
+    """One sent billing period, flattened for the admin billing list — project/customer/sender
+    names inline rather than the full ``ProjectBillingPeriodDTO`` (status/hours/expenses), which
+    the list doesn't need. ``invoice_id`` is ``None`` until the future ``invoices`` module marks it
+    via ``MarkBillingPeriodsInvoiced``."""
+
+    project_id: UUID
+    project_name: str
+    customer_name: str
+    period_start: date
+    period_end: date
+    sent_at: datetime
+    sent_by_id: UUID
+    sent_by_name: str
+    invoice_id: UUID | None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class BillingPeriodPageDTO:
+    items: tuple[BillingPeriodListItemDTO, ...]
+    total: int
+    limit: int
+    offset: int
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -458,6 +490,59 @@ class GetTeamMonthOverview(Query[TeamMonthOverviewDTO]):
     today: date
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ListBillingPeriods(Query[BillingPeriodPageDTO]):
+    """Sent billing periods for the admin billing list, newest ``sent_at`` first.
+
+    ``month_from``/``month_to`` filter on ``period_start`` (always the first of a calendar month),
+    inclusive on both ends. ``customer_id`` matches periods whose project belongs to that customer
+    — resolved via ``projects.ListProjects``, since ``ProjectBillingPeriod`` has no customer id of
+    its own — combined with ``project_id`` if both are given. ``invoiced`` filters on whether
+    ``invoice_id`` is set (``None`` means no filter) — used by the future ``invoices`` module's
+    ``ListInvoiceablePeriods``.
+    """
+
+    project_id: UUID | None = None
+    customer_id: UUID | None = None
+    month_from: date | None = None
+    month_to: date | None = None
+    invoiced: bool | None = None
+    limit: int
+    offset: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class BillingPeriodExportRowDTO:
+    """One row of a sent billing period's CSV export — either a time entry or an approved
+    expense-report line, shaped identically so the two sources appear in one sheet.
+    ``currency``/``vendor``/``document_no`` are only set for an expense-line row; a time-entry row
+    carries ``note`` (if any) as ``description`` instead. ``project_id``/``billing_item_id`` are
+    carried so the future ``invoices`` module can aggregate lines from this same query instead of a
+    separate one."""
+
+    entry_date: date
+    user_name: str
+    user_email: str
+    project_id: UUID
+    billing_item_id: UUID
+    billing_item_name: str
+    unit: BillingUnit
+    quantity: Decimal
+    currency: str | None
+    description: str | None
+    vendor: str | None
+    document_no: str | None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetBillingPeriodExportRows(Query[tuple[BillingPeriodExportRowDTO, ...]]):
+    """The rows behind a sent billing period's CSV export. Raises ``BillingPeriodNotFoundError`` if
+    no sent period exists for ``project_id``/``period_start``."""
+
+    project_id: UUID
+    period_start: date
+
+
 # --- Commands ---
 
 
@@ -488,8 +573,9 @@ class SaveTimesheetWeek(Command[TimesheetWeekDTO]):
     unchanged (the bus also rolls back the whole command on any exception). Raises
     ``WeekStartNotMondayError``, ``EntryDateOutsideWeekError``, ``DuplicateChangeError``,
     ``TimesheetBillingItemNotFoundError``, ``TimesheetRowClosedError``,
-    ``QuantityOutOfRangeError``, ``DailyHoursExceededError`` or ``TimesheetWeekLockedError`` (the
-    week is submitted or approved).
+    ``TimesheetUnitNotAllowedError`` (an ``amount`` item — claim expenses through the ``expenses``
+    module instead), ``QuantityOutOfRangeError``, ``DailyHoursExceededError`` or
+    ``TimesheetWeekLockedError`` (the week is submitted or approved).
     """
 
     user_id: UUID
@@ -510,8 +596,9 @@ class SubmitTimesheetWeek(Command[TimesheetWeekDTO]):
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ApproveTimesheetWeek(Command[TimesheetWeekDTO]):
     """Move ``user_id``'s week from submitted to approved. Raises ``WeekStartNotMondayError``,
-    ``UserNotFoundError``, ``InvalidWeekStatusTransitionError`` or ``SelfReviewError`` (nobody, not
-    even an admin, reviews their own week)."""
+    ``UserNotFoundError``, ``InvalidWeekStatusTransitionError`` or ``SelfReviewError`` (nobody
+    reviews their own week, unless ``company.allow_self_review`` is on and the reviewer holds
+    ``manager``)."""
 
     user_id: UUID
     week_start: date
@@ -522,7 +609,8 @@ class ApproveTimesheetWeek(Command[TimesheetWeekDTO]):
 class ReturnTimesheetWeek(Command[TimesheetWeekDTO]):
     """Move ``user_id``'s week from submitted/approved back to returned, with an explanatory
     ``comment``. Raises ``WeekStartNotMondayError``, ``UserNotFoundError``,
-    ``InvalidWeekStatusTransitionError``, ``SelfReviewError`` or ``ReturnCommentRequiredError``."""
+    ``InvalidWeekStatusTransitionError``, ``SelfReviewError`` (see ``ApproveTimesheetWeek``) or
+    ``ReturnCommentRequiredError``."""
 
     user_id: UUID
     week_start: date
@@ -532,9 +620,10 @@ class ReturnTimesheetWeek(Command[TimesheetWeekDTO]):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class SendProjectMonthToBilling(Command[ProjectBillingPeriodDTO]):
-    """Send ``project_id``'s ``year``/``month`` to billing: a stub that records the handoff
-    (``ProjectBillingPeriod``) and locks the period — invoicing itself doesn't exist yet. Allowed
-    on any day, not only after the month ends, and by any manager regardless of the project's
+    """Send ``project_id``'s ``year``/``month`` to billing: records the handoff
+    (``ProjectBillingPeriod``) and locks the period — drafting the invoice itself is a later,
+    separate step (``invoices.CreateInvoiceDraft``). Allowed on any day, not only after the month
+    ends, and by any manager regardless of the project's
     ``manager_id`` (the router's ``ManagerDep`` is the only check). Raises
     ``TimesheetProjectNotFoundError``, ``UserNotFoundError`` (``sent_by_id``),
     ``BillingPeriodNotReadyError`` (some week in scope isn't approved yet, or there is nothing to
@@ -550,10 +639,44 @@ class SendProjectMonthToBilling(Command[ProjectBillingPeriodDTO]):
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ReopenProjectBillingPeriod(Command[None]):
     """Delete a sent billing period, unlocking it. Admin only (enforced by the router). Raises
-    ``BillingPeriodNotFoundError``."""
+    ``BillingPeriodNotFoundError`` or ``BillingPeriodInvoicedError`` (an invoiced period must be
+    un-invoiced first — deleting a draft/void invoice, once the ``invoices`` module exists — so
+    reopening never orphans an invoice's line items)."""
 
     project_id: UUID
     period_start: date
+    actor_id: UUID
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class BillingPeriodRef:
+    """A (project, month) pair identifying a ``ProjectBillingPeriod`` row — used instead of a
+    single id since a billing period has no id of its own outside this module (its natural key is
+    the unique ``(project_id, period_start)`` pair)."""
+
+    project_id: UUID
+    period_start: date
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class MarkBillingPeriodsInvoiced(Command[None]):
+    """Nested-only: stamps ``invoice_id`` onto every one of ``periods``, executed by the future
+    ``invoices`` module's ``CreateInvoiceDraft`` in the same transaction as creating the draft.
+    Raises ``BillingPeriodNotFoundError`` if any period doesn't exist, or
+    ``BillingPeriodAlreadyInvoicedError`` if any is already marked — checked for every period
+    before any is mutated, so a rejected batch leaves every period unchanged."""
+
+    periods: tuple[BillingPeriodRef, ...]
+    invoice_id: UUID
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ClearBillingPeriodsInvoiced(Command[None]):
+    """Nested-only: clears ``invoice_id`` from every period currently marked with it — executed by
+    the future ``invoices`` module's ``DeleteInvoiceDraft``. A no-op if no period is marked with
+    this ``invoice_id``."""
+
+    invoice_id: UUID
 
 
 # --- Exceptions ---
@@ -595,6 +718,18 @@ class TimesheetRowClosedError(TimesheetError):
 
     def __init__(self, billing_item_id: UUID) -> None:
         super().__init__(f"Billing item {billing_item_id} is not open for this user")
+        self.billing_item_id = billing_item_id
+
+
+class TimesheetUnitNotAllowedError(TimesheetError):
+    """Raised when a change targets an ``amount``-unit billing item — expenses are claimed through
+    the ``expenses`` module's reports now, not the timesheet grid."""
+
+    def __init__(self, billing_item_id: UUID) -> None:
+        super().__init__(
+            f"Billing item {billing_item_id} is an expense item; claim it through an expense "
+            "report instead"
+        )
         self.billing_item_id = billing_item_id
 
 
@@ -658,14 +793,28 @@ class TimesheetProjectNotFoundError(TimesheetError):
         self.project_id = project_id
 
 
+class ProjectIsInternalError(TimesheetError):
+    """Raised by ``SendProjectMonthToBilling`` for an internal project — it is never billable."""
+
+    def __init__(self, project_id: UUID) -> None:
+        super().__init__(f"Project {project_id} is internal and cannot be sent to billing")
+        self.project_id = project_id
+
+
 class BillingPeriodNotReadyError(TimesheetError):
-    def __init__(self, blocking_weeks: int) -> None:
+    def __init__(self, blocking_weeks: int, blocking_reports: int = 0) -> None:
+        blockers = []
+        if blocking_weeks:
+            blockers.append(f"{blocking_weeks} week(s)")
+        if blocking_reports:
+            blockers.append(f"{blocking_reports} expense report(s)")
         super().__init__(
-            f"This period is not ready to send: {blocking_weeks} week(s) still need approval"
-            if blocking_weeks
-            else "This period has no time booked yet"
+            f"This period is not ready to send: {' and '.join(blockers)} still need approval"
+            if blockers
+            else "This period has no time or expenses booked yet"
         )
         self.blocking_weeks = blocking_weeks
+        self.blocking_reports = blocking_reports
 
 
 class BillingPeriodAlreadySentError(TimesheetError):
@@ -690,3 +839,28 @@ class BillingPeriodLockedError(TimesheetError):
         super().__init__(f"Project {project_id} is locked on {entry_date}: already sent to billing")
         self.project_id = project_id
         self.entry_date = entry_date
+
+
+class BillingPeriodAlreadyInvoicedError(TimesheetError):
+    """Raised by ``MarkBillingPeriodsInvoiced`` when a targeted period already carries an
+    ``invoice_id`` — a period may only ever belong to one invoice."""
+
+    def __init__(self, project_id: UUID, period_start: date) -> None:
+        super().__init__(
+            f"Project {project_id}'s period starting {period_start} is already invoiced"
+        )
+        self.project_id = project_id
+        self.period_start = period_start
+
+
+class BillingPeriodInvoicedError(TimesheetError):
+    """Raised by ``ReopenProjectBillingPeriod`` when the period carries an ``invoice_id`` —
+    reopening it would orphan that invoice's line items."""
+
+    def __init__(self, project_id: UUID, period_start: date) -> None:
+        super().__init__(
+            f"Project {project_id}'s period starting {period_start} is invoiced and cannot be "
+            "reopened"
+        )
+        self.project_id = project_id
+        self.period_start = period_start

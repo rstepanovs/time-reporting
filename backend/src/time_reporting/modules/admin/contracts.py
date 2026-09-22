@@ -18,11 +18,12 @@ class RemovalOutcome(StrEnum):
 
 
 class RemovalBlockerKind(StrEnum):
-    """What prevents a permanent delete. More kinds arrive with invoices."""
+    """What prevents a permanent delete."""
 
     SELF = "self"
     PROJECTS = "projects"
     TIME_ENTRIES = "time_entries"
+    INVOICES = "invoices"
 
 
 class RemovalEffectKind(StrEnum):
@@ -87,12 +88,14 @@ class RemoveUser(Command[RemovalOutcome]):
 @dataclass(frozen=True, slots=True, kw_only=True)
 class RemoveCustomer(Command[RemovalOutcome]):
     customer_id: UUID
+    acting_user_id: UUID
     permanent: bool = False
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class RemoveProject(Command[RemovalOutcome]):
     project_id: UUID
+    acting_user_id: UUID
     permanent: bool = False
 
 

@@ -8,15 +8,21 @@ Backend: `modules/timesheets` (workflow statuses, locks and billing readiness ar
   `listSubmittedTimesheetWeeks` (an optional `{ scope: "mine" | "all" }`), the caller's
   project/billing-item picker, the dashboard's `getMonthCalendar`/`getYearHours`/
   `getMonthTimeSummary`/`getWeeklyHours`, the manager team dashboard's `getTeamMonthOverview` (also
-  `scope`-aware) and `sendProjectMonthToBilling`/`reopenProjectBillingPeriod`, plus
-  `TimesheetRuleError` covering 400/403/404 and `TimesheetConflictError` for a 409 — the week's
-  status changed underneath the caller, or a billing period isn't ready yet / was already sent — both
-  with the backend's `detail` as the message.
+  `scope`-aware) and `sendProjectMonthToBilling`/`reopenProjectBillingPeriod`,
+  `listBillingPeriods` (admin or accountant; project/customer/month-range/`invoiced` filters,
+  pagination — backs `pages/admin/AdminBillingPage.tsx`; each `BillingPeriodListItem` carries an
+  `invoice_id`, `null` until `invoices.CreateInvoiceDraft` marks it) and
+  `billingPeriodExportUrl(projectId, periodStart)` (a plain relative URL for that page's per-row
+  "CSV" `<a href download>`, never fetched through `api` — following `system/api.ts`'s
+  `backupDownloadUrl`), plus `TimesheetRuleError` covering 400/403/404 and `TimesheetConflictError`
+  for a 409 — the week's status changed underneath the caller, a billing period isn't ready yet /
+  was already sent, or (`reopenProjectBillingPeriod`) it's invoiced — all with the backend's
+  `detail` as the message.
 - `hooks.ts` — `timesheetKeys` + `useTimesheetWeek`/`useTimesheetOptions`/`useMonthCalendar`/
   `useYearHours`/`useMonthTimeSummary`/`useWeeklyHours`/`useSubmittedTimesheetWeeks`/
-  `useTeamMonthOverview` queries and `useSaveTimesheetWeek`/`useSubmitTimesheetWeek`/
-  `useApproveTimesheetWeek`/`useReturnTimesheetWeek`/`useSendProjectMonthToBilling`/
-  `useReopenProjectBillingPeriod` mutations. Cache rules:
+  `useTeamMonthOverview`/`useBillingPeriods` queries and `useSaveTimesheetWeek`/
+  `useSubmitTimesheetWeek`/`useApproveTimesheetWeek`/`useReturnTimesheetWeek`/
+  `useSendProjectMonthToBilling`/`useReopenProjectBillingPeriod` mutations. Cache rules:
   - the first four mutations write their result straight into the week's query cache instead of
     invalidating;
   - saving also invalidates `timesheetKeys.summaries()` so the dashboard and `/hours` pick up a
@@ -24,7 +30,8 @@ Backend: `modules/timesheets` (workflow statuses, locks and billing readiness ar
   - submit/approve/return also invalidate `timesheetKeys.allSubmissions()` (every cached
     `submissions(scope)`);
   - sending/reopening a billing period invalidate `team()`, `allSubmissions()` and every cached week
-    (`timesheetKeys.weeks()`, since locks may have changed what they allow).
+    (`timesheetKeys.weeks()`, since locks may have changed what they allow); reopening also
+    invalidates every cached `billingPeriods(params)` entry so `/admin/billing` drops the row.
 
 ## Pure helpers
 
@@ -51,9 +58,11 @@ Backend: `modules/timesheets` (workflow statuses, locks and billing readiness ar
   locked.
 - A status header shows the week's `status` badge and, once reviewed, who reviewed it and when, plus
   the return comment when `returned`. "Submit" (behind a confirming modal, auto-saving first if
-  there's anything pending) and, for a manager viewing the week, "Approve"/"Return…" (the latter's
-  modal requires a non-blank comment; both hidden once `can_review` is false, including when a locked
-  row would make a return fail) appear per `can_submit`/`can_review`.
+  there's anything pending) and "Approve"/"Return…" (the latter's modal requires a non-blank
+  comment; both hidden once `can_review` is false, including when a locked row would make a return
+  fail) appear per `can_submit`/`can_review` — purely server-driven flags, so a manager viewing
+  their *own* week under `company.allow_self_review` sees the same buttons with no page code
+  change at all: see `pages/TimesheetPage.test.tsx`'s self-review test.
 - `AddRowModal.tsx` — "add a row" / "copy rows from previous week". The month calendar renders below
   the grid.
 
@@ -90,9 +99,10 @@ All render inside `components/DashboardCard.tsx`, in a responsive `SimpleGrid`.
 
 ### Billing (`accountant`)
 
-- `AccountantPlaceholderCard.tsx` — a single `DashboardCard` noting that invoicing tools are coming;
-  static text only, no data calls. The accountant level is only a flag until the invoices module
-  lands.
+- `invoices/InvoicingCard.tsx` — periods still waiting to be invoiced, the unpaid total per
+  currency and an overdue count, all from `invoices.GetInvoicingSummary` (one aggregate query
+  rather than paging through every invoice/period on the dashboard), linking to `/invoices`. See
+  `invoices/CLAUDE.md`.
 
 The Administration section (`admin`) is `admin/AdminShortcutsCard.tsx`, documented in
 `admin/CLAUDE.md`.
@@ -101,22 +111,34 @@ The Administration section (`admin`) is `admin/AdminShortcutsCard.tsx`, document
 
 - `TeamScopeToggle` — "My projects"/"All", available to any manager. URL-backed (`?scope=`) on
   `/approvals` and `/team`, local state on the dashboard.
-- `pages/ApprovalsPage.tsx` (`/approvals`) lists weeks awaiting review via
-  `useSubmittedTimesheetWeeks` narrowed by the scope, each row linking to `/timesheet?week=&user=`.
+- `pages/ApprovalsPage.tsx` (`/approvals`) is a Mantine `Tabs` (URL-backed `?tab=timesheets|
+  expenses`, default `timesheets`) over two independent lists, the one `TeamScopeToggle` applying
+  to both: "Timesheets" lists weeks awaiting review via `useSubmittedTimesheetWeeks` narrowed by
+  the scope, each row linking to `/timesheet?week=&user=`; "Expenses" is the same for expense
+  reports via `expenses.useSubmittedExpenseReports`, each row linking to `/expenses/:reportId` —
+  see `expenses/CLAUDE.md`. Approve/return themselves happen on the target page
+  (`TimesheetGrid`/`ExpenseReportPage`), not on this list.
 - The dashboard's "My team" section (`manager` only), driven by `useTeamMonthOverview` for the
   current month:
   - `TeamTimesheetsCard.tsx` — awaiting-approval/returned/not-submitted counts, linking to
     `/approvals?scope=`.
-  - `ProjectBillingCard.tsx` — each managed project's hours, weeks-approved x/y and billing status
-    for a ‹›-navigable month (previous month during a month's first 10 days, current month after),
-    with a "Send to billing" button behind a confirming modal for a `ready` project.
+  - `ProjectBillingCard.tsx` — each managed project's hours, weeks-approved x/y (plus a blocking
+    expense-report count when `blocking_reports > 0`) and billing status for a ‹›-navigable month
+    (previous month during a month's first 10 days, current month after), with a "Send to billing"
+    button behind a confirming modal for a `ready` project. An internal project
+    (`projects.ProjectDTO.is_internal`) always reports `not_billable` instead — its `STATUS_LABEL`/
+    `STATUS_COLOR` entry ("Internal — not billed", violet) is just another badge, so the "Send to
+    billing" button (gated on `status === "ready"`) never renders for it; same in `TeamPage.tsx`
+    below.
   - `TeamStaffCard.tsx` — everyone on the manager's projects, deduplicated across projects, hours
     reported this month vs. expected with a warning icon/tooltip, linking to `/timesheet?week=&user=`
     for the current week; footer "Team overview →" to `/team`.
 - `pages/TeamPage.tsx` (`/team`, nav item right after Approvals) is the fuller view: the scope toggle
   and a `?month=YYYY-MM` navigator like `/hours`, then per managed project a header (customer/name,
-  hours, weeks approved x/y, a billing status badge, the same "Send to billing" modal when `ready`
-  or, once `sent`, an admin-only "Reopen" behind its own confirming modal) and `TeamWeekMatrix.tsx`
-  (presentational: members × the month's ISO weeks, each cell a status badge plus that member's hours
-  on the project that week linking to `/timesheet?week=&user=`, a week outside the queried month
-  marked with `*`, a warning icon/tooltip per member).
+  hours, weeks approved x/y plus the same blocking-report count, a billing status badge, the same
+  "Send to billing" modal when `ready` or, once `sent`, an admin-only "Reopen" behind its own
+  confirming modal) and `TeamWeekMatrix.tsx` (presentational: members × the month's ISO weeks, each
+  cell a status badge plus that member's hours on the project that week linking to
+  `/timesheet?week=&user=`, a week outside the queried month marked with `*`, a warning icon/tooltip
+  per member). Neither view lists the project's expense reports themselves — only the blocking
+  count; see the "Expenses" tab of `/approvals` or `/expenses` for the reports.

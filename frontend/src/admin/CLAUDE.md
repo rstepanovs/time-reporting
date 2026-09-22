@@ -4,8 +4,8 @@ The shared archive-or-delete UI for users, customers and projects, plus the dash
 Administration section. Backend: `modules/admin`.
 
 - `AdminShortcutsCard.tsx` — the dashboard's Administration section for `admin` users: a single
-  `DashboardCard` with link-only shortcuts to Users/Customers/Projects/Calendar/System status, no
-  data calls.
+  `DashboardCard` with link-only shortcuts to Users/Customers/Projects/Calendar/Billing/Company/
+  Audit log/Backups/System status, no data calls.
 
 - `api.ts` — `getRemovalImpact`/`removeEntity` against `/api/v1/admin/...`, plus
   `RemovalBlockedError` (409, carries `blockers`), `RemovalRuleError` (400) and
@@ -25,4 +25,23 @@ Administration section. Backend: `modules/admin`.
   their own row in `UserFormModal`, mirroring the backend guard), and cannot remove themselves from
   `AdminUsersPage`.
 - `AdminCalendarPage` — non-working days, via `calendar/`.
-- `AdminSystemStatusPage` (`/admin/status`) just polls the health endpoints for an API/database badge.
+- `AdminBillingPage` (`/admin/billing`) — every sent billing period (customer/project/month-range
+  filters, paginated), a per-row "Reopen…" confirm modal reusing `timesheets/hooks.ts`'s
+  `useReopenProjectBillingPeriod` (same mutation and modal shape as `pages/TeamPage.tsx`'s), plus a
+  per-row "CSV" link (`timesheets/api.ts`'s `billingPeriodExportUrl`, a plain `<a href download>`
+  like `backupDownloadUrl`) to that period's time-entry/expense-line export. A row whose
+  `invoice_id` is set (stamped by `invoices.CreateInvoiceDraft`) shows an "Invoiced" badge instead
+  of the "Reopen…" button — the backend refuses reopening an invoiced period (409) anyway, this
+  just avoids offering a button that would fail. Backed by `timesheets/`, not an area of its own.
+  The page itself is still admin-only (`RequireRole roles={["admin"]}`); the underlying
+  `GET`/CSV-export routes also accept an accountant directly, for `invoices/`'s own "To invoice"
+  tab (`ListInvoiceablePeriods`) to call.
+- `AdminCompanyPage` (`/admin/company`) — the company profile/settings form (legal identity,
+  address, bank details, invoicing defaults, the `allow_self_review` workflow switch) and a logo
+  upload/preview/remove control. Backed by `company/`, not an area of `admin/` itself.
+- `AdminAuditPage` (`/admin/audit`) — the administrative audit log: action/entity type/actor/date
+  range filters, a paginated table (time, actor, action, summary) with each row expandable to show
+  its raw `details` JSON. Backed by `audit/`.
+- `AdminBackupsPage` (`/admin/backups`) and `AdminSystemStatusPage` (`/admin/status`, health badges
+  polled directly, no area of their own, plus Versions/Database/Tables/Uptime/Backups/Configuration
+  cards) — both backed by `system/`; see `system/CLAUDE.md`.

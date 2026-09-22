@@ -4,23 +4,33 @@ Every authenticated user reads and writes their own week/dashboard; managers may
 not write) another user's data.
 """
 
+import csv
+import io
 from datetime import date
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi.responses import StreamingResponse
 
 from time_reporting.api.deps import BusDep
-from time_reporting.modules.auth.dependencies import AdminDep, CurrentUserDep, ManagerDep
+from time_reporting.modules.auth.dependencies import (
+    AdminDep,
+    CurrentUserDep,
+    ManagerDep,
+    require_roles,
+)
 from time_reporting.modules.timesheets.contracts import (
     ApproveTimesheetWeek,
     BillingPeriodAlreadySentError,
+    BillingPeriodInvoicedError,
     BillingPeriodLockedError,
     BillingPeriodNotFoundError,
     BillingPeriodNotReadyError,
     DailyHoursExceededError,
     DuplicateChangeError,
     EntryDateOutsideWeekError,
+    GetBillingPeriodExportRows,
     GetMonthCalendar,
     GetMonthTimeSummary,
     GetTeamMonthOverview,
@@ -28,8 +38,10 @@ from time_reporting.modules.timesheets.contracts import (
     GetWeeklyHours,
     GetYearHours,
     InvalidWeekStatusTransitionError,
+    ListBillingPeriods,
     ListSubmittedTimesheetWeeks,
     ListTimesheetOptions,
+    ProjectIsInternalError,
     QuantityOutOfRangeError,
     ReopenProjectBillingPeriod,
     ReturnCommentRequiredError,
@@ -43,11 +55,13 @@ from time_reporting.modules.timesheets.contracts import (
     TimesheetBillingItemNotFoundError,
     TimesheetProjectNotFoundError,
     TimesheetRowClosedError,
+    TimesheetUnitNotAllowedError,
     TimesheetWeekLockedError,
     WeekRangeOutOfBoundsError,
     WeekStartNotMondayError,
 )
 from time_reporting.modules.timesheets.schemas import (
+    BillingPeriodPageResponse,
     MonthCalendarResponse,
     MonthTimeSummaryResponse,
     ProjectBillingPeriodResponse,
@@ -66,6 +80,9 @@ from time_reporting.modules.users.contracts import UserDTO, UserNotFoundError, U
 Scope = Literal["mine", "all"]
 
 router = APIRouter(prefix="/timesheets", tags=["timesheets"])
+
+# The billing list and its CSV export are also read by an accountant, not only an admin.
+BillingReaderDep = Annotated[UserDTO, Depends(require_roles(UserRole.ADMIN, UserRole.ACCOUNTANT))]
 
 _USER_NOT_FOUND_RESPONSE: dict[int | str, dict[str, Any]] = {
     status.HTTP_404_NOT_FOUND: {"description": "User not found"}
@@ -166,6 +183,7 @@ async def save_timesheet_week(
         EntryDateOutsideWeekError,
         DuplicateChangeError,
         TimesheetRowClosedError,
+        TimesheetUnitNotAllowedError,
         QuantityOutOfRangeError,
         DailyHoursExceededError,
     ) as exc:
@@ -279,11 +297,38 @@ async def get_team_month_overview(
     return TeamMonthOverviewResponse.model_validate(overview)
 
 
+@router.get("/billing-periods")
+async def list_billing_periods(
+    _reader: BillingReaderDep,
+    bus: BusDep,
+    project_id: Annotated[UUID | None, Query()] = None,
+    customer_id: Annotated[UUID | None, Query()] = None,
+    month_from: Annotated[date | None, Query()] = None,
+    month_to: Annotated[date | None, Query()] = None,
+    invoiced: Annotated[bool | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> BillingPeriodPageResponse:
+    page = await bus.query(
+        ListBillingPeriods(
+            project_id=project_id,
+            customer_id=customer_id,
+            month_from=month_from,
+            month_to=month_to,
+            invoiced=invoiced,
+            limit=limit,
+            offset=offset,
+        )
+    )
+    return BillingPeriodPageResponse.model_validate(page)
+
+
 @router.post(
     "/billing-periods",
     status_code=status.HTTP_201_CREATED,
     responses={
         **_USER_NOT_FOUND_RESPONSE,
+        status.HTTP_400_BAD_REQUEST: {"description": "The project is internal and never billed"},
         status.HTTP_409_CONFLICT: {"description": "Not ready to send, or already sent"},
     },
 )
@@ -303,6 +348,8 @@ async def send_project_month_to_billing(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except UserNotFoundError as exc:
         raise _user_not_found() from exc
+    except ProjectIsInternalError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except (BillingPeriodNotReadyError, BillingPeriodAlreadySentError) as exc:
         raise _conflict(str(exc)) from exc
     return ProjectBillingPeriodResponse.model_validate(period)
@@ -311,17 +358,77 @@ async def send_project_month_to_billing(
 @router.delete(
     "/billing-periods/{project_id}/{period_start}",
     status_code=status.HTTP_204_NO_CONTENT,
-    responses={status.HTTP_404_NOT_FOUND: {"description": "No sent period found"}},
+    responses={
+        status.HTTP_404_NOT_FOUND: {"description": "No sent period found"},
+        status.HTTP_409_CONFLICT: {"description": "The period is invoiced"},
+    },
 )
 async def reopen_project_billing_period(
-    project_id: UUID, period_start: date, _admin: AdminDep, bus: BusDep
+    project_id: UUID, period_start: date, admin: AdminDep, bus: BusDep
 ) -> None:
     try:
         await bus.execute(
-            ReopenProjectBillingPeriod(project_id=project_id, period_start=period_start)
+            ReopenProjectBillingPeriod(
+                project_id=project_id, period_start=period_start, actor_id=admin.id
+            )
         )
     except BillingPeriodNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except BillingPeriodInvoicedError as exc:
+        raise _conflict(str(exc)) from exc
+
+
+@router.get(
+    "/billing-periods/{project_id}/{period_start}/export.csv",
+    responses={status.HTTP_404_NOT_FOUND: {"description": "No sent period found"}},
+)
+async def export_billing_period_csv(
+    project_id: UUID, period_start: date, _reader: BillingReaderDep, bus: BusDep
+) -> StreamingResponse:
+    try:
+        rows = await bus.query(
+            GetBillingPeriodExportRows(project_id=project_id, period_start=period_start)
+        )
+    except BillingPeriodNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(
+        [
+            "Date",
+            "User",
+            "Email",
+            "Billing item",
+            "Unit",
+            "Quantity",
+            "Currency",
+            "Description",
+            "Vendor",
+            "Document no.",
+        ]
+    )
+    for row in rows:
+        writer.writerow(
+            [
+                row.entry_date.isoformat(),
+                row.user_name,
+                row.user_email,
+                row.billing_item_name,
+                row.unit.value,
+                str(row.quantity),
+                row.currency or "",
+                row.description or "",
+                row.vendor or "",
+                row.document_no or "",
+            ]
+        )
+    filename = f"billing-{project_id}-{period_start.isoformat()}.csv"
+    return StreamingResponse(
+        iter([buffer.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/options")

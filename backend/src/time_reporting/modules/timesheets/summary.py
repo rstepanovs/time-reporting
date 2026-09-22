@@ -13,6 +13,7 @@ from uuid import UUID
 
 from time_reporting.core.config import get_settings
 from time_reporting.core.cqrs import Bus
+from time_reporting.modules.expenses.contracts import GetMonthExpenseTotals
 from time_reporting.modules.projects.contracts import (
     BillingItemPreset,
     BillingUnit,
@@ -252,13 +253,9 @@ class TimesheetSummaryService:
                 )
             )
         }
-        projects_by_id = {
-            project.id: project
-            for project in await self._bus.query(
-                GetProjectsByIds(project_ids=frozenset(entry.project_id for entry in entries))
-            )
-        }
 
+        # `amount`-unit entries no longer exist in `time_entries` — expenses are claimed through
+        # the expenses module's reports instead, folded in below.
         accumulator = _QuantityAccumulator()
         for entry in entries:
             if entry.unit is BillingUnit.HOUR:
@@ -266,12 +263,12 @@ class TimesheetSummaryService:
                 accumulator.add_hours(preset=preset, quantity=entry.quantity)
             elif entry.unit is BillingUnit.DAY:
                 accumulator.add_days(entry.quantity)
-            elif entry.unit is BillingUnit.AMOUNT:
-                project = projects_by_id.get(entry.project_id)
-                if project is not None:
-                    accumulator.add_amount(
-                        currency=project.customer.currency, quantity=entry.quantity
-                    )
+
+        expense_totals = await self._bus.query(
+            GetMonthExpenseTotals(user_id=user_id, year=year, month=month)
+        )
+        for total in expense_totals:
+            accumulator.add_amount(currency=total.currency, quantity=total.amount)
 
         days = await self._bus.query(GetCalendarDays(date_from=month_first, date_to=month_last))
         working_days, working_days_to_date = _count_working_days(days, up_to=today)

@@ -21,6 +21,7 @@ from time_reporting.modules.admin.contracts import (
     RemoveUser,
     SelfRemovalError,
 )
+from time_reporting.modules.audit.contracts import AuditAction, AuditEventDTO, ListAuditEvents
 from time_reporting.modules.customers.contracts import GetCustomerById
 from time_reporting.modules.projects.contracts import (
     DEFAULT_BILLING_ITEMS,
@@ -221,6 +222,21 @@ async def test_project_removal_impact_unknown_returns_none(bus: Bus) -> None:
 # --- Removal (archive) ---
 
 
+async def _events_for(
+    bus: Bus, *, entity_type: str, entity_id: object, action: AuditAction | None = None
+) -> tuple[AuditEventDTO, ...]:
+    page = await bus.query(
+        ListAuditEvents(
+            limit=10,
+            offset=0,
+            entity_type=entity_type,
+            entity_id=str(entity_id),
+            action=action,
+        )
+    )
+    return page.items
+
+
 async def test_remove_user_default_archives(bus: Bus, make_user: UserFactory) -> None:
     admin = await make_user(roles=ADMIN)
     user = await make_user()
@@ -232,6 +248,15 @@ async def test_remove_user_default_archives(bus: Bus, make_user: UserFactory) ->
     assert reloaded is not None
     assert reloaded.is_active is False
 
+    # Recorded by `UpdateUser`'s own instrumentation (the archive branch is just
+    # `UpdateUser(is_active=False)`); the admin module does not also log a separate event for a
+    # user's archive, only for a permanent delete (see `test_remove_user_permanently_...` below).
+    events = await _events_for(
+        bus, entity_type="user", entity_id=user.id, action=AuditAction.USER_DEACTIVATED
+    )
+    assert len(events) == 1
+    assert events[0].actor_id == admin.id
+
 
 async def test_remove_user_archive_is_idempotent(bus: Bus, make_user: UserFactory) -> None:
     admin = await make_user(roles=ADMIN)
@@ -241,6 +266,15 @@ async def test_remove_user_archive_is_idempotent(bus: Bus, make_user: UserFactor
     outcome = await bus.execute(RemoveUser(user_id=user.id, acting_user_id=admin.id))
 
     assert outcome is RemovalOutcome.ARCHIVED
+    # Still active -> inactive once, not twice: the second call is a no-op change.
+    assert (
+        len(
+            await _events_for(
+                bus, entity_type="user", entity_id=user.id, action=AuditAction.USER_DEACTIVATED
+            )
+        )
+        == 1
+    )
 
 
 async def test_remove_user_rejects_self_in_both_modes(bus: Bus, make_user: UserFactory) -> None:
@@ -252,26 +286,45 @@ async def test_remove_user_rejects_self_in_both_modes(bus: Bus, make_user: UserF
         await bus.execute(RemoveUser(user_id=admin.id, acting_user_id=admin.id, permanent=True))
 
 
-async def test_remove_customer_default_archives(bus: Bus, make_customer: CustomerFactory) -> None:
+async def test_remove_customer_default_archives(
+    bus: Bus, make_user: UserFactory, make_customer: CustomerFactory
+) -> None:
+    admin = await make_user(roles=ADMIN)
     customer = await make_customer()
 
-    outcome = await bus.execute(RemoveCustomer(customer_id=customer.id))
+    outcome = await bus.execute(RemoveCustomer(customer_id=customer.id, acting_user_id=admin.id))
 
     assert outcome is RemovalOutcome.ARCHIVED
     reloaded = await bus.query(GetCustomerById(customer_id=customer.id))
     assert reloaded is not None
     assert reloaded.is_active is False
+    events = await _events_for(
+        bus,
+        entity_type="customer",
+        entity_id=customer.id,
+        action=AuditAction.CUSTOMER_ARCHIVED,
+    )
+    assert len(events) == 1
+    assert events[0].actor_id == admin.id
 
 
-async def test_remove_project_default_archives(bus: Bus, make_project: ProjectFactory) -> None:
+async def test_remove_project_default_archives(
+    bus: Bus, make_user: UserFactory, make_project: ProjectFactory
+) -> None:
+    admin = await make_user(roles=ADMIN)
     project = await make_project()
 
-    outcome = await bus.execute(RemoveProject(project_id=project.id))
+    outcome = await bus.execute(RemoveProject(project_id=project.id, acting_user_id=admin.id))
 
     assert outcome is RemovalOutcome.ARCHIVED
     reloaded = await bus.query(GetProjectById(project_id=project.id))
     assert reloaded is not None
     assert reloaded.is_active is False
+    events = await _events_for(
+        bus, entity_type="project", entity_id=project.id, action=AuditAction.PROJECT_ARCHIVED
+    )
+    assert len(events) == 1
+    assert events[0].actor_id == admin.id
 
 
 # --- Removal (permanent delete) ---
@@ -295,6 +348,14 @@ async def test_remove_user_permanently_deletes_and_cascades_memberships(
     assert await bus.query(GetUserById(user_id=user.id)) is None
     assert await bus.query(ListProjectMembers(project_id=project_a.id)) == ()
     assert await bus.query(ListProjectMembers(project_id=project_b.id)) == ()
+    events = await _events_for(
+        bus, entity_type="user", entity_id=user.id, action=AuditAction.USER_DELETED
+    )
+    assert len(events) == 1
+    assert events[0].actor_id == admin.id
+    # The user row is gone by the time the event is written, so the name/email came from a fetch
+    # made just before the delete.
+    assert user.name in events[0].summary
 
 
 async def test_remove_user_permanently_clears_manager_assignment(
@@ -334,6 +395,14 @@ async def test_remove_user_permanently_rolls_back_membership_removal_on_failure(
 
     members = await bus.query(ListProjectMembers(project_id=project.id))
     assert [m.user_id for m in members] == [user.id]
+    # The whole command rolled back, so no `user.deleted` event either — it's only ever recorded
+    # after every step (including the now-rolled-back membership removal) has already succeeded.
+    assert (
+        await _events_for(
+            bus, entity_type="user", entity_id=user.id, action=AuditAction.USER_DELETED
+        )
+        == ()
+    )
 
 
 async def test_remove_user_permanently_blocked_by_time_entries(
@@ -352,15 +421,37 @@ async def test_remove_user_permanently_blocked_by_time_entries(
     assert await bus.query(GetUserById(user_id=user.id)) is not None
 
 
-async def test_remove_customer_permanently_blocked_by_archived_project(
-    bus: Bus, make_customer: CustomerFactory, make_project: ProjectFactory
+async def test_remove_customer_permanently_deletes_with_no_projects(
+    bus: Bus, make_user: UserFactory, make_customer: CustomerFactory
 ) -> None:
+    admin = await make_user(roles=ADMIN)
+    customer = await make_customer()
+
+    outcome = await bus.execute(
+        RemoveCustomer(customer_id=customer.id, acting_user_id=admin.id, permanent=True)
+    )
+
+    assert outcome is RemovalOutcome.DELETED
+    assert await bus.query(GetCustomerById(customer_id=customer.id)) is None
+    events = await _events_for(
+        bus, entity_type="customer", entity_id=customer.id, action=AuditAction.CUSTOMER_DELETED
+    )
+    assert len(events) == 1
+    assert events[0].actor_id == admin.id
+
+
+async def test_remove_customer_permanently_blocked_by_archived_project(
+    bus: Bus, make_user: UserFactory, make_customer: CustomerFactory, make_project: ProjectFactory
+) -> None:
+    admin = await make_user(roles=ADMIN)
     customer = await make_customer()
     project = await make_project(customer_id=customer.id)
     await bus.execute(UpdateProject(project_id=project.id, is_active=False))
 
     with pytest.raises(RemovalBlockedError) as exc_info:
-        await bus.execute(RemoveCustomer(customer_id=customer.id, permanent=True))
+        await bus.execute(
+            RemoveCustomer(customer_id=customer.id, acting_user_id=admin.id, permanent=True)
+        )
 
     assert exc_info.value.blockers[0].kind == RemovalBlockerKind.PROJECTS
     reloaded = await bus.query(GetCustomerById(customer_id=customer.id))
@@ -371,26 +462,37 @@ async def test_remove_customer_permanently_blocked_by_archived_project(
 async def test_remove_project_permanently_deletes_with_members(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
+    admin = await make_user(roles=ADMIN)
     project = await make_project()
     user = await make_user()
     await bus.execute(AddProjectMember(project_id=project.id, user_id=user.id))
 
-    outcome = await bus.execute(RemoveProject(project_id=project.id, permanent=True))
+    outcome = await bus.execute(
+        RemoveProject(project_id=project.id, acting_user_id=admin.id, permanent=True)
+    )
 
     assert outcome is RemovalOutcome.DELETED
     assert await bus.query(GetProjectById(project_id=project.id)) is None
+    events = await _events_for(
+        bus, entity_type="project", entity_id=project.id, action=AuditAction.PROJECT_DELETED
+    )
+    assert len(events) == 1
+    assert events[0].actor_id == admin.id
 
 
 async def test_remove_project_permanently_blocked_by_time_entries(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
+    admin = await make_user(roles=ADMIN)
     project = await make_project()
     user = await make_user()
     await bus.execute(AddProjectMember(project_id=project.id, user_id=user.id))
     await _book_normal_hours(bus, project_id=project.id, user_id=user.id)
 
     with pytest.raises(RemovalBlockedError) as exc_info:
-        await bus.execute(RemoveProject(project_id=project.id, permanent=True))
+        await bus.execute(
+            RemoveProject(project_id=project.id, acting_user_id=admin.id, permanent=True)
+        )
 
     assert exc_info.value.blockers[0].kind == RemovalBlockerKind.TIME_ENTRIES
     assert await bus.query(GetProjectById(project_id=project.id)) is not None

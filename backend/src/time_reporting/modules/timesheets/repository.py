@@ -302,6 +302,14 @@ class ProjectBillingPeriodRepository:
         )
         return result.one_or_none()
 
+    async def list_by_invoice_id(self, invoice_id: UUID) -> Sequence[ProjectBillingPeriod]:
+        """Every period currently marked with ``invoice_id`` — used to clear the mark when the
+        future ``invoices`` module deletes a draft."""
+        result = await self._session.scalars(
+            select(ProjectBillingPeriod).where(ProjectBillingPeriod.invoice_id == invoice_id)
+        )
+        return result.all()
+
     async def list_for_projects_in_range(
         self, project_ids: frozenset[UUID], date_from: date, date_to: date
     ) -> Sequence[ProjectBillingPeriod]:
@@ -333,6 +341,76 @@ class ProjectBillingPeriodRepository:
             )
         )
         return result.all()
+
+    async def get_page(
+        self,
+        *,
+        project_ids: frozenset[UUID] | None,
+        month_from: date | None,
+        month_to: date | None,
+        invoiced: bool | None,
+        limit: int,
+        offset: int,
+    ) -> Sequence[ProjectBillingPeriod]:
+        """Newest ``sent_at`` first. ``project_ids=None`` means no project filter; an empty (but
+        not ``None``) set short-circuits to no rows, without hitting the database."""
+        if project_ids is not None and not project_ids:
+            return ()
+        statement = (
+            self._filtered(
+                select(ProjectBillingPeriod),
+                project_ids=project_ids,
+                month_from=month_from,
+                month_to=month_to,
+                invoiced=invoiced,
+            )
+            .order_by(ProjectBillingPeriod.sent_at.desc(), ProjectBillingPeriod.id)
+            .limit(limit)
+            .offset(offset)
+        )
+        result = await self._session.scalars(statement)
+        return result.all()
+
+    async def count(
+        self,
+        *,
+        project_ids: frozenset[UUID] | None,
+        month_from: date | None,
+        month_to: date | None,
+        invoiced: bool | None,
+    ) -> int:
+        if project_ids is not None and not project_ids:
+            return 0
+        statement = self._filtered(
+            select(func.count()).select_from(ProjectBillingPeriod),
+            project_ids=project_ids,
+            month_from=month_from,
+            month_to=month_to,
+            invoiced=invoiced,
+        )
+        result = await self._session.execute(statement)
+        return result.scalar_one()
+
+    def _filtered[T: tuple[Any, ...]](
+        self,
+        statement: Select[T],
+        *,
+        project_ids: frozenset[UUID] | None,
+        month_from: date | None,
+        month_to: date | None,
+        invoiced: bool | None,
+    ) -> Select[T]:
+        if project_ids is not None:
+            statement = statement.where(ProjectBillingPeriod.project_id.in_(project_ids))
+        if month_from is not None:
+            statement = statement.where(ProjectBillingPeriod.period_start >= month_from)
+        if month_to is not None:
+            statement = statement.where(ProjectBillingPeriod.period_start <= month_to)
+        if invoiced is True:
+            statement = statement.where(ProjectBillingPeriod.invoice_id.is_not(None))
+        elif invoiced is False:
+            statement = statement.where(ProjectBillingPeriod.invoice_id.is_(None))
+        return statement
 
     async def save(self, period: ProjectBillingPeriod) -> None:
         """Add ``period`` to the session and flush."""

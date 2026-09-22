@@ -100,6 +100,8 @@ class ImportPublicHolidays(Command[int]):
     """
 
     year: int
+    # `None` for the CLI's `import-holidays` (no signed-in actor).
+    actor_id: UUID | None = None
 
 
 # --- Exceptions ---

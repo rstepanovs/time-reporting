@@ -74,6 +74,11 @@ async def create_customer(
                 currency=body.currency,
                 payment_terms_days=body.payment_terms_days,
                 notes=body.notes,
+                vat_rate=body.vat_rate,
+                vat_note=body.vat_note,
+                invoice_locale=body.invoice_locale,
+                customer_number=body.customer_number,
+                your_reference=body.your_reference,
             )
         )
     except CustomerNameAlreadyExistsError as exc:
@@ -117,6 +122,11 @@ async def update_customer(
                 payment_terms_days=body.payment_terms_days,
                 notes=body.notes,
                 is_active=body.is_active,
+                vat_rate=body.vat_rate,
+                vat_note=body.vat_note,
+                invoice_locale=body.invoice_locale,
+                customer_number=body.customer_number,
+                your_reference=body.your_reference,
                 clear_fields=clear_fields,
             )
         )

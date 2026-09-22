@@ -11,6 +11,7 @@ from uuid import UUID
 
 from time_reporting.core.cqrs import Bus
 from time_reporting.db.mixins import utc_now
+from time_reporting.modules.company.contracts import GetCompanySettings
 from time_reporting.modules.projects.contracts import (
     BillingUnit,
     GetProjectBillingItemsByIds,
@@ -41,6 +42,7 @@ from time_reporting.modules.timesheets.contracts import (
     TimesheetBillingItemNotFoundError,
     TimesheetRowClosedError,
     TimesheetRowDTO,
+    TimesheetUnitNotAllowedError,
     TimesheetWeekDTO,
     TimesheetWeekLockedError,
     TimesheetWeekStatus,
@@ -105,7 +107,11 @@ class TimesheetService:
         }
         open_item_ids = frozenset(
             item.id
-            for option in await self._bus.query(ListMemberProjectsWithBillingItems(user_id=user_id))
+            for option in await self._bus.query(
+                ListMemberProjectsWithBillingItems(
+                    user_id=user_id, units=frozenset({BillingUnit.HOUR, BillingUnit.DAY})
+                )
+            )
             for item in option.billing_items
         )
         locked_dates_by_project = await self._locked_dates_by_project(
@@ -142,11 +148,15 @@ class TimesheetService:
         # A locked project (sent to billing) can't be returned — a return would be rejected, so
         # hide the review actions entirely rather than let the caller hit a 409.
         is_locked = any(locked_dates_by_project.values())
+        self_review_allowed = False
+        if viewer_id == user_id:
+            settings = await self._bus.query(GetCompanySettings())
+            self_review_allowed = settings.allow_self_review
         can_review = (
             viewer is not None
             and UserRole.MANAGER in viewer.roles
             and status in _REVIEWABLE_STATUSES
-            and viewer_id != user_id
+            and (viewer_id != user_id or self_review_allowed)
             and not is_locked
         )
 
@@ -247,7 +257,7 @@ class TimesheetService:
         _ensure_monday(week_start)
         if await self._bus.query(GetUserById(user_id=command.user_id)) is None:
             raise UserNotFoundError(command.user_id)
-        self._ensure_not_self_review(command.user_id, command.reviewer_id)
+        await self._ensure_review_allowed(command.user_id, command.reviewer_id)
 
         week_row = await self._weeks.get(user_id=command.user_id, week_start=week_start)
         status = week_row.status if week_row is not None else TimesheetWeekStatus.DRAFT
@@ -272,7 +282,7 @@ class TimesheetService:
         comment = command.comment.strip()
         if not comment:
             raise ReturnCommentRequiredError()
-        self._ensure_not_self_review(command.user_id, command.reviewer_id)
+        await self._ensure_review_allowed(command.user_id, command.reviewer_id)
 
         week_row = await self._weeks.get(user_id=command.user_id, week_start=week_start)
         status = week_row.status if week_row is not None else TimesheetWeekStatus.DRAFT
@@ -290,9 +300,18 @@ class TimesheetService:
             user_id=command.user_id, week_start=week_start, viewer_id=command.reviewer_id
         )
 
-    @staticmethod
-    def _ensure_not_self_review(user_id: UUID, reviewer_id: UUID) -> None:
-        if reviewer_id == user_id:
+    async def _ensure_review_allowed(self, user_id: UUID, reviewer_id: UUID) -> None:
+        """Nobody reviews their own week — unless ``company.allow_self_review`` is on and the
+        reviewer holds ``manager`` (the router's ``ManagerDep`` normally guarantees the latter, but
+        this is checked here too since a self-review is otherwise indistinguishable from a regular
+        one at this point)."""
+        if reviewer_id != user_id:
+            return
+        settings = await self._bus.query(GetCompanySettings())
+        if not settings.allow_self_review:
+            raise SelfReviewError()
+        reviewer = await self._bus.query(GetUserById(user_id=reviewer_id))
+        if reviewer is None or UserRole.MANAGER not in reviewer.roles:
             raise SelfReviewError()
 
     async def _reviewer_name(self, week_row: TimesheetWeek | None) -> str | None:
@@ -400,7 +419,12 @@ class TimesheetService:
     async def _open_items(
         self, user_id: UUID
     ) -> tuple[dict[UUID, ProjectBillingItemDTO], dict[UUID, ProjectDTO]]:
-        options = await self._bus.query(ListMemberProjectsWithBillingItems(user_id=user_id))
+        # `amount` items are claimed only through the expenses module now — see expenses/CLAUDE.md.
+        options = await self._bus.query(
+            ListMemberProjectsWithBillingItems(
+                user_id=user_id, units=frozenset({BillingUnit.HOUR, BillingUnit.DAY})
+            )
+        )
         open_items = {item.id: item for option in options for item in option.billing_items}
         projects_by_item = {
             item.id: option.project for option in options for item in option.billing_items
@@ -413,16 +437,21 @@ class TimesheetService:
         open_items: dict[UUID, ProjectBillingItemDTO],
     ) -> None:
         """Raise if any of ``billing_item_ids`` isn't currently open for this user: not found at
-        all (``TimesheetBillingItemNotFoundError``), or found but closed
+        all (``TimesheetBillingItemNotFoundError``), an ``amount`` item
+        (``TimesheetUnitNotAllowedError`` — claimed through the expenses module instead, and would
+        otherwise surface as the more confusing "not open" below), or found but closed
         (``TimesheetRowClosedError`` — archived, or the user isn't a member anymore)."""
         unknown_ids = billing_item_ids - open_items.keys()
         if not unknown_ids:
             return
         existing = await self._bus.query(GetProjectBillingItemsByIds(billing_item_ids=unknown_ids))
-        existing_ids = frozenset(item.id for item in existing)
+        existing_by_id = {item.id: item for item in existing}
         for billing_item_id in unknown_ids:
-            if billing_item_id not in existing_ids:
+            item = existing_by_id.get(billing_item_id)
+            if item is None:
                 raise TimesheetBillingItemNotFoundError(billing_item_id)
+            if item.unit is BillingUnit.AMOUNT:
+                raise TimesheetUnitNotAllowedError(billing_item_id)
             raise TimesheetRowClosedError(billing_item_id)
 
     async def _apply_changes(

@@ -127,10 +127,16 @@ async def search_user_directory(
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, responses=_EMAIL_CONFLICT_RESPONSE)
-async def create_user(body: UserCreateRequest, _admin: AdminDep, bus: BusDep) -> UserResponse:
+async def create_user(body: UserCreateRequest, admin: AdminDep, bus: BusDep) -> UserResponse:
     try:
         user = await bus.execute(
-            CreateUser(name=body.name, email=body.email, roles=body.roles, password=body.password)
+            CreateUser(
+                name=body.name,
+                email=body.email,
+                roles=body.roles,
+                password=body.password,
+                actor_id=admin.id,
+            )
         )
     except EmailAlreadyExistsError as exc:
         raise _email_conflict() from exc
@@ -183,10 +189,12 @@ async def update_user(
     "/{user_id}/password", status_code=status.HTTP_204_NO_CONTENT, responses=_NOT_FOUND_RESPONSE
 )
 async def reset_user_password(
-    user_id: UUID, body: PasswordResetRequest, _admin: AdminDep, bus: BusDep
+    user_id: UUID, body: PasswordResetRequest, admin: AdminDep, bus: BusDep
 ) -> None:
     """Set a user's password. All tokens previously issued to that user stop working."""
     try:
-        await bus.execute(ResetUserPassword(user_id=user_id, new_password=body.new_password))
+        await bus.execute(
+            ResetUserPassword(user_id=user_id, new_password=body.new_password, actor_id=admin.id)
+        )
     except UserNotFoundError as exc:
         raise _not_found() from exc

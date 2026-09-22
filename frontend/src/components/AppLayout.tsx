@@ -15,7 +15,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { Link, Outlet, useLocation } from "react-router";
 
 import { useAuthenticatedUser, useSignOut } from "@/auth/hooks";
-import { EMPLOYEE_LABEL, canManage, isAdmin, roleLabels } from "@/auth/roles";
+import { EMPLOYEE_LABEL, canManage, isAccountant, isAdmin, roleLabels } from "@/auth/roles";
 
 function AccountMenu() {
   const user = useAuthenticatedUser();
@@ -67,18 +67,30 @@ const NAV_ITEMS = [
   { to: "/", label: "Dashboard" },
   { to: "/timesheet", label: "Timesheet" },
   { to: "/hours", label: "My hours" },
+  { to: "/expenses", label: "Expenses" },
   { to: "/projects", label: "Projects" },
 ];
 
-// Shown only to managers, right after "My hours".
+// Shown only to managers, right after "Expenses" (index 4 in NAV_ITEMS below — see the splice in
+// Navigation, which needs updating in step with this index if NAV_ITEMS changes).
 const APPROVALS_NAV_ITEM = { to: "/approvals", label: "Approvals" };
 const TEAM_NAV_ITEM = { to: "/team", label: "Team" };
+
+// Shown only to accountants.
+const BILLING_NAV_ITEMS = [
+  { to: "/invoices", label: "Invoices" },
+  { to: "/accounting", label: "Accountant package" },
+];
 
 const ADMIN_NAV_ITEMS = [
   { to: "/admin/users", label: "Users" },
   { to: "/admin/customers", label: "Customers" },
   { to: "/admin/projects", label: "Projects" },
   { to: "/admin/calendar", label: "Calendar" },
+  { to: "/admin/billing", label: "Billing" },
+  { to: "/admin/company", label: "Company" },
+  { to: "/admin/audit", label: "Audit log" },
+  { to: "/admin/backups", label: "Backups" },
   { to: "/admin/status", label: "System status" },
 ];
 
@@ -86,7 +98,7 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
   const user = useAuthenticatedUser();
   const navItems = canManage(user)
-    ? [...NAV_ITEMS.slice(0, 3), APPROVALS_NAV_ITEM, TEAM_NAV_ITEM, ...NAV_ITEMS.slice(3)]
+    ? [...NAV_ITEMS.slice(0, 4), APPROVALS_NAV_ITEM, TEAM_NAV_ITEM, ...NAV_ITEMS.slice(4)]
     : NAV_ITEMS;
 
   return (
@@ -103,6 +115,23 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
           onClick={onNavigate}
         />
       ))}
+      {isAccountant(user) && (
+        <NavLink
+          label="Billing"
+          defaultOpened={BILLING_NAV_ITEMS.some((item) => location.pathname.startsWith(item.to))}
+        >
+          {BILLING_NAV_ITEMS.map((item) => (
+            <NavLink
+              key={item.to}
+              component={Link}
+              to={item.to}
+              label={item.label}
+              active={location.pathname.startsWith(item.to)}
+              onClick={onNavigate}
+            />
+          ))}
+        </NavLink>
+      )}
       {isAdmin(user) && (
         <NavLink
           label="Administration"

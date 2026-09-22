@@ -2,10 +2,12 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fetchCurrentUser } from "@/auth/api";
+import { getInvoicingSummary } from "@/invoices/api";
 import {
   testAccountant,
   testAdmin,
   testAdminOnly,
+  testInvoicingSummary,
   testMonthTimeSummary,
   testMonthTimeSummaryPrevious,
   testReadyBillingPeriod,
@@ -29,6 +31,11 @@ vi.mock("@/auth/api", async (importOriginal) => ({
   fetchCurrentUser: vi.fn(),
 }));
 
+vi.mock("@/invoices/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/invoices/api")>()),
+  getInvoicingSummary: vi.fn(),
+}));
+
 vi.mock("@/timesheets/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/timesheets/api")>()),
   getMonthTimeSummary: vi.fn(),
@@ -49,6 +56,7 @@ beforeEach(() => {
   vi.mocked(getWeeklyHours).mockResolvedValue(testWeeklyHours);
   vi.mocked(listTimesheetOptions).mockResolvedValue([testTimesheetOption]);
   vi.mocked(getTeamMonthOverview).mockResolvedValue(testTeamMonthOverview);
+  vi.mocked(getInvoicingSummary).mockResolvedValue(testInvoicingSummary);
 });
 
 describe("DashboardPage", () => {
@@ -173,13 +181,21 @@ describe("DashboardPage", () => {
     );
   });
 
-  it("shows a Billing placeholder to an accountant", async () => {
+  it("shows the invoicing summary to an accountant, linking to /invoices", async () => {
     vi.mocked(fetchCurrentUser).mockResolvedValue(testAccountant);
     renderApp("/");
 
     await screen.findByRole("heading", { name: "Billing" });
     expect(screen.queryByRole("heading", { name: "My team" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "Administration", level: 3 })).toBeNull();
+
+    const heading = await screen.findByRole("heading", { level: 4, name: "Invoicing" });
+    const card = heading.closest(".mantine-Paper-root") as HTMLElement;
+    expect(within(card).getByText("2")).toBeTruthy();
+    expect(within(card).getByText("1250 EUR")).toBeTruthy();
+    expect(within(card).getByText("1")).toBeTruthy();
+    const link = within(card).getByRole("link", { name: "Details →" });
+    expect(link.getAttribute("href")).toBe("/invoices");
   });
 
   it("shows both My team and Administration to an admin who is also a manager", async () => {
@@ -209,5 +225,21 @@ describe("DashboardPage", () => {
         expect.anything(),
       );
     });
+  });
+
+  it("shows a blocking expense-report count on the Billing card", async () => {
+    const overview = {
+      ...testTeamMonthOverview,
+      projects: testTeamMonthOverview.projects.map((project) =>
+        project.project.id === testReadyBillingPeriod.project_id
+          ? { ...project, billing: { ...project.billing, status: "not_ready" as const, blocking_reports: 1 } }
+          : project,
+      ),
+    };
+    vi.mocked(getTeamMonthOverview).mockResolvedValue(overview);
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
+    renderApp("/");
+
+    await screen.findByText(/1 expense report\(s\) pending/);
   });
 });

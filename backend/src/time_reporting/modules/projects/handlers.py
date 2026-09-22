@@ -79,6 +79,7 @@ def _to_dto(
         description=project.description,
         is_active=project.is_active,
         normal_working_hours=project.normal_working_hours,
+        is_internal=project.is_internal,
         manager=manager,
         created_at=project.created_at,
         updated_at=project.updated_at,
@@ -186,7 +187,7 @@ class ListMemberProjectsWithBillingItemsHandler(_BaseHandler):
         items_by_project: dict[UUID, list[ProjectBillingItemDTO]] = defaultdict(list)
         project_ids = frozenset(project.id for project in projects)
         for item in await self._billing_items.list_for_projects(
-            project_ids, include_inactive=False
+            project_ids, include_inactive=False, units=query.units
         ):
             items_by_project[item.project_id].append(_billing_item_dto(item))
 
@@ -200,6 +201,9 @@ class ListMemberProjectsWithBillingItemsHandler(_BaseHandler):
                 billing_items=tuple(items_by_project[project.id]),
             )
             for project in projects
+            # With a units filter, a project none of whose active items match drops out
+            # entirely rather than appearing with an empty row picker.
+            if query.units is None or items_by_project[project.id]
         )
 
 
@@ -332,6 +336,7 @@ class CreateProjectHandler(_BaseHandler):
             name=command.name,
             description=command.description,
             normal_working_hours=command.normal_working_hours,
+            is_internal=command.is_internal,
             manager_id=command.manager_id,
         )
         return await self._project_dto(project)

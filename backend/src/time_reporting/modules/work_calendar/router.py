@@ -122,10 +122,10 @@ async def delete_non_working_day(non_working_day_id: UUID, _admin: AdminDep, bus
 
 @router.post("/non-working-days/import")
 async def import_public_holidays(
-    body: ImportHolidaysRequest, _admin: AdminDep, bus: BusDep
+    body: ImportHolidaysRequest, admin: AdminDep, bus: BusDep
 ) -> ImportHolidaysResponse:
     try:
-        added = await bus.execute(ImportPublicHolidays(year=body.year))
+        added = await bus.execute(ImportPublicHolidays(year=body.year, actor_id=admin.id))
     except HolidayCountryNotSupportedError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return ImportHolidaysResponse(added=added)

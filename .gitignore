@@ -20,6 +20,10 @@ node_modules/
 .env.*
 !.env.example
 
+# Local `time-reporting backup` output (the default `backup_dir`; Docker Compose uses the
+# `backups` named volume instead)
+/backups/
+
 # Editors / OS
 .idea/
 .vscode/

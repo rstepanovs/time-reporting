@@ -114,6 +114,8 @@ class ProjectDTO:
     is_active: bool
     # Hours booked per working day when a timesheet week is prefilled for this project.
     normal_working_hours: Decimal
+    # Never billed — see ``timesheets.contracts.BillingPeriodStatus.NOT_BILLABLE``.
+    is_internal: bool
     manager: ProjectManagerDTO | None
     created_at: datetime
     updated_at: datetime
@@ -200,9 +202,15 @@ class GetProjectBillingItemsByIds(Query[tuple[ProjectBillingItemDTO, ...]]):
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ListMemberProjectsWithBillingItems(Query[tuple[ProjectOptionDTO, ...]]):
     """Active projects ``user_id`` is a member of, each with its active billing items, ordered by
-    project name. Used to build a timesheet row picker and to validate timesheet writes."""
+    project name. Used to build a timesheet row picker and to validate timesheet writes.
+
+    ``units=None`` (the default) returns every unit; ``timesheets`` passes ``{HOUR, DAY}`` and
+    ``expenses`` passes ``{AMOUNT}`` so each module only ever sees the items it can write to. A
+    project whose every billing item is filtered out by ``units`` is dropped from the result.
+    """
 
     user_id: UUID
+    units: frozenset[BillingUnit] | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -260,6 +268,7 @@ class CreateProject(Command[ProjectDTO]):
     name: str
     description: str | None = None
     normal_working_hours: Decimal = Decimal("8.00")
+    is_internal: bool = False
     manager_id: UUID | None = None
 
 
@@ -278,6 +287,7 @@ class UpdateProject(Command[ProjectDTO]):
     description: str | None = None
     is_active: bool | None = None
     normal_working_hours: Decimal | None = None
+    is_internal: bool | None = None
     manager_id: UUID | None = None
     clear_fields: frozenset[ClearableProjectField] = frozenset()
 

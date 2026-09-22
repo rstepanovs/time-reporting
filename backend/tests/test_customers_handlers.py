@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 from uuid import uuid4
 
 import pytest
@@ -17,6 +18,7 @@ from time_reporting.modules.customers.contracts import (
     DeleteCustomer,
     GetCustomerById,
     GetCustomersByIds,
+    InvalidInvoiceLocaleError,
     ListCustomers,
     UpdateCustomer,
 )
@@ -113,6 +115,118 @@ async def test_update_customer_clears_listed_fields(bus: Bus) -> None:
 
     assert updated.legal_name is None
     assert updated.notes == "Invoice by post"
+
+
+async def test_create_and_update_invoicing_fields_round_trip(bus: Bus) -> None:
+    customer = await bus.execute(
+        CreateCustomer(
+            name="Invoicing Fields",
+            billing_address=DEFAULT_BILLING_ADDRESS,
+            billing_period=DEFAULT_BILLING_PERIOD,
+            currency="EUR",
+            vat_rate=Decimal("25.00"),
+            vat_note="Omvänd betalningsskyldighet / Reverse charge",
+            invoice_locale="sv",
+            customer_number="CUST-042",
+            your_reference="Jane Doe",
+        )
+    )
+
+    assert customer.vat_rate == Decimal("25.00")
+    assert customer.vat_note == "Omvänd betalningsskyldighet / Reverse charge"
+    assert customer.invoice_locale == "sv"
+    assert customer.customer_number == "CUST-042"
+    assert customer.your_reference == "Jane Doe"
+
+    updated = await bus.execute(
+        UpdateCustomer(customer_id=customer.id, vat_rate=Decimal("0.00"), invoice_locale="en")
+    )
+
+    assert updated.vat_rate == Decimal("0.00")
+    assert updated.invoice_locale == "en"
+    assert updated.customer_number == "CUST-042"
+
+
+async def test_create_customer_defaults_invoicing_fields_to_none(bus: Bus) -> None:
+    customer = await bus.execute(
+        CreateCustomer(
+            name="No Invoicing Fields",
+            billing_address=DEFAULT_BILLING_ADDRESS,
+            billing_period=DEFAULT_BILLING_PERIOD,
+            currency="EUR",
+        )
+    )
+
+    assert customer.vat_rate is None
+    assert customer.vat_note is None
+    assert customer.invoice_locale is None
+    assert customer.customer_number is None
+    assert customer.your_reference is None
+
+
+async def test_update_customer_clears_invoicing_fields(
+    bus: Bus, make_customer: CustomerFactory
+) -> None:
+    customer = await bus.execute(
+        UpdateCustomer(
+            customer_id=(await make_customer()).id,
+            vat_rate=Decimal("25.00"),
+            vat_note="Some note",
+            invoice_locale="sv",
+            customer_number="CUST-1",
+            your_reference="Ref",
+        )
+    )
+
+    cleared = await bus.execute(
+        UpdateCustomer(
+            customer_id=customer.id,
+            clear_fields=frozenset(
+                {"vat_rate", "vat_note", "invoice_locale", "customer_number", "your_reference"}
+            ),
+        )
+    )
+
+    assert cleared.vat_rate is None
+    assert cleared.vat_note is None
+    assert cleared.invoice_locale is None
+    assert cleared.customer_number is None
+    assert cleared.your_reference is None
+
+
+async def test_create_customer_rejects_unknown_invoice_locale(bus: Bus) -> None:
+    with pytest.raises(InvalidInvoiceLocaleError):
+        await bus.execute(
+            CreateCustomer(
+                name="Bad Locale",
+                billing_address=DEFAULT_BILLING_ADDRESS,
+                billing_period=DEFAULT_BILLING_PERIOD,
+                currency="EUR",
+                invoice_locale="xx",
+            )
+        )
+
+
+async def test_update_customer_rejects_unknown_invoice_locale(
+    bus: Bus, make_customer: CustomerFactory
+) -> None:
+    customer = await make_customer()
+
+    with pytest.raises(InvalidInvoiceLocaleError):
+        await bus.execute(UpdateCustomer(customer_id=customer.id, invoice_locale="xx"))
+
+
+async def test_database_rejects_vat_rate_out_of_range(bus: Bus) -> None:
+    with pytest.raises(IntegrityError, match="ck_customers_vat_rate_range"):
+        await bus.execute(
+            CreateCustomer(
+                name="Bad VAT",
+                billing_address=DEFAULT_BILLING_ADDRESS,
+                billing_period=DEFAULT_BILLING_PERIOD,
+                currency="EUR",
+                vat_rate=Decimal("150.00"),
+            )
+        )
 
 
 async def test_rename_to_taken_name_is_rejected(bus: Bus, make_customer: CustomerFactory) -> None:

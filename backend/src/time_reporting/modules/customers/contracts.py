@@ -6,6 +6,7 @@ for these messages are registered in ``customers.module``; ORM entities never le
 
 from dataclasses import dataclass
 from datetime import date, datetime
+from decimal import Decimal
 from enum import StrEnum
 from typing import Literal, get_args
 from uuid import UUID
@@ -20,7 +21,24 @@ class BillingIntervalUnit(StrEnum):
     YEAR = "year"
 
 
-type ClearableCustomerField = Literal["legal_name", "tax_id", "billing_email", "notes"]
+# Matches faktura_printer.available_locales(); duplicated here (not imported) since a module may
+# only import another module's contracts.py, and faktura-printer is only a dependency of the
+# future `invoices` module, not of `customers`. Also duplicated independently as
+# `company.contracts.INVOICE_LOCALES` for the company's own default — the two happen to agree today
+# but neither imports the other.
+INVOICE_LOCALES: frozenset[str] = frozenset({"sv", "en"})
+
+type ClearableCustomerField = Literal[
+    "legal_name",
+    "tax_id",
+    "billing_email",
+    "notes",
+    "vat_rate",
+    "vat_note",
+    "invoice_locale",
+    "customer_number",
+    "your_reference",
+]
 
 # Optional text fields that ``UpdateCustomer.clear_fields`` can reset to ``None``.
 CLEARABLE_CUSTOMER_FIELDS: tuple[ClearableCustomerField, ...] = get_args(
@@ -65,6 +83,13 @@ class CustomerDTO:
     payment_terms_days: int
     notes: str | None
     is_active: bool
+    # Invoicing. Null `vat_rate` means no VAT line; null `invoice_locale` falls back to the
+    # company's default — see INVOICE_LOCALES.
+    vat_rate: Decimal | None
+    vat_note: str | None
+    invoice_locale: str | None
+    customer_number: str | None
+    your_reference: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -120,6 +145,11 @@ class CreateCustomer(Command[CustomerDTO]):
     billing_email: str | None = None
     payment_terms_days: int = 30
     notes: str | None = None
+    vat_rate: Decimal | None = None
+    vat_note: str | None = None
+    invoice_locale: str | None = None
+    customer_number: str | None = None
+    your_reference: str | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -142,6 +172,11 @@ class UpdateCustomer(Command[CustomerDTO]):
     payment_terms_days: int | None = None
     notes: str | None = None
     is_active: bool | None = None
+    vat_rate: Decimal | None = None
+    vat_note: str | None = None
+    invoice_locale: str | None = None
+    customer_number: str | None = None
+    your_reference: str | None = None
     clear_fields: frozenset[ClearableCustomerField] = frozenset()
 
 
@@ -179,3 +214,13 @@ class CustomerInUseError(CustomerError):
             f"Customer {customer_id} is referenced by other data and cannot be deleted"
         )
         self.customer_id = customer_id
+
+
+class InvalidInvoiceLocaleError(CustomerError):
+    """Defense in depth for a direct bus caller — the HTTP schema already rejects this via
+    ``Literal[INVOICE_LOCALES]``, so no router ever needs to catch it."""
+
+    def __init__(self, locale: str) -> None:
+        available = ", ".join(sorted(INVOICE_LOCALES))
+        super().__init__(f"Unknown invoice locale {locale!r}, available: {available}")
+        self.locale = locale

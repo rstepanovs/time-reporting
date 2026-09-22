@@ -330,6 +330,7 @@ class ProjectBillingPeriodResponse(BaseModel):
     sent_at: datetime | None
     sent_by: TimesheetUserResponse | None
     blocking_weeks: int
+    blocking_reports: int
     weeks_in_scope: int
     hours: HoursTotalsResponse
     per_diem_days: Decimal
@@ -342,6 +343,29 @@ class TeamProjectResponse(BaseModel):
     project: TimesheetProjectResponse
     members: list[TeamMemberResponse]
     billing: ProjectBillingPeriodResponse
+
+
+class BillingPeriodListItemResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    project_id: UUID
+    project_name: str
+    customer_name: str
+    period_start: date
+    period_end: date
+    sent_at: datetime
+    sent_by_id: UUID
+    sent_by_name: str
+    invoice_id: UUID | None
+
+
+class BillingPeriodPageResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    items: list[BillingPeriodListItemResponse]
+    total: int
+    limit: int
+    offset: int
 
 
 class TeamStatusCountsResponse(BaseModel):

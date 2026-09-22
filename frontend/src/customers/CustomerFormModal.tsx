@@ -11,7 +11,8 @@ import {
 import { DateInput } from "@mantine/dates";
 import { isNotEmpty, matches, useForm } from "@mantine/form";
 
-import type { Customer, CustomerCreateBody, CustomerUpdateBody } from "@/customers/api";
+import { INVOICE_LOCALE_OPTIONS } from "@/company/api";
+import type { Customer, CustomerCreateBody, CustomerUpdateBody, InvoiceLocale } from "@/customers/api";
 import { CustomerConflictError } from "@/customers/api";
 import { useCreateCustomer, useUpdateCustomer } from "@/customers/hooks";
 
@@ -20,6 +21,12 @@ const INTERVAL_UNIT_OPTIONS = [
   { value: "week", label: "week(s)" },
   { value: "month", label: "month(s)" },
   { value: "year", label: "year(s)" },
+];
+
+// "" means "use the company's default", stored as `invoice_locale: null`.
+const INVOICE_LOCALE_SELECT_OPTIONS = [
+  { value: "", label: "Company default" },
+  ...INVOICE_LOCALE_OPTIONS,
 ];
 
 type FormValues = {
@@ -39,6 +46,11 @@ type FormValues = {
   anchorDate: string;
   currency: string;
   paymentTermsDays: number;
+  vatRate: number | "";
+  vatNote: string;
+  invoiceLocale: InvoiceLocale | "";
+  customerNumber: string;
+  yourReference: string;
 };
 
 type Props =
@@ -63,6 +75,11 @@ function valuesFromCustomer(customer: Customer): FormValues {
     anchorDate: customer.billing_period.anchor_date,
     currency: customer.currency,
     paymentTermsDays: customer.payment_terms_days,
+    vatRate: customer.vat_rate !== null ? Number(customer.vat_rate) : "",
+    vatNote: customer.vat_note ?? "",
+    invoiceLocale: (customer.invoice_locale as InvoiceLocale | null) ?? "",
+    customerNumber: customer.customer_number ?? "",
+    yourReference: customer.your_reference ?? "",
   };
 }
 
@@ -83,6 +100,11 @@ const EMPTY_VALUES: FormValues = {
   anchorDate: "",
   currency: "",
   paymentTermsDays: 30,
+  vatRate: "",
+  vatNote: "",
+  invoiceLocale: "",
+  customerNumber: "",
+  yourReference: "",
 };
 
 /** `null` if cleared (was non-empty, now empty), the new value if changed, `undefined` if unchanged. */
@@ -109,6 +131,7 @@ export function CustomerFormModal(props: Props) {
       anchorDate: isNotEmpty("Choose an anchor date"),
       intervalCount: (value) => (value >= 1 && value <= 366 ? null : "Use 1 to 366"),
       paymentTermsDays: (value) => (value >= 0 && value <= 365 ? null : "Use 0 to 365"),
+      vatRate: (value) => (value === "" || (value >= 0 && value <= 100) ? null : "Use 0 to 100"),
     },
   });
 
@@ -141,6 +164,11 @@ export function CustomerFormModal(props: Props) {
           billing_period: billingPeriod,
           currency: values.currency.toUpperCase(),
           payment_terms_days: values.paymentTermsDays,
+          vat_rate: values.vatRate === "" ? null : values.vatRate,
+          vat_note: values.vatNote || null,
+          invoice_locale: values.invoiceLocale || null,
+          customer_number: values.customerNumber || null,
+          your_reference: values.yourReference || null,
         });
       } else {
         const original = props.customer;
@@ -175,6 +203,20 @@ export function CustomerFormModal(props: Props) {
         if (values.paymentTermsDays !== original.payment_terms_days) {
           body.payment_terms_days = values.paymentTermsDays;
         }
+
+        const newVatRate = values.vatRate === "" ? null : values.vatRate;
+        const originalVatRate = original.vat_rate === null ? null : Number(original.vat_rate);
+        if (newVatRate !== originalVatRate) body.vat_rate = newVatRate;
+        const vatNote = clearableDiff(original.vat_note ?? "", values.vatNote);
+        if (vatNote !== undefined) body.vat_note = vatNote;
+        const newInvoiceLocale = values.invoiceLocale || null;
+        if (newInvoiceLocale !== (original.invoice_locale ?? null)) {
+          body.invoice_locale = newInvoiceLocale;
+        }
+        const customerNumber = clearableDiff(original.customer_number ?? "", values.customerNumber);
+        if (customerNumber !== undefined) body.customer_number = customerNumber;
+        const yourReference = clearableDiff(original.your_reference ?? "", values.yourReference);
+        if (yourReference !== undefined) body.your_reference = yourReference;
 
         await updateCustomer.mutateAsync(body);
       }
@@ -308,6 +350,48 @@ export function CustomerFormModal(props: Props) {
             key={form.key("notes")}
             {...form.getInputProps("notes")}
           />
+
+          <Group grow align="flex-end">
+            <NumberInput
+              label="VAT rate"
+              description="Blank prints no VAT line, e.g. for reverse charge"
+              min={0}
+              max={100}
+              decimalScale={2}
+              suffix="%"
+              key={form.key("vatRate")}
+              {...form.getInputProps("vatRate")}
+            />
+            <Select
+              label="Invoice language"
+              data={INVOICE_LOCALE_SELECT_OPTIONS}
+              allowDeselect={false}
+              key={form.key("invoiceLocale")}
+              {...form.getInputProps("invoiceLocale")}
+            />
+          </Group>
+          <Textarea
+            label="VAT note"
+            description={'Printed on the invoice, e.g. "Omvänd betalningsskyldighet / Reverse charge"'}
+            autosize
+            minRows={2}
+            key={form.key("vatNote")}
+            {...form.getInputProps("vatNote")}
+          />
+          <Group grow>
+            <TextInput
+              label="Customer number"
+              maxLength={50}
+              key={form.key("customerNumber")}
+              {...form.getInputProps("customerNumber")}
+            />
+            <TextInput
+              label="Your reference"
+              maxLength={255}
+              key={form.key("yourReference")}
+              {...form.getInputProps("yourReference")}
+            />
+          </Group>
 
           <Button type="submit" loading={mutation.isPending} style={{ alignSelf: "flex-start" }}>
             {props.mode === "create" ? "Create customer" : "Save changes"}

@@ -32,6 +32,8 @@ export type TeamMemberWarning = components["schemas"]["TeamMemberResponse"]["war
 export type TeamStatusCounts = components["schemas"]["TeamStatusCountsResponse"];
 export type ProjectBillingPeriod = components["schemas"]["ProjectBillingPeriodResponse"];
 export type BillingPeriodStatus = components["schemas"]["ProjectBillingPeriodResponse"]["status"];
+export type BillingPeriodListItem = components["schemas"]["BillingPeriodListItemResponse"];
+export type BillingPeriodPage = components["schemas"]["BillingPeriodPageResponse"];
 export type TeamScope = "mine" | "all";
 
 /** A project/billing-item pair picked from the options list, before it has any entries — the
@@ -236,7 +238,36 @@ export async function sendProjectMonthToBilling(params: {
   return data;
 }
 
-/** Admin only: delete a sent billing period, unlocking it again. */
+/** Admin or accountant: every sent billing period, newest first, filterable by
+ * project/customer/month range and whether it's invoiced, paginated. */
+export async function listBillingPeriods(params: {
+  projectId?: string;
+  customerId?: string;
+  monthFrom?: string;
+  monthTo?: string;
+  invoiced?: boolean;
+  limit?: number;
+  offset?: number;
+} = {}): Promise<BillingPeriodPage> {
+  const { data, response } = await api.GET("/api/v1/timesheets/billing-periods", {
+    params: {
+      query: {
+        project_id: params.projectId,
+        customer_id: params.customerId,
+        month_from: params.monthFrom,
+        month_to: params.monthTo,
+        invoiced: params.invoiced,
+        limit: params.limit,
+        offset: params.offset,
+      },
+    },
+  });
+  if (!data) throw await timesheetAwareError(response);
+  return data;
+}
+
+/** Admin only: delete a sent billing period, unlocking it again. Throws `TimesheetConflictError`
+ * if the period is invoiced. */
 export async function reopenProjectBillingPeriod(params: {
   projectId: string;
   periodStart: string;
@@ -246,4 +277,13 @@ export async function reopenProjectBillingPeriod(params: {
     { params: { path: { project_id: params.projectId, period_start: params.periodStart } } },
   );
   if (!response.ok) throw await timesheetAwareError(response);
+}
+
+/** Relative download URL for a sent billing period's CSV export; used directly as an
+ * `<a href download>`, not fetched via `api` — following `backupDownloadUrl`. */
+export function billingPeriodExportUrl(projectId: string, periodStart: string): string {
+  return (
+    `/api/v1/timesheets/billing-periods/${encodeURIComponent(projectId)}` +
+    `/${encodeURIComponent(periodStart)}/export.csv`
+  );
 }

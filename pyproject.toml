@@ -15,6 +15,7 @@ dev = [
     "pytest>=9.1",
     "pytest-asyncio>=1.4",
     "httpx>=0.28.1",
+    "types-openpyxl>=3.1.5.20260827",
 ]
 
 [tool.uv]
@@ -55,6 +56,12 @@ strict = true
 files = ["backend/src", "backend/tests"]
 mypy_path = "backend/src"
 plugins = ["pydantic.mypy"]
+
+# No stubs and no py.typed marker upstream; `accounting.rendering` is the only file importing it,
+# and casts its one Any-typed return (`HTML(...).write_pdf()`) back to `bytes` explicitly.
+[[tool.mypy.overrides]]
+module = "weasyprint"
+ignore_missing_imports = true
 
 [tool.pydantic-mypy]
 init_forbid_extra = true

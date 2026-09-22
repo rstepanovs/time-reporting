@@ -1,6 +1,7 @@
 """Tests for the demo data seed and the ``time-reporting seed-demo`` command."""
 
 import io
+from collections import defaultdict
 from dataclasses import replace
 from datetime import date
 from decimal import Decimal
@@ -12,7 +13,14 @@ from support import EMPLOYEE, UserFactory
 from time_reporting.cli import main
 from time_reporting.core.cqrs import Bus
 from time_reporting.core.passwords import verify_password
+from time_reporting.modules.company.contracts import (
+    CompanyAddressDTO,
+    GetCompanySettings,
+    UpdateCompanySettings,
+)
 from time_reporting.modules.customers.contracts import ListCustomers
+from time_reporting.modules.expenses.contracts import ExpenseReportStatus, ListMyExpenseReports
+from time_reporting.modules.invoices.contracts import InvoiceStatus, ListInvoices
 from time_reporting.modules.projects.contracts import (
     BillingItemPreset,
     ListProjectBillingItems,
@@ -119,6 +127,7 @@ async def test_seed_creates_users_customers_and_projects(bus: Bus) -> None:
         stored_project = projects_by_name[project.name]
         assert stored_project.is_active is not project.archived
         assert stored_project.customer.name == project.customer_name
+        assert stored_project.is_internal is project.is_internal
         if project.manager_email:
             assert stored_project.manager is not None
             assert stored_project.manager.email == project.manager_email
@@ -188,6 +197,32 @@ async def test_seed_creates_users_customers_and_projects(bus: Bus) -> None:
             assert credentials is not None
             assert await bus.query(CountTimeEntries(user_id=credentials.id)) == 0
 
+    # Expense reports: a demo user who is a member of at least two active projects with an
+    # amount item gets one approved and one submitted report this month.
+    membership_counts: dict[str, int] = defaultdict(int)
+    for project in projects:
+        if project.archived:
+            continue
+        for email in project.member_emails:
+            membership_counts[email] += 1
+    expense_report_emails = {email for email, count in membership_counts.items() if count >= 2}
+    assert set(report.seeded_expense_reports_for) == expense_report_emails
+    for user in users:
+        credentials = await bus.query(GetUserCredentialsByEmail(email=user.email))
+        assert credentials is not None
+        reports = await bus.query(
+            ListMyExpenseReports(
+                user_id=credentials.id, year=SEED_TODAY.year, month=SEED_TODAY.month
+            )
+        )
+        if user.email in expense_report_emails:
+            assert {r.status for r in reports} == {
+                ExpenseReportStatus.APPROVED,
+                ExpenseReportStatus.SUBMITTED,
+            }
+        else:
+            assert reports == ()
+
 
 async def test_seed_is_idempotent(bus: Bus) -> None:
     suffix = uuid4().hex[:8]
@@ -220,6 +255,87 @@ async def test_seed_leaves_an_existing_user_untouched(bus: Bus, make_user: UserF
     stored = await bus.query(GetUserById(user_id=existing.id))
     assert stored is not None
     assert (stored.roles, stored.name) == (EMPLOYEE, "Someone Else")
+
+
+async def test_seed_sets_the_company_profile_only_if_still_placeholder(bus: Bus) -> None:
+    report = await seed_demo_data(bus, users=(), customers=(), projects=(), today=SEED_TODAY)
+
+    assert report.seeded_company_profile is True
+    settings = await bus.query(GetCompanySettings())
+    assert settings.legal_name == "Demo Consulting AB"
+    assert settings.org_number == "556677-8899"
+    assert settings.invoice_number_prefix == f"{SEED_TODAY.year}-"
+
+    second_report = await seed_demo_data(bus, users=(), customers=(), projects=(), today=SEED_TODAY)
+
+    assert second_report.seeded_company_profile is False
+    unchanged = await bus.query(GetCompanySettings())
+    assert unchanged.legal_name == "Demo Consulting AB"
+
+
+async def test_seed_leaves_a_customized_company_profile_untouched(bus: Bus) -> None:
+    await bus.execute(
+        UpdateCompanySettings(
+            actor_id=None,
+            legal_name="Someone Else AB",
+            org_number="",
+            vat_number="",
+            address=CompanyAddressDTO(street="", street2=None, postal_code="", city="", country=""),
+            email="",
+            phone="",
+            registered_office="",
+            bankgiro="",
+            iban="",
+            bic="",
+            f_tax_approved=False,
+            default_invoice_locale="sv",
+            late_interest="",
+            invoice_number_prefix="",
+            next_invoice_number=1,
+            allow_self_review=False,
+        )
+    )
+
+    report = await seed_demo_data(bus, users=(), customers=(), projects=(), today=SEED_TODAY)
+
+    assert report.seeded_company_profile is False
+    settings = await bus.query(GetCompanySettings())
+    assert settings.legal_name == "Someone Else AB"
+
+
+async def test_seed_sends_and_invoices_the_earliest_booked_month(bus: Bus) -> None:
+    suffix = uuid4().hex[:8]
+    users, customers, projects = (
+        _unique_users(suffix),
+        _unique_customers(suffix),
+        _unique_projects(suffix),
+    )
+
+    report = await seed_demo_data(
+        bus, users=users, customers=customers, projects=projects, today=SEED_TODAY
+    )
+
+    assert report.seeded_invoice is True
+    customer_page = await bus.query(ListCustomers(limit=1000, offset=0, include_inactive=True))
+    customer_id = next(
+        customer.id
+        for customer in customer_page.items
+        if customer.name == f"Acme Corporation {suffix}"
+    )
+    invoices_page = await bus.query(ListInvoices(customer_id=customer_id, limit=10, offset=0))
+    assert invoices_page.total == 1
+    invoice = invoices_page.items[0]
+    assert invoice.status == InvoiceStatus.ISSUED
+    assert invoice.number is not None
+    assert invoice.currency == "EUR"
+
+    second_report = await seed_demo_data(
+        bus, users=users, customers=customers, projects=projects, today=SEED_TODAY
+    )
+
+    assert second_report.seeded_invoice is False
+    invoices_page_again = await bus.query(ListInvoices(customer_id=customer_id, limit=10, offset=0))
+    assert invoices_page_again.total == 1
 
 
 # --- main(): output and input validation, without touching the database ---

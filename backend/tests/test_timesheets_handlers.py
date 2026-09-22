@@ -4,11 +4,13 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from support import ADMIN, EMPLOYEE, MANAGER, ProjectFactory, UserFactory
+from support import ADMIN, ADMIN_ONLY, EMPLOYEE, MANAGER, ProjectFactory, UserFactory
 from time_reporting.core.cqrs import Bus
+from time_reporting.modules.company.contracts import CompanyAddressDTO, UpdateCompanySettings
 from time_reporting.modules.projects.contracts import (
     AddProjectMember,
     BillingItemPreset,
+    BillingUnit,
     ListProjectBillingItems,
     UpdateProject,
     UpdateProjectBillingItem,
@@ -33,6 +35,7 @@ from time_reporting.modules.timesheets.contracts import (
     TimeEntryChange,
     TimesheetBillingItemNotFoundError,
     TimesheetRowClosedError,
+    TimesheetUnitNotAllowedError,
     TimesheetWeekLockedError,
     TimesheetWeekStatus,
     WeekStartNotMondayError,
@@ -354,7 +357,7 @@ async def test_save_week_rejects_out_of_range_day_quantity(
         )
 
 
-async def test_save_week_allows_amount_with_no_upper_bound(
+async def test_save_week_rejects_an_amount_item(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
     user = await make_user()
@@ -363,19 +366,31 @@ async def test_save_week_allows_amount_with_no_upper_bound(
     items = await bus.query(ListProjectBillingItems(project_id=project.id))
     expense_item = next(i for i in items if i.preset == BillingItemPreset.OTHER_EXPENSES)
 
-    updated = await bus.execute(
-        SaveTimesheetWeek(
-            user_id=user.id,
-            week_start=A_MONDAY,
-            changes=(
-                TimeEntryChange(
-                    billing_item_id=expense_item.id, date=A_MONDAY, quantity=Decimal("999.99")
+    with pytest.raises(TimesheetUnitNotAllowedError):
+        await bus.execute(
+            SaveTimesheetWeek(
+                user_id=user.id,
+                week_start=A_MONDAY,
+                changes=(
+                    TimeEntryChange(
+                        billing_item_id=expense_item.id, date=A_MONDAY, quantity=Decimal("999.99")
+                    ),
                 ),
-            ),
+            )
         )
-    )
-    row = next(r for r in updated.rows if r.billing_item.id == expense_item.id)
-    assert row.entries[0].quantity == Decimal("999.99")
+
+
+async def test_list_timesheet_options_excludes_amount_items(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    user = await make_user()
+    project = await make_project()
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=user.id))
+
+    options = await bus.query(ListTimesheetOptions(user_id=user.id))
+
+    units = {item.unit for option in options for item in option.billing_items}
+    assert BillingUnit.AMOUNT not in units
 
 
 async def test_save_week_rejects_more_than_24_hours_on_one_day(
@@ -609,6 +624,30 @@ async def test_deleting_every_cell_and_the_comment_removes_the_row(
 # --- Submit / approve / return workflow ---
 
 
+async def _enable_self_review(bus: Bus, actor_id: UUID) -> None:
+    await bus.execute(
+        UpdateCompanySettings(
+            actor_id=actor_id,
+            legal_name="",
+            org_number="",
+            vat_number="",
+            address=CompanyAddressDTO(street="", street2=None, postal_code="", city="", country=""),
+            email="",
+            phone="",
+            registered_office="",
+            bankgiro="",
+            iban="",
+            bic="",
+            f_tax_approved=False,
+            default_invoice_locale="sv",
+            late_interest="",
+            invoice_number_prefix="",
+            next_invoice_number=1,
+            allow_self_review=True,
+        )
+    )
+
+
 async def _member_worker_and_manager(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> tuple[UUID, UUID, UUID]:
@@ -751,6 +790,38 @@ async def test_admin_manager_cannot_review_their_own_week(
         )
 
 
+async def test_self_review_allowed_when_setting_is_on(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    admin = await make_user(roles=ADMIN)
+    await _enable_self_review(bus, admin.id)
+    project = await make_project()
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=admin.id))
+    await bus.execute(SubmitTimesheetWeek(user_id=admin.id, week_start=A_MONDAY))
+
+    approved = await bus.execute(
+        ApproveTimesheetWeek(user_id=admin.id, week_start=A_MONDAY, reviewer_id=admin.id)
+    )
+    assert approved.status is TimesheetWeekStatus.APPROVED
+
+
+async def test_self_review_still_refused_for_a_non_manager_owner(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    admin_only = await make_user(roles=ADMIN_ONLY)
+    await _enable_self_review(bus, admin_only.id)
+    project = await make_project()
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=admin_only.id))
+    await bus.execute(SubmitTimesheetWeek(user_id=admin_only.id, week_start=A_MONDAY))
+
+    with pytest.raises(SelfReviewError):
+        await bus.execute(
+            ApproveTimesheetWeek(
+                user_id=admin_only.id, week_start=A_MONDAY, reviewer_id=admin_only.id
+            )
+        )
+
+
 async def test_can_review_reflects_role_and_status(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory
 ) -> None:
@@ -773,6 +844,27 @@ async def test_can_review_reflects_role_and_status(
         GetTimesheetWeek(user_id=worker_id, week_start=A_MONDAY, viewer_id=other_worker.id)
     )
     assert worker_view.can_review is False
+
+
+async def test_can_review_reflects_self_review_setting(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory
+) -> None:
+    admin = await make_user(roles=ADMIN)
+    project = await make_project()
+    await bus.execute(AddProjectMember(project_id=project.id, user_id=admin.id))
+    await bus.execute(SubmitTimesheetWeek(user_id=admin.id, week_start=A_MONDAY))
+
+    off_view = await bus.query(
+        GetTimesheetWeek(user_id=admin.id, week_start=A_MONDAY, viewer_id=admin.id)
+    )
+    assert off_view.can_review is False
+
+    await _enable_self_review(bus, admin.id)
+
+    on_view = await bus.query(
+        GetTimesheetWeek(user_id=admin.id, week_start=A_MONDAY, viewer_id=admin.id)
+    )
+    assert on_view.can_review is True
 
 
 async def test_list_submitted_weeks_reports_totals(

@@ -482,6 +482,11 @@ export function ProjectDetailsPage() {
             <Badge color={data.is_active ? "green" : "gray"} variant="light">
               {data.is_active ? "Active" : "Archived"}
             </Badge>
+            {data.is_internal && (
+              <Badge color="violet" variant="light">
+                Internal
+              </Badge>
+            )}
           </Group>
           <Text c="dimmed">{data.customer.name}</Text>
           <Text c="dimmed" size="sm">

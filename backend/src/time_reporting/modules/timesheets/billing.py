@@ -1,28 +1,45 @@
 """Sending a project's calendar month to billing, and reopening a sent one.
 
-A stub: "sending" records the handoff (``ProjectBillingPeriod``) and locks the period against
-further edits — invoicing itself doesn't exist yet; a future invoices module would pick up sent
-periods from here. Kept separate from ``service.py`` (week read/write) and ``team.py`` (the team
-overview's own read of the same readiness rule, which this reuses via ``billing_readiness``).
+"Sending" only records the handoff (``ProjectBillingPeriod``) and locks the period against further
+edits — drafting the invoice itself is ``invoices.CreateInvoiceDraft``'s job, reading sent periods
+from here (``ListInvoiceablePeriods``, ``timesheets/CLAUDE.md``'s "Billing handoff and locking").
+Kept separate from ``service.py`` (week read/write) and ``team.py`` (the team overview's own read
+of the same readiness rule, which this reuses via ``billing_readiness``).
 """
 
 from collections.abc import Sequence
 from datetime import date
+from decimal import Decimal
 from uuid import UUID
 
 from time_reporting.core.cqrs import Bus
 from time_reporting.db.mixins import utc_now
+from time_reporting.modules.audit.contracts import AuditAction, RecordAuditEvent
+from time_reporting.modules.expenses.contracts import (
+    ExpenseReportSummaryDTO,
+    ListProjectMonthExpenseReportLines,
+    ListProjectMonthExpenseReports,
+    LockProjectMonthExpenseReports,
+    UnlockProjectMonthExpenseReports,
+)
 from time_reporting.modules.projects.contracts import (
     BillingUnit,
     GetProjectBillingItemsByIds,
     GetProjectById,
 )
 from time_reporting.modules.timesheets.contracts import (
+    BillingPeriodAlreadyInvoicedError,
     BillingPeriodAlreadySentError,
+    BillingPeriodExportRowDTO,
+    BillingPeriodInvoicedError,
     BillingPeriodNotFoundError,
     BillingPeriodNotReadyError,
     BillingPeriodStatus,
+    ClearBillingPeriodsInvoiced,
+    GetBillingPeriodExportRows,
+    MarkBillingPeriodsInvoiced,
     ProjectBillingPeriodDTO,
+    ProjectIsInternalError,
     ReopenProjectBillingPeriod,
     SendProjectMonthToBilling,
     TimesheetProjectNotFoundError,
@@ -41,7 +58,12 @@ from time_reporting.modules.timesheets.summary import (
     _start_of_iso_week,
 )
 from time_reporting.modules.timesheets.team import billing_readiness
-from time_reporting.modules.users.contracts import GetUserById, UserDTO, UserNotFoundError
+from time_reporting.modules.users.contracts import (
+    GetUserById,
+    GetUsersByIds,
+    UserDTO,
+    UserNotFoundError,
+)
 
 
 class BillingService:
@@ -55,6 +77,8 @@ class BillingService:
         project = await self._bus.query(GetProjectById(project_id=command.project_id))
         if project is None:
             raise TimesheetProjectNotFoundError(command.project_id)
+        if project.is_internal:
+            raise ProjectIsInternalError(command.project_id)
         sender = await self._bus.query(GetUserById(user_id=command.sent_by_id))
         if sender is None:
             raise UserNotFoundError(command.sent_by_id)
@@ -82,11 +106,16 @@ class BillingService:
             else ()
         )
         status_by_user_week = {(row.user_id, row.week_start): row.status for row in week_rows}
-        status, blocking_weeks, _weeks_in_scope = billing_readiness(
-            scope_pairs, status_by_user_week
+        reports = await self._bus.query(
+            ListProjectMonthExpenseReports(
+                project_ids=frozenset({command.project_id}), period_start=month_first
+            )
+        )
+        status, blocking_weeks, blocking_reports, _weeks_in_scope = billing_readiness(
+            scope_pairs, status_by_user_week, [report.status for report in reports]
         )
         if status is not BillingPeriodStatus.READY:
-            raise BillingPeriodNotReadyError(blocking_weeks)
+            raise BillingPeriodNotReadyError(blocking_weeks, blocking_reports)
 
         period = ProjectBillingPeriod(
             project_id=command.project_id,
@@ -96,8 +125,28 @@ class BillingService:
             sent_by_id=command.sent_by_id,
         )
         await self._periods.save(period)
+        await self._bus.execute(
+            LockProjectMonthExpenseReports(project_id=command.project_id, period_start=month_first)
+        )
+        await self._bus.execute(
+            RecordAuditEvent(
+                actor_id=command.sent_by_id,
+                action=AuditAction.BILLING_PERIOD_SENT,
+                entity_type="billing_period",
+                entity_id=f"{command.project_id}:{month_first.isoformat()}",
+                summary=(
+                    f"Sent {project.customer.name} · {project.name} "
+                    f"({month_first:%Y-%m}) to billing"
+                ),
+                details={
+                    "project_id": str(command.project_id),
+                    "period_start": month_first.isoformat(),
+                    "period_end": month_last.isoformat(),
+                },
+            )
+        )
 
-        return await self._period_dto(period, entries, project.customer.currency, sender)
+        return await self._period_dto(period, entries, reports, project.customer.currency, sender)
 
     async def reopen_period(self, command: ReopenProjectBillingPeriod) -> None:
         period = await self._periods.get(
@@ -105,12 +154,127 @@ class BillingService:
         )
         if period is None:
             raise BillingPeriodNotFoundError(command.project_id, command.period_start)
+        if period.invoice_id is not None:
+            raise BillingPeriodInvoicedError(command.project_id, command.period_start)
+        # `ON DELETE RESTRICT` on `project_billing_periods.project_id` guarantees the project
+        # still exists while any of its periods (including this one, until the delete below) do.
+        project = await self._bus.query(GetProjectById(project_id=command.project_id))
+        assert project is not None
         await self._periods.delete(period)
+        await self._bus.execute(
+            UnlockProjectMonthExpenseReports(
+                project_id=command.project_id, period_start=command.period_start
+            )
+        )
+        await self._bus.execute(
+            RecordAuditEvent(
+                actor_id=command.actor_id,
+                action=AuditAction.BILLING_PERIOD_REOPENED,
+                entity_type="billing_period",
+                entity_id=f"{command.project_id}:{command.period_start.isoformat()}",
+                summary=(
+                    f"Reopened {project.customer.name} · {project.name} "
+                    f"({command.period_start:%Y-%m}) billing period"
+                ),
+            )
+        )
+
+    async def mark_invoiced(self, command: MarkBillingPeriodsInvoiced) -> None:
+        periods = []
+        for ref in command.periods:
+            period = await self._periods.get(
+                project_id=ref.project_id, period_start=ref.period_start
+            )
+            if period is None:
+                raise BillingPeriodNotFoundError(ref.project_id, ref.period_start)
+            if period.invoice_id is not None:
+                raise BillingPeriodAlreadyInvoicedError(ref.project_id, ref.period_start)
+            periods.append(period)
+        for period in periods:
+            period.invoice_id = command.invoice_id
+            await self._periods.save(period)
+
+    async def clear_invoiced(self, command: ClearBillingPeriodsInvoiced) -> None:
+        for period in await self._periods.list_by_invoice_id(command.invoice_id):
+            period.invoice_id = None
+            await self._periods.save(period)
+
+    async def get_export_rows(
+        self, query: GetBillingPeriodExportRows
+    ) -> tuple[BillingPeriodExportRowDTO, ...]:
+        period = await self._periods.get(
+            project_id=query.project_id, period_start=query.period_start
+        )
+        if period is None:
+            raise BillingPeriodNotFoundError(query.project_id, query.period_start)
+        project = await self._bus.query(GetProjectById(project_id=query.project_id))
+        assert project is not None
+
+        entries = await self._entries.list_for_projects_in_range(
+            frozenset({query.project_id}), period.period_start, period.period_end
+        )
+        items_by_id = {
+            item.id: item
+            for item in await self._bus.query(
+                GetProjectBillingItemsByIds(
+                    billing_item_ids=frozenset(entry.billing_item_id for entry in entries)
+                )
+            )
+        }
+        users_by_id = {
+            user.id: user
+            for user in await self._bus.query(
+                GetUsersByIds(user_ids=frozenset(entry.user_id for entry in entries))
+            )
+        }
+        rows = [
+            BillingPeriodExportRowDTO(
+                entry_date=entry.entry_date,
+                user_name=users_by_id[entry.user_id].name,
+                user_email=users_by_id[entry.user_id].email,
+                project_id=entry.project_id,
+                billing_item_id=entry.billing_item_id,
+                billing_item_name=items_by_id[entry.billing_item_id].name,
+                unit=entry.unit,
+                quantity=entry.quantity,
+                currency=None,
+                description=entry.note,
+                vendor=None,
+                document_no=None,
+            )
+            for entry in entries
+        ]
+
+        lines = await self._bus.query(
+            ListProjectMonthExpenseReportLines(
+                project_id=query.project_id, period_start=period.period_start
+            )
+        )
+        rows.extend(
+            BillingPeriodExportRowDTO(
+                entry_date=line.expense_date,
+                user_name=line.user.name,
+                user_email=line.user.email,
+                project_id=query.project_id,
+                billing_item_id=line.billing_item.id,
+                billing_item_name=line.billing_item.name,
+                unit=BillingUnit.AMOUNT,
+                quantity=line.amount,
+                currency=project.customer.currency,
+                description=line.description,
+                vendor=line.vendor,
+                document_no=line.document_no,
+            )
+            for line in lines
+        )
+        rows.sort(key=lambda row: (row.entry_date, row.user_name))
+        return tuple(rows)
 
     async def _period_dto(
         self,
         period: ProjectBillingPeriod,
         entries: Sequence[TimeEntry],
+        reports: Sequence[ExpenseReportSummaryDTO],
         currency: str,
         sent_by: UserDTO,
     ) -> ProjectBillingPeriodDTO:
@@ -132,8 +296,11 @@ class BillingService:
                 )
             elif time_entry.unit is BillingUnit.DAY:
                 accumulator.add_days(time_entry.quantity)
-            elif time_entry.unit is BillingUnit.AMOUNT:
-                accumulator.add_amount(currency=currency, quantity=time_entry.quantity)
+        # `amount`-unit entries no longer exist in `time_entries` — every report here is already
+        # confirmed `approved` (readiness required it), so their totals are this period's expenses.
+        expense_total = sum((report.total for report in reports), start=Decimal("0"))
+        if expense_total:
+            accumulator.add_amount(currency=currency, quantity=expense_total)
 
         return ProjectBillingPeriodDTO(
             project_id=period.project_id,
@@ -143,6 +310,7 @@ class BillingService:
             sent_at=period.sent_at,
             sent_by=sent_by,
             blocking_weeks=0,
+            blocking_reports=0,
             weeks_in_scope=len(scope_pairs),
             hours=accumulator.freeze_hours(),
             per_diem_days=accumulator.days,

@@ -116,12 +116,14 @@ async def get_customer_removal_impact(
 @router.delete("/customers/{customer_id}", responses={**_NOT_FOUND_RESPONSE, **_BLOCKED_RESPONSE})
 async def remove_customer(
     customer_id: UUID,
-    _admin: AdminDep,
+    admin: AdminDep,
     bus: BusDep,
     permanent: Annotated[bool, Query()] = False,
 ) -> RemovalResponse:
     try:
-        outcome = await bus.execute(RemoveCustomer(customer_id=customer_id, permanent=permanent))
+        outcome = await bus.execute(
+            RemoveCustomer(customer_id=customer_id, acting_user_id=admin.id, permanent=permanent)
+        )
     except RemovalTargetNotFoundError as exc:
         raise _not_found() from exc
     except RemovalBlockedError as exc:
@@ -140,12 +142,14 @@ async def get_project_removal_impact(
 @router.delete("/projects/{project_id}", responses={**_NOT_FOUND_RESPONSE, **_BLOCKED_RESPONSE})
 async def remove_project(
     project_id: UUID,
-    _admin: AdminDep,
+    admin: AdminDep,
     bus: BusDep,
     permanent: Annotated[bool, Query()] = False,
 ) -> RemovalResponse:
     try:
-        outcome = await bus.execute(RemoveProject(project_id=project_id, permanent=permanent))
+        outcome = await bus.execute(
+            RemoveProject(project_id=project_id, acting_user_id=admin.id, permanent=permanent)
+        )
     except RemovalTargetNotFoundError as exc:
         raise _not_found() from exc
     except RemovalBlockedError as exc:
