@@ -29,11 +29,16 @@ Backend: `modules/company` — a singleton settings row, always readable, never 
   backend additionally lets `accountant` read but not write — the frontend has no accountant-only
   view of this page, so an accountant without `admin` never reaches it).
 - One page, not a modal (unlike `customers/CustomerFormModal.tsx`): a single Mantine form with
-  section headings — Company, Address, Bank, Invoicing, Workflow — submitted as one
-  `CompanySettingsUpdateBody`, since the backend command is a full replace. `useForm`'s
+  section headings — Company, Address, Bank, Invoicing, Customer numbering, Workflow — submitted as
+  one `CompanySettingsUpdateBody`, since the backend command is a full replace. `useForm`'s
   `initialValues` come from the loaded settings, so the form only renders once
   `useCompanySettings()` has data (the `AdminBackupsPage`/`AdminCalendarPage` loading/error
   pattern).
+- The Customer numbering section (`customer_number_prefix`/`next_customer_number`) mirrors the
+  Invoicing section's invoice-numbering fields: a new customer created with no `customer_number` of
+  its own (`customers/CustomerFormModal.tsx` leaves the field blank) gets the next one allocated
+  automatically — see `modules/company/CLAUDE.md`'s "Customer numbering" and
+  `modules/customers/CLAUDE.md`.
 - The Workflow section's `allow_self_review` `Switch` carries an inline description explaining
   what it does (needed for [[t3-self-approval]] once that reads this flag) rather than linking out
   to documentation.

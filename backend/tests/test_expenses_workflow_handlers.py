@@ -59,6 +59,8 @@ async def _enable_self_review(bus: Bus, actor_id: UUID) -> None:
             late_interest="",
             invoice_number_prefix="",
             next_invoice_number=1,
+            customer_number_prefix="",
+            next_customer_number=1,
             allow_self_review=True,
         )
     )

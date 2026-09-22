@@ -54,6 +54,8 @@ type FormValues = {
   lateInterest: string;
   invoiceNumberPrefix: string;
   nextInvoiceNumber: number;
+  customerNumberPrefix: string;
+  nextCustomerNumber: number;
   allowSelfReview: boolean;
 };
 
@@ -78,6 +80,8 @@ function valuesFromSettings(settings: CompanySettings): FormValues {
     lateInterest: settings.late_interest,
     invoiceNumberPrefix: settings.invoice_number_prefix,
     nextInvoiceNumber: settings.next_invoice_number,
+    customerNumberPrefix: settings.customer_number_prefix,
+    nextCustomerNumber: settings.next_customer_number,
     allowSelfReview: settings.allow_self_review,
   };
 }
@@ -154,6 +158,7 @@ function CompanyForm({ settings }: { settings: CompanySettings }) {
       email: (value) => (value === "" || isEmail(value) ? null : "Enter a valid email"),
       country: matches(/^([A-Za-z]{2})?$/, "Use a 2-letter country code, e.g. SE"),
       nextInvoiceNumber: (value) => (value >= 1 ? null : "Use 1 or higher"),
+      nextCustomerNumber: (value) => (value >= 1 ? null : "Use 1 or higher"),
     },
   });
 
@@ -180,6 +185,8 @@ function CompanyForm({ settings }: { settings: CompanySettings }) {
       late_interest: values.lateInterest,
       invoice_number_prefix: values.invoiceNumberPrefix,
       next_invoice_number: values.nextInvoiceNumber,
+      customer_number_prefix: values.customerNumberPrefix,
+      next_customer_number: values.nextCustomerNumber,
       allow_self_review: values.allowSelfReview,
     };
     await updateSettings.mutateAsync(body);
@@ -284,6 +291,26 @@ function CompanyForm({ settings }: { settings: CompanySettings }) {
           key={form.key("lateInterest")}
           {...form.getInputProps("lateInterest")}
         />
+
+        <Title order={4} mt="md">
+          Customer numbering
+        </Title>
+        <Text size="xs" c="dimmed">
+          A new customer with no number of its own gets the next one from here automatically.
+        </Text>
+        <Group grow align="flex-end">
+          <TextInput
+            label="Customer number prefix"
+            key={form.key("customerNumberPrefix")}
+            {...form.getInputProps("customerNumberPrefix")}
+          />
+          <NumberInput
+            label="Next customer number"
+            min={1}
+            key={form.key("nextCustomerNumber")}
+            {...form.getInputProps("nextCustomerNumber")}
+          />
+        </Group>
 
         <Title order={4} mt="md">
           Workflow

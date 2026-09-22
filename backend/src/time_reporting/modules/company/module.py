@@ -2,6 +2,7 @@
 
 from time_reporting.core.cqrs import HandlerRegistry
 from time_reporting.modules.company.contracts import (
+    AllocateCustomerNumber,
     AllocateInvoiceNumber,
     ClearCompanyLogo,
     GetCompanyLogo,
@@ -10,6 +11,7 @@ from time_reporting.modules.company.contracts import (
     UpdateCompanySettings,
 )
 from time_reporting.modules.company.handlers import (
+    AllocateCustomerNumberHandler,
     AllocateInvoiceNumberHandler,
     ClearCompanyLogoHandler,
     GetCompanyLogoHandler,
@@ -27,3 +29,4 @@ def register(registry: HandlerRegistry) -> None:
     registry.command(SetCompanyLogo, SetCompanyLogoHandler)
     registry.command(ClearCompanyLogo, ClearCompanyLogoHandler)
     registry.command(AllocateInvoiceNumber, AllocateInvoiceNumberHandler)
+    registry.command(AllocateCustomerNumber, AllocateCustomerNumberHandler)

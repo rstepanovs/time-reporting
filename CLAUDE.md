@@ -131,8 +131,9 @@ Modules talk to each other exclusively through the in-process CQRS bus in `core/
 
 Modules (each documented in its own `CLAUDE.md`):
 - **`company`** — `CompanySettings`: the singleton company profile (legal identity, address, bank
-  details, logo, `allow_self_review`), and gapless invoice numbering. Nothing depends on it, so it
-  registers first in `modules/registry.py`.
+  details, logo, `allow_self_review`), and gapless invoice/customer numbering. Only `customers`
+  depends on it (for auto-allocating a `customer_number`), so it still registers first, before it,
+  in `modules/registry.py`.
 - **`users`** — `User`, access levels (`admin`/`manager`/`accountant`, combinable, on top of the
   implicit "employee" baseline every account has), account management, user directory.
 - **`auth`** — JWT issuing/validation, login/session cookie, route guards (`auth/dependencies.py`).

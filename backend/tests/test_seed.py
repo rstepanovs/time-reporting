@@ -292,6 +292,8 @@ async def test_seed_leaves_a_customized_company_profile_untouched(bus: Bus) -> N
             late_interest="",
             invoice_number_prefix="",
             next_invoice_number=1,
+            customer_number_prefix="",
+            next_customer_number=1,
             allow_self_review=False,
         )
     )

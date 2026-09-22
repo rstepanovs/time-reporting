@@ -17,6 +17,7 @@ CountryCode = Annotated[
 ]
 LateInterest = Annotated[str, StringConstraints(strip_whitespace=True, max_length=255)]
 InvoiceNumberPrefix = Annotated[str, StringConstraints(strip_whitespace=True, max_length=20)]
+CustomerNumberPrefix = Annotated[str, StringConstraints(strip_whitespace=True, max_length=20)]
 
 
 class CompanyAddressRequest(BaseModel):
@@ -52,6 +53,8 @@ class CompanySettingsUpdateRequest(BaseModel):
     late_interest: LateInterest = ""
     invoice_number_prefix: InvoiceNumberPrefix = ""
     next_invoice_number: Annotated[int, Field(ge=1)] = 1
+    customer_number_prefix: CustomerNumberPrefix = ""
+    next_customer_number: Annotated[int, Field(ge=1)] = 1
     allow_self_review: bool = False
 
 
@@ -83,6 +86,8 @@ class CompanySettingsResponse(BaseModel):
     late_interest: str
     invoice_number_prefix: str
     next_invoice_number: int
+    customer_number_prefix: str
+    next_customer_number: int
     allow_self_review: bool
     has_logo: bool
     updated_at: datetime

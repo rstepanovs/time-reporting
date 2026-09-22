@@ -381,6 +381,9 @@ export function CustomerFormModal(props: Props) {
           <Group grow>
             <TextInput
               label="Customer number"
+              description={
+                props.mode === "create" ? "Left blank, one is assigned automatically" : undefined
+              }
               maxLength={50}
               key={form.key("customerNumber")}
               {...form.getInputProps("customerNumber")}

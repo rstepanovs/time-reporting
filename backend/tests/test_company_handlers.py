@@ -6,6 +6,7 @@ from support import UserFactory
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.audit.contracts import AuditAction, ListAuditEvents
 from time_reporting.modules.company.contracts import (
+    AllocateCustomerNumber,
     AllocateInvoiceNumber,
     ClearCompanyLogo,
     CompanyAddressDTO,
@@ -32,6 +33,8 @@ def _update(
     default_invoice_locale: str = "sv",
     invoice_number_prefix: str = "",
     next_invoice_number: int = 1,
+    customer_number_prefix: str = "",
+    next_customer_number: int = 1,
 ) -> UpdateCompanySettings:
     return UpdateCompanySettings(
         actor_id=actor_id,
@@ -49,6 +52,8 @@ def _update(
         default_invoice_locale=default_invoice_locale,
         late_interest="8.00 %",
         invoice_number_prefix=invoice_number_prefix,
+        customer_number_prefix=customer_number_prefix,
+        next_customer_number=next_customer_number,
         next_invoice_number=next_invoice_number,
         allow_self_review=False,
     )
@@ -62,6 +67,8 @@ async def test_default_settings_are_blank(bus: Bus) -> None:
     assert settings.default_invoice_locale == "sv"
     assert settings.invoice_number_prefix == ""
     assert settings.next_invoice_number == 1
+    assert settings.customer_number_prefix == ""
+    assert settings.next_customer_number == 1
     assert settings.allow_self_review is False
     assert settings.has_logo is False
 
@@ -180,4 +187,26 @@ async def test_allocation_rolled_back_does_not_burn_a_number(bus: Bus) -> None:
             raise RuntimeError("boom")
 
     number = await bus.execute(AllocateInvoiceNumber())
+    assert number == "1"
+
+
+async def test_allocate_customer_number_is_consecutive(bus: Bus, make_user: UserFactory) -> None:
+    admin = await make_user()
+    await bus.execute(_update(admin.id, customer_number_prefix="CUST-", next_customer_number=41))
+
+    first = await bus.execute(AllocateCustomerNumber())
+    second = await bus.execute(AllocateCustomerNumber())
+
+    assert (first, second) == ("CUST-41", "CUST-42")
+
+
+async def test_customer_number_allocation_rolled_back_does_not_burn_a_number(bus: Bus) -> None:
+    service = CompanyService(bus.session)
+
+    with pytest.raises(RuntimeError):
+        async with bus.session.begin_nested():
+            await service.allocate_customer_number()
+            raise RuntimeError("boom")
+
+    number = await bus.execute(AllocateCustomerNumber())
     assert number == "1"

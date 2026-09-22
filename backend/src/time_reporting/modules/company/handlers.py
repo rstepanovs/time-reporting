@@ -10,6 +10,7 @@ from uuid import UUID
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.audit.contracts import AuditAction, RecordAuditEvent
 from time_reporting.modules.company.contracts import (
+    AllocateCustomerNumber,
     AllocateInvoiceNumber,
     ClearCompanyLogo,
     CompanyAddressDTO,
@@ -51,6 +52,8 @@ def to_dto(settings: CompanySettings) -> CompanySettingsDTO:
         late_interest=settings.late_interest,
         invoice_number_prefix=settings.invoice_number_prefix,
         next_invoice_number=settings.next_invoice_number,
+        customer_number_prefix=settings.customer_number_prefix,
+        next_customer_number=settings.next_customer_number,
         allow_self_review=settings.allow_self_review,
         has_logo=settings.logo is not None,
         updated_at=settings.updated_at,
@@ -138,3 +141,11 @@ class AllocateInvoiceNumberHandler:
 
     async def handle(self, command: AllocateInvoiceNumber) -> str:
         return await self._service.allocate_invoice_number()
+
+
+class AllocateCustomerNumberHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._service = CompanyService(bus.session)
+
+    async def handle(self, command: AllocateCustomerNumber) -> str:
+        return await self._service.allocate_customer_number()

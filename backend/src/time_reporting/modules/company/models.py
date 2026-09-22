@@ -19,6 +19,7 @@ class CompanySettings(TimestampMixin, Base):
     __table_args__ = (
         CheckConstraint(f"id = {SINGLETON_ID}", name="company_settings_singleton"),
         CheckConstraint("next_invoice_number > 0", name="next_invoice_number_positive"),
+        CheckConstraint("next_customer_number > 0", name="next_customer_number_positive"),
         CheckConstraint(
             "default_invoice_locale IN ('sv', 'en')", name="default_invoice_locale_valid"
         ),
@@ -58,6 +59,12 @@ class CompanySettings(TimestampMixin, Base):
 
     invoice_number_prefix: Mapped[str] = mapped_column(String(20), default="", server_default="")
     next_invoice_number: Mapped[int] = mapped_column(default=1, server_default="1")
+
+    # Same gapless-allocation shape as the invoice counter above, for a customer created with no
+    # `customer_number` of its own (see `customers.CreateCustomer`) — lets an existing paper trail
+    # of client numbers be resumed the same way `next_invoice_number` resumes invoice numbering.
+    customer_number_prefix: Mapped[str] = mapped_column(String(20), default="", server_default="")
+    next_customer_number: Mapped[int] = mapped_column(default=1, server_default="1")
 
     # Lets a one-person company review and approve its own timesheet weeks/expense reports —
     # see timesheets.CLAUDE.md / expenses.CLAUDE.md for where this is read. Off by default: any

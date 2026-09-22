@@ -670,6 +670,8 @@ async def _seed_company_profile(bus: Bus, report: SeedReport, *, today: date) ->
             late_interest="8% per annum",
             invoice_number_prefix=f"{today.year}-",
             next_invoice_number=1,
+            customer_number_prefix="",
+            next_customer_number=1,
             allow_self_review=False,
         )
     )

@@ -3,7 +3,10 @@
 Handlers translate between bus messages and the service/repository and never return ORM entities.
 """
 
+from dataclasses import replace
+
 from time_reporting.core.cqrs import Bus
+from time_reporting.modules.company.contracts import AllocateCustomerNumber
 from time_reporting.modules.customers.contracts import (
     BillingAddressDTO,
     BillingPeriodDTO,
@@ -102,7 +105,15 @@ class _CommandHandler:
 
 
 class CreateCustomerHandler(_CommandHandler):
+    def __init__(self, bus: Bus) -> None:
+        super().__init__(bus)
+        self._bus = bus
+
     async def handle(self, command: CreateCustomer) -> CustomerDTO:
+        if command.customer_number is None:
+            command = replace(
+                command, customer_number=await self._bus.execute(AllocateCustomerNumber())
+            )
         return to_dto(await self._service.create_customer(command))
 
 

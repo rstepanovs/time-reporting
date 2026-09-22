@@ -60,6 +60,22 @@ async def test_manager_can_create_and_update_customer(
     assert updated.json()["name"] == "Acme"
 
 
+async def test_customer_number_is_auto_allocated_when_omitted(
+    client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
+) -> None:
+    headers = auth_headers(await make_user(roles=ADMIN))
+
+    first = await client.post("/api/v1/customers", headers=headers, json=_payload(name="Auto 1"))
+    second = await client.post("/api/v1/customers", headers=headers, json=_payload(name="Auto 2"))
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    first_number = first.json()["customer_number"]
+    second_number = second.json()["customer_number"]
+    assert first_number is not None
+    assert int(second_number) == int(first_number) + 1
+
+
 async def test_invoicing_fields_round_trip_and_clear(
     client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
 ) -> None:

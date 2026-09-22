@@ -12,4 +12,7 @@ Backend: `modules/customers`.
   by the free-text `vat_note` instead), an "Invoice language" select (`INVOICE_LOCALE_OPTIONS` from
   `company/api.ts` plus a "Company default" option mapping to `null`) and the free-text
   `customer_number`/`your_reference`. Read by `invoices/` when drafting an invoice — see
-  `invoices/CLAUDE.md`.
+  `invoices/CLAUDE.md`. `customer_number` left blank submits `null`; on create this gets a number
+  auto-allocated by the backend (see `modules/customers/CLAUDE.md`) — the field's description says
+  so only in create mode, since on edit a blank submission instead *clears* an existing number
+  (`clearableDiff`), it is never re-allocated.

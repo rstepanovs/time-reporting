@@ -115,6 +115,8 @@ async def _complete_company_profile(bus: Bus, admin_id: UUID) -> None:
             late_interest="8.00 %",
             invoice_number_prefix="INV-",
             next_invoice_number=1,
+            customer_number_prefix="",
+            next_customer_number=1,
             allow_self_review=False,
         )
     )

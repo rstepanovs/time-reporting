@@ -160,8 +160,30 @@ async def test_create_customer_defaults_invoicing_fields_to_none(bus: Bus) -> No
     assert customer.vat_rate is None
     assert customer.vat_note is None
     assert customer.invoice_locale is None
-    assert customer.customer_number is None
     assert customer.your_reference is None
+
+
+async def test_create_customer_auto_allocates_a_customer_number_when_omitted(bus: Bus) -> None:
+    first = await bus.execute(
+        CreateCustomer(
+            name="Auto Number One",
+            billing_address=DEFAULT_BILLING_ADDRESS,
+            billing_period=DEFAULT_BILLING_PERIOD,
+            currency="EUR",
+        )
+    )
+    second = await bus.execute(
+        CreateCustomer(
+            name="Auto Number Two",
+            billing_address=DEFAULT_BILLING_ADDRESS,
+            billing_period=DEFAULT_BILLING_PERIOD,
+            currency="EUR",
+        )
+    )
+
+    assert first.customer_number is not None
+    assert second.customer_number is not None
+    assert int(second.customer_number) == int(first.customer_number) + 1
 
 
 async def test_update_customer_clears_invoicing_fields(

@@ -2,7 +2,8 @@
 
 Owns the `Customer` entity: name, legal details, a structured billing address (ISO 3166-1 alpha-2
 country), a billing period (`interval_count` × `BillingIntervalUnit`, counted from `anchor_date`),
-currency (ISO 4217) and payment terms.
+currency (ISO 4217) and payment terms. Depends on `company.contracts` (`AllocateCustomerNumber`,
+for `CreateCustomer` below) — the one thing this module imports from another.
 
 - Any authenticated user can read customers; writes require `ManagerDep` (the `manager` access
   level).
@@ -25,3 +26,11 @@ currency (ISO 4217) and payment terms.
   importing it — a module may only import another module's `contracts.py`, and neither of these two
   needs the other; both independently mirror `faktura_printer.available_locales()`. Read by
   `invoices` (`CreateInvoiceDraft`, `IssueInvoice`) — see `invoices/CLAUDE.md`.
+- `CreateCustomer.customer_number` left `None` gets one auto-allocated: `CreateCustomerHandler`
+  executes a nested `company.AllocateCustomerNumber` (locks the singleton settings row, returns
+  `customer_number_prefix + next_customer_number`, increments the counter — the same gapless shape
+  as `invoices.IssueInvoice`'s `AllocateInvoiceNumber`, see `company/CLAUDE.md`) before handing the
+  command to `CustomerService.create_customer`. A `customer_number` given explicitly is stored
+  as-is and never allocated. This only ever fires on creation — `UpdateCustomer` (including
+  clearing `customer_number` via `clear_fields`) never allocates one, matching how an invoice
+  number is never reallocated after issue.

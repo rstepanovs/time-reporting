@@ -1034,23 +1034,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/accounting/packages/{year}/{month}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Accountant Package Status */
-        get: operations["get_accountant_package_status_api_v1_accounting_packages__year___month__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/accounting/packages/{year}/{month}.zip": {
         parameters: {
             query?: never;
@@ -1060,6 +1043,23 @@ export interface paths {
         };
         /** Download Accountant Package */
         get: operations["download_accountant_package_api_v1_accounting_packages__year___month__zip_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/accounting/packages/{year}/{month}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Accountant Package Status */
+        get: operations["get_accountant_package_status_api_v1_accounting_packages__year___month__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1689,6 +1689,10 @@ export interface components {
             invoice_number_prefix: string;
             /** Next Invoice Number */
             next_invoice_number: number;
+            /** Customer Number Prefix */
+            customer_number_prefix: string;
+            /** Next Customer Number */
+            next_customer_number: number;
             /** Allow Self Review */
             allow_self_review: boolean;
             /** Has Logo */
@@ -1772,6 +1776,16 @@ export interface components {
              * @default 1
              */
             next_invoice_number: number;
+            /**
+             * Customer Number Prefix
+             * @default
+             */
+            customer_number_prefix: string;
+            /**
+             * Next Customer Number
+             * @default 1
+             */
+            next_customer_number: number;
             /**
              * Allow Self Review
              * @default false
@@ -6620,38 +6634,6 @@ export interface operations {
             };
         };
     };
-    get_accountant_package_status_api_v1_accounting_packages__year___month__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                year: number;
-                month: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AccountantPackageStatusResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     download_accountant_package_api_v1_accounting_packages__year___month__zip_get: {
         parameters: {
             query?: never;
@@ -6671,6 +6653,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_accountant_package_status_api_v1_accounting_packages__year___month__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                year: number;
+                month: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountantPackageStatusResponse"];
                 };
             };
             /** @description Validation Error */

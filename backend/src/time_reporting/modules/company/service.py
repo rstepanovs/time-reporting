@@ -75,6 +75,13 @@ class CompanyService:
         await self._settings.save(settings)
         return number
 
+    async def allocate_customer_number(self) -> str:
+        settings = await self._settings.get_for_update()
+        number = f"{settings.customer_number_prefix}{settings.next_customer_number}"
+        settings.next_customer_number += 1
+        await self._settings.save(settings)
+        return number
+
 
 # Fields copied verbatim from UpdateCompanySettings onto CompanySettings (everything except the
 # address, which is a nested value compared/set as a whole by _address_changed/_set_address).
@@ -93,6 +100,8 @@ _SCALAR_FIELDS = (
     "late_interest",
     "invoice_number_prefix",
     "next_invoice_number",
+    "customer_number_prefix",
+    "next_customer_number",
     "allow_self_review",
 )
 

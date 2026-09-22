@@ -55,6 +55,8 @@ async def update_company_settings(
             late_interest=body.late_interest,
             invoice_number_prefix=body.invoice_number_prefix,
             next_invoice_number=body.next_invoice_number,
+            customer_number_prefix=body.customer_number_prefix,
+            next_customer_number=body.next_customer_number,
             allow_self_review=body.allow_self_review,
         )
     )

@@ -1,11 +1,12 @@
 # company module
 
-Owns one table, `company_settings` — the running company's own profile and invoice-numbering
-counter. There is always exactly one row (a singleton, `id` fixed to `SINGLETON_ID = 1`, enforced
-by a check constraint); the migration inserts it with placeholder values. Nothing depends on
-`company`, so it is registered first in `modules/registry.py`, and its own contract depends on
-nothing beyond `audit.contracts` (`RecordAuditEvent`, for `UpdateCompanySettings`/
-`SetCompanyLogo`/`ClearCompanyLogo`).
+Owns one table, `company_settings` — the running company's own profile and its invoice- and
+customer-numbering counters. There is always exactly one row (a singleton, `id` fixed to
+`SINGLETON_ID = 1`, enforced by a check constraint); the migration inserts it with placeholder
+values. Only `customers` depends on `company` (`AllocateCustomerNumber`), so `company` is still
+registered first, before it, in `modules/registry.py`; its own contract depends on nothing beyond
+`audit.contracts` (`RecordAuditEvent`, for `UpdateCompanySettings`/`SetCompanyLogo`/
+`ClearCompanyLogo`).
 
 ## Settings
 
@@ -14,9 +15,10 @@ nothing beyond `audit.contracts` (`RecordAuditEvent`, for `UpdateCompanySettings
   `email`, `phone`, `registered_office`, bank details (`bankgiro`, `iban`, `bic`),
   `f_tax_approved`, `default_invoice_locale` (`"sv"`/`"en"`, see `INVOICE_LOCALES` in
   `contracts.py`), `late_interest` (free text, printed on an invoice as-is), invoice numbering
-  (`invoice_number_prefix`, `next_invoice_number`), `allow_self_review` (read by `timesheets` and
-  `expenses` to let a manager approve/return their own week or report — see their `CLAUDE.md`
-  `Workflow` sections) and the logo. Every text
+  (`invoice_number_prefix`, `next_invoice_number`), customer numbering (`customer_number_prefix`,
+  `next_customer_number` — see "Customer numbering" below), `allow_self_review` (read by
+  `timesheets` and `expenses` to let a manager approve/return their own week or report — see their
+  `CLAUDE.md` `Workflow` sections) and the logo. Every text
   field defaults to `""` rather than `NULL` — an empty company profile is a valid, if incomplete,
   state; `invoices.IssueInvoice` checks completeness (`legal_name`/`org_number`) before allowing
   an issue — see `invoices/CLAUDE.md`.
@@ -25,9 +27,10 @@ nothing beyond `audit.contracts` (`RecordAuditEvent`, for `UpdateCompanySettings
   /company`, not a partial patch) since the admin page is a single settings form; it validates
   `default_invoice_locale` (`InvalidInvoiceLocaleError` otherwise) and records `company.updated`
   with the changed field names in `details.fields`, only when something actually changed.
-  `next_invoice_number` is deliberately editable here too (not only incremented by
-  `AllocateInvoiceNumber`), so a first-time setup can resume numbering after an existing paper
-  trail instead of always starting at 1 — flag this if it should be locked down instead.
+  `next_invoice_number`/`next_customer_number` are deliberately editable here too (not only
+  incremented by `AllocateInvoiceNumber`/`AllocateCustomerNumber`), so a first-time setup can
+  resume numbering after an existing paper trail instead of always starting at 1 — flag this if it
+  should be locked down instead.
 
 ## Logo
 
@@ -51,6 +54,14 @@ nothing beyond `audit.contracts` (`RecordAuditEvent`, for `UpdateCompanySettings
   (`invoices.IssueInvoice`) — if that transaction later fails, the whole thing, including
   this increment, rolls back, so the number is never burned. Never call this from an HTTP router
   directly.
+
+## Customer numbering
+
+- `AllocateCustomerNumber` is the same nested-only shape as `AllocateInvoiceNumber`, over
+  `customer_number_prefix`/`next_customer_number` instead: `customers.CreateCustomerHandler`
+  executes it only when the caller left `CreateCustomer.customer_number` unset, so a number typed
+  in by hand (e.g. to match an existing paper trail on a specific customer) is stored as-is and
+  never allocated. See `customers/CLAUDE.md`.
 
 ## HTTP API (`router.py`, `schemas.py`)
 

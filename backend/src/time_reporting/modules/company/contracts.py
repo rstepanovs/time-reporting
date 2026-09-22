@@ -4,8 +4,9 @@ Other modules may import only this file: DTOs, commands, queries and domain exce
 for these messages are registered in ``company.module``; ORM entities never leave the module.
 
 ``CompanySettings`` is a singleton: there is always exactly one row, created by migration
-``add_company_settings_table`` with placeholder values. Nothing in the system depends on
-``company``, so it is registered first in ``modules/registry.py``.
+``add_company_settings_table`` with placeholder values. Only ``customers`` depends on ``company``
+(``AllocateCustomerNumber``), so ``company`` is still registered first, before it, in
+``modules/registry.py``.
 """
 
 from dataclasses import dataclass
@@ -55,6 +56,8 @@ class CompanySettingsDTO:
     late_interest: str
     invoice_number_prefix: str
     next_invoice_number: int
+    customer_number_prefix: str
+    next_customer_number: int
     allow_self_review: bool
     # The logo bytes never travel in this DTO — see GetCompanyLogo.
     has_logo: bool
@@ -109,6 +112,9 @@ class UpdateCompanySettings(Command[CompanySettingsDTO]):
     # Settable here (not only via AllocateInvoiceNumber) so a first-time setup can resume
     # numbering after an existing paper trail rather than always starting at 1.
     next_invoice_number: int
+    customer_number_prefix: str
+    # Settable here (not only via AllocateCustomerNumber) for the same reason.
+    next_customer_number: int
     allow_self_review: bool
 
 
@@ -132,6 +138,16 @@ class AllocateInvoiceNumber(Command[str]):
     ``invoice_number_prefix + next_invoice_number`` and increments the counter. Gapless because it
     commits with the issuing (outer) transaction: if that transaction later fails, the whole thing
     — including this increment — rolls back with it, so the number is never burned.
+    """
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class AllocateCustomerNumber(Command[str]):
+    """Nested-only, same shape as ``AllocateInvoiceNumber``: locks the singleton settings row,
+    returns ``customer_number_prefix + next_customer_number`` and increments the counter.
+
+    Called by ``customers.CreateCustomer`` only when the caller left ``customer_number`` blank —
+    an explicitly given number is used as-is and never allocated here.
     """
 
 

@@ -241,6 +241,8 @@ export const testCompanySettings: CompanySettings = {
   late_interest: "Referensränta + 8 %",
   invoice_number_prefix: "2026-",
   next_invoice_number: 1,
+  customer_number_prefix: "",
+  next_customer_number: 1,
   allow_self_review: false,
   has_logo: false,
   updated_at: "2026-09-16T10:00:00Z",

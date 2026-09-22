@@ -60,6 +60,26 @@ describe("AdminCompanyPage", () => {
     await screen.findByText("Company settings saved");
   });
 
+  it("saves the customer numbering fields", async () => {
+    vi.mocked(updateCompanySettings).mockResolvedValue(testCompanySettings);
+    renderApp("/admin/company");
+    await screen.findByDisplayValue(testCompanySettings.legal_name);
+
+    fireEvent.change(screen.getByLabelText(/customer number prefix/i), {
+      target: { value: "CUST-" },
+    });
+    fireEvent.change(screen.getByLabelText(/next customer number/i), {
+      target: { value: "7" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => {
+      expect(updateCompanySettings).toHaveBeenCalledWith(
+        expect.objectContaining({ customer_number_prefix: "CUST-", next_customer_number: 7 }),
+      );
+    });
+  });
+
   it("toggles self-review", async () => {
     vi.mocked(updateCompanySettings).mockResolvedValue({
       ...testCompanySettings,

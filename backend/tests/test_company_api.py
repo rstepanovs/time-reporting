@@ -28,6 +28,8 @@ def _payload(**overrides: Any) -> dict[str, Any]:
         "default_invoice_locale": "sv",
         "invoice_number_prefix": "INV-",
         "next_invoice_number": 42,
+        "customer_number_prefix": "CUST-",
+        "next_customer_number": 7,
         "allow_self_review": True,
     }
     return payload | overrides
@@ -75,6 +77,8 @@ async def test_admin_can_replace_settings(
     assert body["address"]["country"] == "SE"
     assert body["invoice_number_prefix"] == "INV-"
     assert body["next_invoice_number"] == 42
+    assert body["customer_number_prefix"] == "CUST-"
+    assert body["next_customer_number"] == 7
 
     read_back = await client.get("/api/v1/company", headers=headers)
     assert read_back.json() == body
