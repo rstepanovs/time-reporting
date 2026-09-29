@@ -41,6 +41,53 @@ docker compose exec backend time-reporting create-admin --email you@example.com 
 
 Frontend: `http://<host>:8080`. API docs: `http://<host>:8000/api/docs`.
 
+## Running a second deployment on the same machine
+
+Useful for keeping a real deployment (real customers, real invoices) separate from an ongoing
+development checkout, without ever transferring data between them — each deployment's database
+just gets migrated in place as its own checkout is upgraded.
+
+Give the second deployment its own working tree, since `scripts/upgrade.sh` runs `git checkout`/
+`git pull` in whatever directory it's run from — sharing one checkout between two deployments would
+mean upgrading one always disturbs the other. A `git worktree` is the cheapest way to do that: it's
+a second working directory backed by the same repository (`.git`), so both stay in sync with a
+single `git fetch`, with no second clone to keep up to date by hand.
+
+Git refuses to have the same branch checked out in two worktrees at once, so if the development
+checkout has `main` checked out, the second worktree has to be **detached** (checked out at a
+specific commit/tag, not a branch) — which is the right shape for a deployment anyway: it upgrades
+only when *you* choose to move it, by passing an explicit ref to `scripts/upgrade.sh`, never a bare
+`git pull`.
+
+```sh
+git worktree add --detach ../time-reporting-prod main   # or a tag, once you tag releases
+cd ../time-reporting-prod
+cp .env.example .env
+```
+
+In that `.env`, set values that don't collide with the other deployment's:
+
+```
+COMPOSE_PROJECT_NAME=time-reporting-prod
+BACKEND_PORT=18000
+FRONTEND_PORT=18080
+POSTGRES_PORT=15432
+PGADMIN_PORT=15050
+```
+
+(`COMPOSE_PROJECT_NAME` is what keeps the two deployments' containers, networks and named volumes
+from colliding — without it, both directories would default to the same project name and fight
+over the same `db-data`/`backups`/`attachments` volumes.) Generate its own `JWT_SECRET_KEY` too —
+never reuse one between deployments. Then follow Install above from `docker compose up --build -d`.
+
+Each deployment is upgraded independently with `scripts/upgrade.sh [ref]`, run from its own
+directory. Because the prod worktree is detached, always pass an explicit ref — a tag once releases
+are tagged, otherwise `origin/main` (`scripts/upgrade.sh origin/main`; the *local* branch name
+`main` doesn't work here — git refuses to check out a branch that's already checked out in another
+worktree, even into detached HEAD, but a remote-tracking ref like `origin/main` isn't that branch
+and checks out fine detached). The bare no-arg form (`git pull --ff-only`) only works on a directory
+that has a branch checked out, so don't use it here either.
+
 ## Upgrade
 
 ```sh

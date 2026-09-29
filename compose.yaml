@@ -2,7 +2,7 @@ name: time-reporting
 
 x-backend-env: &backend-env
   DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-time_reporting}:${POSTGRES_PASSWORD:-time_reporting}@db:5432/${POSTGRES_DB:-time_reporting}
-  CORS_ORIGINS: '["http://localhost:8080"]'
+  CORS_ORIGINS: '["http://localhost:${FRONTEND_PORT:-8080}"]'
   JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set JWT_SECRET_KEY in .env}
   BACKUP_DIR: /var/backups/time-reporting
   BACKUP_RETENTION_COUNT: ${BACKUP_RETENTION_COUNT:-14}
@@ -56,7 +56,7 @@ services:
       - backups:/var/backups/time-reporting
       - attachments:/var/lib/time-reporting/attachments
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8000}:8000"
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -88,7 +88,7 @@ services:
       args:
         VITE_GIT_SHA: ${GIT_SHA:-}
     ports:
-      - "8080:80"
+      - "${FRONTEND_PORT:-8080}:80"
     depends_on:
       - backend
 
