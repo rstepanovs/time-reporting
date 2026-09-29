@@ -156,6 +156,7 @@ class _GeneratedLine:
     """A line built by ``_generate_lines``, before it has an id or position."""
 
     kind: InvoiceLineKind
+    article_number: str | None
     description: str
     quantity: Decimal
     unit: str
@@ -203,6 +204,7 @@ def _generate_lines(
             lines.append(
                 _GeneratedLine(
                     kind=InvoiceLineKind.TIME,
+                    article_number=item.article_number,
                     description=f"{project.name} — {item.name} ({ref.period_start:%Y-%m})",
                     quantity=quantity,
                     unit=item.unit.value,
@@ -227,6 +229,7 @@ def _generate_lines(
             lines.append(
                 _GeneratedLine(
                     kind=InvoiceLineKind.EXPENSE,
+                    article_number=item.article_number,
                     description=" — ".join(description_parts),
                     quantity=Decimal("1"),
                     unit="pcs",
@@ -341,6 +344,7 @@ class InvoiceService:
                     invoice_id=invoice.id,
                     position=position,
                     kind=line.kind,
+                    article_number=line.article_number,
                     description=line.description,
                     quantity=line.quantity,
                     unit=line.unit,
@@ -426,6 +430,7 @@ class InvoiceService:
                     id=line.id,
                     position=line.position,
                     kind=line.kind,
+                    article_number=line.article_number,
                     description=line.description,
                     quantity=line.quantity,
                     unit=line.unit,

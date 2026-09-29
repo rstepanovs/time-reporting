@@ -21,7 +21,9 @@ CLEARABLE_PROJECT_FIELDS: tuple[ClearableProjectField, ...] = get_args(
     ClearableProjectField.__value__
 )
 
-type ClearableBillingItemField = Literal["description", "unit_rate", "markup_percent"]
+type ClearableBillingItemField = Literal[
+    "description", "unit_rate", "markup_percent", "article_number"
+]
 
 # Optional fields that ``UpdateProjectBillingItem.clear_fields`` can reset to ``None``.
 CLEARABLE_BILLING_ITEM_FIELDS: tuple[ClearableBillingItemField, ...] = get_args(
@@ -149,6 +151,7 @@ class ProjectBillingItemDTO:
     unit: BillingUnit
     unit_rate: Decimal | None
     markup_percent: Decimal | None
+    article_number: str | None
     position: int
     is_active: bool
     created_at: datetime
@@ -338,6 +341,7 @@ class AddProjectBillingItem(Command[ProjectBillingItemDTO]):
     description: str | None = None
     unit_rate: Decimal | None = None
     markup_percent: Decimal | None = None
+    article_number: str | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -346,9 +350,10 @@ class UpdateProjectBillingItem(Command[ProjectBillingItemDTO]):
 
     ``unit`` and ``preset`` are immutable and not part of this command (also for default items,
     which can otherwise be renamed and archived like any other item). ``description``,
-    ``unit_rate`` and ``markup_percent`` are cleared by naming them in ``clear_fields``. Archive an
-    item with ``is_active=False``; permanently deleting an unreferenced one goes through the admin
-    module. Re-activating an item under an archived project is rejected.
+    ``unit_rate``, ``markup_percent`` and ``article_number`` are cleared by naming them in
+    ``clear_fields``. Archive an item with ``is_active=False``; permanently deleting an
+    unreferenced one goes through the admin module. Re-activating an item under an archived
+    project is rejected.
     """
 
     project_id: UUID
@@ -357,6 +362,7 @@ class UpdateProjectBillingItem(Command[ProjectBillingItemDTO]):
     description: str | None = None
     unit_rate: Decimal | None = None
     markup_percent: Decimal | None = None
+    article_number: str | None = None
     is_active: bool | None = None
     clear_fields: frozenset[ClearableBillingItemField] = frozenset()
 

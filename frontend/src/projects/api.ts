@@ -197,6 +197,7 @@ export async function addProjectBillingItem(
   body: {
     name: string;
     unit: BillingUnit;
+    article_number?: string | null;
     description?: string | null;
     unit_rate?: number | string | null;
     markup_percent?: number | string | null;
@@ -215,6 +216,7 @@ export async function updateProjectBillingItem(
   itemId: string,
   body: {
     name?: string;
+    article_number?: string | null;
     description?: string | null;
     unit_rate?: number | string | null;
     markup_percent?: number | string | null;

@@ -626,6 +626,21 @@ async def test_add_billing_item_appends_after_the_defaults(
     assert item.is_active
 
 
+async def test_add_billing_item_with_article_number(bus: Bus, make_project: ProjectFactory) -> None:
+    project = await make_project()
+
+    item = await bus.execute(
+        AddProjectBillingItem(
+            project_id=project.id,
+            name="Consulting",
+            unit=BillingUnit.HOUR,
+            article_number="Cs",
+        )
+    )
+
+    assert item.article_number == "Cs"
+
+
 async def test_add_billing_item_to_unknown_project_raises(bus: Bus) -> None:
     with pytest.raises(ProjectNotFoundError):
         await bus.execute(
@@ -740,6 +755,27 @@ async def test_update_billing_item_changes_name_description_and_rate(
     assert updated.name == "Renamed"
     assert updated.description == "New description"
     assert updated.unit_rate == Decimal("75.00")
+
+
+async def test_update_billing_item_sets_and_clears_article_number(
+    bus: Bus, make_project: ProjectFactory
+) -> None:
+    project = await make_project()
+    item = await bus.execute(
+        AddProjectBillingItem(project_id=project.id, name="Extra", unit=BillingUnit.HOUR)
+    )
+
+    updated = await bus.execute(
+        UpdateProjectBillingItem(project_id=project.id, item_id=item.id, article_number="Cs")
+    )
+    assert updated.article_number == "Cs"
+
+    cleared = await bus.execute(
+        UpdateProjectBillingItem(
+            project_id=project.id, item_id=item.id, clear_fields=frozenset({"article_number"})
+        )
+    )
+    assert cleared.article_number is None
 
 
 async def test_update_billing_item_clears_unit_rate(bus: Bus, make_project: ProjectFactory) -> None:

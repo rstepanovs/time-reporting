@@ -4,16 +4,17 @@ The only file in the whole app importing ``faktura_printer`` — everything it n
 plain dicts (``seller``/``buyer``, built by ``service._build_seller_snapshot``/
 ``_build_buyer_snapshot`` and, for an issued invoice, the very same dicts read back from
 ``Invoice.seller_snapshot``/``buyer_snapshot``), so this module depends on nothing from the rest of
-the app beyond ``invoices.contracts``.
+the app beyond ``invoices.contracts``. ``_DESIGN`` selects our own template/CSS (see `theme.py`)
+over faktura-printer's bundled ones; ``render_pdf(untrusted=True)`` still applies (seller/buyer/
+note fields are free text an admin typed in) — ``base_dir`` now points at `theme.THEME_DIR`, the
+one directory that mode is allowed to read `_DESIGN`'s files from.
 """
 
 import asyncio
 from decimal import Decimal
-from pathlib import Path
-from tempfile import gettempdir
 from typing import Any
 
-from faktura_printer import Buyer, Invoice, Item, Seller, Totals
+from faktura_printer import Buyer, Design, Invoice, Item, Seller, Totals
 from faktura_printer import render_pdf as _render_pdf
 
 # `InvoiceInfo` isn't re-exported from the package root (see faktura-printer's README "Public
@@ -21,11 +22,9 @@ from faktura_printer import render_pdf as _render_pdf
 from faktura_printer.models import InvoiceInfo
 
 from time_reporting.modules.invoices.contracts import InvoiceDTO
+from time_reporting.modules.invoices.theme import CSS_FILENAME, TEMPLATE_FILENAME, THEME_DIR
 
-# render_pdf(untrusted=True) requires a base_dir even though nothing rendered here ever resolves
-# to a file on disk (the logo is a `data:` URI, everything else is plain text) — any existing
-# directory works, and the system temp dir is always present.
-_SCRATCH_BASE_DIR = Path(gettempdir())
+_DESIGN = Design(theme="classic", template=TEMPLATE_FILENAME, css=CSS_FILENAME)
 
 
 def _build_invoice(
@@ -46,6 +45,7 @@ def _build_invoice(
     return Invoice(
         locale=dto.locale,
         labels={"title": "UTKAST/DRAFT"} if draft else {},
+        design=_DESIGN,
         seller=Seller(**seller_fields),
         buyer=Buyer(**buyer_fields),
         invoice=InvoiceInfo(
@@ -59,6 +59,7 @@ def _build_invoice(
         ),
         items=[
             Item(
+                article_number=line.article_number or "",
                 description=line.description,
                 quantity=line.quantity,
                 unit=line.unit,
@@ -88,4 +89,4 @@ async def render_invoice_pdf(
     does). WeasyPrint is CPU-bound, so the actual render runs in a thread.
     """
     invoice = _build_invoice(dto, seller=seller, buyer=buyer, draft=draft)
-    return await asyncio.to_thread(_render_pdf, invoice, base_dir=_SCRATCH_BASE_DIR, untrusted=True)
+    return await asyncio.to_thread(_render_pdf, invoice, base_dir=THEME_DIR, untrusted=True)

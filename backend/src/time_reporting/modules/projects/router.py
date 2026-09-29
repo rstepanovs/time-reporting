@@ -280,6 +280,7 @@ async def add_project_billing_item(
                 description=body.description,
                 unit_rate=body.unit_rate,
                 markup_percent=body.markup_percent,
+                article_number=body.article_number,
             )
         )
     except ProjectNotFoundError as exc:
@@ -322,6 +323,7 @@ async def update_project_billing_item(
                 description=body.description,
                 unit_rate=body.unit_rate,
                 markup_percent=body.markup_percent,
+                article_number=body.article_number,
                 is_active=body.is_active,
                 clear_fields=clear_fields,
             )

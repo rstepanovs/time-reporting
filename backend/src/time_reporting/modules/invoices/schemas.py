@@ -46,6 +46,7 @@ class InvoiceLineResponse(BaseModel):
     id: UUID
     position: int
     kind: InvoiceLineKind
+    article_number: str | None
     description: str
     quantity: Decimal
     unit: str

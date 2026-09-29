@@ -46,6 +46,10 @@ only file in the whole app importing it — see "Issuing" below.
        own vendor/date/description), `unit_price = quantity × (1 + markup_percent / 100)`
        (`markup_percent=None` behaves as `0`), `quantity=1`, `unit="pcs"`, description built from
        the expense date, vendor and text.
+     - Both kinds copy `article_number` from the billing item, printed as the PDF's ARTNR column
+       (`rendering.py`) — a snapshot at generation time, like every other line field, so it stays
+       what was printed even if the billing item's own `article_number` changes later. A `MANUAL`
+       line (below) never has one.
      - Every line's `amount = quantity × unit_price`, quantized to 0.01 (`ROUND_HALF_UP` — see
        `_quantize`).
   4. Takes `currency`, `vat_rate`, `vat_note`, `your_reference` from the customer as-is;

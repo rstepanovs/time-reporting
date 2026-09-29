@@ -113,6 +113,9 @@ class ProjectBillingItem(TimestampMixin, Base):
     )
     unit_rate: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     markup_percent: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
+    # Printed as the invoice line's article number; free text, e.g. a code carried over from a
+    # pre-system paper invoice ("Cs" for consulting services). Never validated or looked up.
+    article_number: Mapped[str | None] = mapped_column(String(50))
     # Display (and later invoice) order within the project.
     position: Mapped[int]
     is_active: Mapped[bool] = mapped_column(default=True, server_default=true())

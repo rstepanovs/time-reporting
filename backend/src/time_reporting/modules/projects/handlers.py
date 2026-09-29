@@ -96,6 +96,7 @@ def _billing_item_dto(item: ProjectBillingItem) -> ProjectBillingItemDTO:
         unit=item.unit,
         unit_rate=item.unit_rate,
         markup_percent=item.markup_percent,
+        article_number=item.article_number,
         position=item.position,
         is_active=item.is_active,
         created_at=item.created_at,
@@ -401,6 +402,7 @@ class AddProjectBillingItemHandler:
             description=command.description,
             unit_rate=command.unit_rate,
             markup_percent=command.markup_percent,
+            article_number=command.article_number,
         )
         return _billing_item_dto(item)
 

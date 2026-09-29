@@ -28,6 +28,7 @@ export function formatBillingItemPrice(item: BillingItem, currency: string): str
 type FormValues = {
   name: string;
   unit: BillingUnit;
+  articleNumber: string;
   description: string;
   unitRate: number | "";
   markupPercent: number | "";
@@ -59,12 +60,20 @@ export function BillingItemFormModal(props: Props) {
         ? {
             name: props.item.name,
             unit: props.item.unit,
+            articleNumber: props.item.article_number ?? "",
             description: props.item.description ?? "",
             unitRate: props.item.unit_rate !== null ? Number(props.item.unit_rate) : "",
             markupPercent:
               props.item.markup_percent !== null ? Number(props.item.markup_percent) : "",
           }
-        : { name: "", unit: "hour", description: "", unitRate: "", markupPercent: "" },
+        : {
+            name: "",
+            unit: "hour",
+            articleNumber: "",
+            description: "",
+            unitRate: "",
+            markupPercent: "",
+          },
     validate: {
       name: isNotEmpty("Enter a name"),
     },
@@ -78,6 +87,7 @@ export function BillingItemFormModal(props: Props) {
         const created = await addItem.mutateAsync({
           name: values.name,
           unit: values.unit,
+          article_number: values.articleNumber || null,
           description: values.description || null,
           unit_rate: values.unit === "amount" || values.unitRate === "" ? null : values.unitRate,
           markup_percent:
@@ -89,11 +99,14 @@ export function BillingItemFormModal(props: Props) {
         const original = props.item;
         const body: {
           name?: string;
+          article_number?: string | null;
           description?: string | null;
           unit_rate?: number | string | null;
           markup_percent?: number | string | null;
         } = {};
         if (values.name !== original.name) body.name = values.name;
+        const newArticleNumber = values.articleNumber || null;
+        if (newArticleNumber !== original.article_number) body.article_number = newArticleNumber;
         const newDescription = values.description || null;
         if (newDescription !== original.description) body.description = newDescription;
         if (original.unit === "amount") {
@@ -133,6 +146,13 @@ export function BillingItemFormModal(props: Props) {
             maxLength={255}
             key={form.key("name")}
             {...form.getInputProps("name")}
+          />
+          <TextInput
+            label="Article number"
+            description="Printed on invoice lines as the article number, e.g. a code carried over from a paper invoice"
+            maxLength={50}
+            key={form.key("articleNumber")}
+            {...form.getInputProps("articleNumber")}
           />
           <Select
             label="Unit"

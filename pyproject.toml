@@ -50,6 +50,11 @@ select = [
 [tool.ruff.lint.isort]
 known-first-party = ["time_reporting"]
 
+[tool.ruff.lint.per-file-ignores]
+# Embeds faktura-printer's Jinja2 invoice template verbatim (see the module docstring) — its long
+# lines are markup, not Python code to wrap.
+"backend/src/time_reporting/modules/invoices/theme.py" = ["E501"]
+
 [tool.mypy]
 python_version = "3.13"
 strict = true

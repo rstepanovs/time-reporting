@@ -20,7 +20,10 @@ Backend: `modules/projects`.
   pages, and `timesheets/ProjectBillingCard.tsx`/`pages/TeamPage.tsx` report its month as "Internal
   — not billed" instead of a billing status — see `timesheets/CLAUDE.md`'s "Manager views".
 - `BillingItemFormModal.tsx` — create/edit a billing item; the unit is locked once editing, and its
-  rate/markup field swaps by unit.
+  rate/markup field swaps by unit. `articleNumber` is free text, printed on generated invoice lines
+  as the article number (see `invoices/CLAUDE.md`) — blank submits `null`; on edit that clears an
+  existing value (`clearableDiff`), matching `description`. `pages/ProjectDetailsPage.tsx`'s billing
+  items table shows it in its own column, `—` when unset.
 
 ## Pages
 

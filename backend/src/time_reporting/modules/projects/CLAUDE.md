@@ -42,7 +42,10 @@ Depends on: `customers.contracts` (`GetCustomersByIds`, active check), `users.co
 `ProjectBillingItem`: the positions a project's invoices will be made of (normal/overtime/travel
 hours, per diems, purchasing/other expenses), each with an immutable `unit` (`hour`, `day` or
 `amount`) and, depending on that unit, a `unit_rate` or a `markup_percent` in the customer's
-currency.
+currency. `article_number` is free text, printed as the invoice line's article number when
+`invoices.CreateInvoiceDraft` generates a line from this item (see `invoices/CLAUDE.md`'s
+"Drafting") — never validated or looked up, e.g. a code carried over from a pre-system paper
+invoice.
 
 - Creating a project creates its six defaults (`DEFAULT_BILLING_ITEMS`, unpriced); further items
   are added directly to one project (there is no catalog shared across projects).

@@ -16,6 +16,10 @@ Description = Annotated[str, StringConstraints(strip_whitespace=True, max_length
 # the item's unit (a rate for an ``amount`` item, say), which is a business rule, not a shape one.
 Rate = Annotated[Decimal, Field(ge=0, max_digits=12, decimal_places=2)]
 Markup = Annotated[Decimal, Field(ge=0, le=1000, max_digits=6, decimal_places=2)]
+# Matches the ``project_billing_items.article_number`` column (``String(50)``).
+ArticleNumber = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=50)
+]
 # Matches the ``projects`` check constraint (``0 < normal_working_hours <= 24``).
 NormalWorkingHours = Annotated[Decimal, Field(gt=0, le=24, max_digits=4, decimal_places=2)]
 
@@ -77,14 +81,15 @@ class BillingItemCreateRequest(BaseModel):
     description: Description | None = None
     unit_rate: Rate | None = None
     markup_percent: Markup | None = None
+    article_number: ArticleNumber | None = None
 
 
 class BillingItemUpdateRequest(BaseModel):
     """Partial update: omitted fields are left unchanged.
 
     ``unit`` and ``preset`` are immutable and not part of this request. ``null`` clears
-    ``description``, ``unit_rate`` and ``markup_percent``; it is rejected for ``name`` and
-    ``is_active``.
+    ``description``, ``unit_rate``, ``markup_percent`` and ``article_number``; it is rejected for
+    ``name`` and ``is_active``.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -93,6 +98,7 @@ class BillingItemUpdateRequest(BaseModel):
     description: Description | None = None
     unit_rate: Rate | None = None
     markup_percent: Markup | None = None
+    article_number: ArticleNumber | None = None
     is_active: bool | None = None
 
     @model_validator(mode="after")
@@ -172,6 +178,7 @@ class ProjectBillingItemResponse(BaseModel):
     unit: BillingUnit
     unit_rate: Decimal | None
     markup_percent: Decimal | None
+    article_number: str | None
     position: int
     is_active: bool
     created_at: datetime

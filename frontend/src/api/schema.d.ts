@@ -1412,6 +1412,8 @@ export interface components {
             unit_rate?: number | string | null;
             /** Markup Percent */
             markup_percent?: number | string | null;
+            /** Article Number */
+            article_number?: string | null;
         };
         /**
          * BillingItemPreset
@@ -1424,8 +1426,8 @@ export interface components {
          * @description Partial update: omitted fields are left unchanged.
          *
          *     ``unit`` and ``preset`` are immutable and not part of this request. ``null`` clears
-         *     ``description``, ``unit_rate`` and ``markup_percent``; it is rejected for ``name`` and
-         *     ``is_active``.
+         *     ``description``, ``unit_rate``, ``markup_percent`` and ``article_number``; it is rejected for
+         *     ``name`` and ``is_active``.
          */
         BillingItemUpdateRequest: {
             /** Name */
@@ -1436,6 +1438,8 @@ export interface components {
             unit_rate?: number | string | null;
             /** Markup Percent */
             markup_percent?: number | string | null;
+            /** Article Number */
+            article_number?: string | null;
             /** Is Active */
             is_active?: boolean | null;
         };
@@ -2291,6 +2295,8 @@ export interface components {
             /** Position */
             position: number;
             kind: components["schemas"]["InvoiceLineKind"];
+            /** Article Number */
+            article_number: string | null;
             /** Description */
             description: string;
             /** Quantity */
@@ -2627,6 +2633,8 @@ export interface components {
             unit_rate: string | null;
             /** Markup Percent */
             markup_percent: string | null;
+            /** Article Number */
+            article_number: string | null;
             /** Position */
             position: number;
             /** Is Active */

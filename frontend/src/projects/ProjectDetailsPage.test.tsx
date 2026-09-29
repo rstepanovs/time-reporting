@@ -19,6 +19,7 @@ import { searchUserDirectory, type UserRole } from "@/users/api";
 import {
   testAdmin,
   testBillingItem,
+  testCustomBillingItem,
   testProject,
   testProjectMember,
   testManager,
@@ -72,6 +73,17 @@ describe("ProjectDetailsPage", () => {
     expect(screen.getByText("Default")).toBeTruthy();
     // testBillingItem: unit "hour", unit_rate "90.00", project's customer currency "EUR".
     expect(screen.getByText("90.00 EUR / hour")).toBeTruthy();
+  });
+
+  it("shows a billing item's article number, or a dash when it has none", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
+    vi.mocked(listProjectBillingItems).mockResolvedValue([testBillingItem, testCustomBillingItem]);
+    renderApp(`/projects/${testProject.id}`);
+
+    await screen.findByText(testBillingItem.name);
+    expect(screen.getByText(testCustomBillingItem.article_number!)).toBeTruthy();
+    const row = screen.getByText(testBillingItem.name).closest("tr")!;
+    expect(within(row).getByText("—")).toBeTruthy();
   });
 
   it("hides write controls from a plain employee", async () => {
@@ -281,6 +293,7 @@ describe("ProjectDetailsPage", () => {
       expect(addProjectBillingItem).toHaveBeenCalledWith(testProject.id, {
         name: "On-call standby",
         unit: "amount",
+        article_number: null,
         description: null,
         unit_rate: null,
         markup_percent: 10,
@@ -308,6 +321,30 @@ describe("ProjectDetailsPage", () => {
     await waitFor(() => {
       expect(updateProjectBillingItem).toHaveBeenCalledWith(testProject.id, testBillingItem.id, {
         unit_rate: 95,
+      });
+    });
+  });
+
+  it("lets a manager set a billing item's article number", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
+    vi.mocked(updateProjectBillingItem).mockResolvedValue({
+      ...testBillingItem,
+      article_number: "Cs",
+    });
+    renderApp(`/projects/${testProject.id}`);
+    await screen.findByRole("heading", { name: testProject.name });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Actions" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Article number" }), {
+      target: { value: "Cs" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => {
+      expect(updateProjectBillingItem).toHaveBeenCalledWith(testProject.id, testBillingItem.id, {
+        article_number: "Cs",
       });
     });
   });

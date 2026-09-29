@@ -328,6 +328,30 @@ async def test_create_draft_aggregates_hours_per_item_across_dates(
     assert invoice.due_date == date(2026, 10, 1) + timedelta(days=customer.payment_terms_days)
 
 
+async def test_create_draft_copies_the_billing_items_article_number(
+    bus: Bus, make_project: ProjectFactory, make_user: UserFactory, make_customer: CustomerFactory
+) -> None:
+    customer = await make_customer()
+    project_id, _manager, admin, _worker = await _sent_period(
+        bus, make_project, make_user, customer_id=customer.id
+    )
+    item_id = await _hours_item_id(bus, project_id)
+    await bus.execute(
+        UpdateProjectBillingItem(project_id=project_id, item_id=item_id, article_number="Cs")
+    )
+
+    invoice = await bus.execute(
+        CreateInvoiceDraft(
+            customer_id=customer.id,
+            periods=(BillingPeriodRef(project_id=project_id, period_start=PERIOD_START),),
+            invoice_date=date(2026, 10, 1),
+            actor_id=admin.id,
+        )
+    )
+
+    assert invoice.lines[0].article_number == "Cs"
+
+
 async def test_create_draft_rounds_amounts_half_up(
     bus: Bus, make_project: ProjectFactory, make_user: UserFactory, make_customer: CustomerFactory
 ) -> None:

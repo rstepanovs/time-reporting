@@ -91,6 +91,9 @@ Backend: `modules/invoices` (draft generation, issuing/PDF/paid/void are documen
     string (the backend's `min_length=1` would reject that). "Issue…" sits next to Discard/Save,
     auto-saving first if dirty (the `ExpenseLinesTable` Submit-button pattern) before executing
     `IssueInvoice`; disabled while there are no lines or an in-progress edit is incomplete.
+  - A line's `article_number` (copied from its billing item at generation time — see
+    `modules/invoices/CLAUDE.md`'s "Drafting") is printed on the PDF but not shown or editable in
+    this table; add a column here if that changes.
   - **Issued/paid/void**: the same table read-only, no header fields, no line actions. Totals
     (subtotal/VAT/total) are always the server's own values, never recomputed client-side, even
     mid-edit — a live per-line "Amount" preview (`quantity × unit_price`) is shown only in the

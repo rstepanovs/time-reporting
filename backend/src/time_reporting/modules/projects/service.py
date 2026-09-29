@@ -149,6 +149,7 @@ class ProjectService:
         description: str | None,
         unit_rate: Decimal | None,
         markup_percent: Decimal | None,
+        article_number: str | None,
     ) -> ProjectBillingItem:
         await self._ensure_project_active(project_id)
         if unit_rate is not None:
@@ -166,6 +167,7 @@ class ProjectService:
             unit=unit,
             unit_rate=unit_rate,
             markup_percent=markup_percent,
+            article_number=article_number,
             position=position,
         )
         await self._billing_items.save(item)
@@ -191,6 +193,10 @@ class ProjectService:
         elif data.markup_percent is not None:
             self._ensure_pricing_allowed(item.unit, "markup_percent")
             item.markup_percent = data.markup_percent
+        if "article_number" in data.clear_fields:
+            item.article_number = None
+        elif data.article_number is not None:
+            item.article_number = data.article_number
         if data.is_active is not None:
             if data.is_active and not item.is_active:
                 # Re-activating an item requires its project to still be active.

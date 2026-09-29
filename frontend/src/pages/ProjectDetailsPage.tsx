@@ -394,6 +394,7 @@ function BillingItemsSection({
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Name</Table.Th>
+              <Table.Th>Article no.</Table.Th>
               <Table.Th>Unit</Table.Th>
               <Table.Th>Price</Table.Th>
               {isManager && <Table.Th />}
@@ -415,6 +416,7 @@ function BillingItemsSection({
                     </Badge>
                   )}
                 </Table.Td>
+                <Table.Td>{item.article_number ?? "—"}</Table.Td>
                 <Table.Td style={{ textTransform: "capitalize" }}>{item.unit}</Table.Td>
                 <Table.Td>{formatBillingItemPrice(item, project.customer.currency)}</Table.Td>
                 {isManager && (

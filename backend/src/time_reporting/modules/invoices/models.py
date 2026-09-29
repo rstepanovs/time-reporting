@@ -97,6 +97,10 @@ class InvoiceLine(TimestampMixin, Base):
             values_callable=lambda k: [x.value for x in k],
         )
     )
+    # Copied from the billing item's own `article_number` at generation time (never joined back
+    # live), so it stays what the invoice printed even if the billing item later changes; always
+    # `None` for a manual line.
+    article_number: Mapped[str | None] = mapped_column(String(50))
     description: Mapped[str] = mapped_column(String(500))
     quantity: Mapped[Decimal] = mapped_column(Numeric(12, 2))
     unit: Mapped[str] = mapped_column(String(20))
