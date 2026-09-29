@@ -10,6 +10,8 @@ from typing import Any
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from support import ADMIN, EMPLOYEE, MANAGER, AuthHeaders, UserFactory
 from time_reporting.core.config import get_settings
@@ -133,6 +135,20 @@ async def test_backup_without_an_actor_is_not_audited(bus: Bus) -> None:
         )
     )
     assert events.items == ()
+
+
+async def test_pending_migrations_check_skips_before_any_migration_has_ever_run(
+    bus: Bus, db_session: AsyncSession
+) -> None:
+    """A brand-new database has no `alembic_version` table at all until `alembic upgrade head` has
+    run once — exactly what `compose.yaml`'s `migrate` service (`backup --if-pending-migrations`,
+    run before its own `alembic upgrade head`) hits on a first-ever install. That must be treated
+    as "nothing to protect" rather than crash."""
+    await db_session.execute(text("DROP TABLE alembic_version"))
+
+    backup = await bus.execute(CreateBackup(only_if_migrations_pending=True))
+
+    assert backup is None
 
 
 async def test_creating_a_backup_while_one_is_in_progress_conflicts(
