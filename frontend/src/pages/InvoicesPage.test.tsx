@@ -135,6 +135,17 @@ describe("InvoicesPage", () => {
     });
   });
 
+  it("links each row to its invoice detail page", async () => {
+    const { router } = renderApp("/invoices?tab=invoices");
+    const numberCell = await screen.findByText(testInvoiceSummary.number!);
+
+    fireEvent.click(numberCell);
+
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe(`/invoices/${testInvoiceSummary.id}`);
+    });
+  });
+
   it("filters invoices by customer", async () => {
     renderApp("/invoices?tab=invoices");
     await screen.findByText(testInvoiceSummary.number!);

@@ -1,5 +1,6 @@
 import {
   Alert,
+  Anchor,
   Badge,
   Button,
   Checkbox,
@@ -14,7 +15,7 @@ import {
   Title,
 } from "@mantine/core";
 import { useState } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 
 import { useCustomers } from "@/customers/hooks";
 import { InvoiceRuleError, type InvoiceableCustomer, type InvoiceStatus } from "@/invoices/api";
@@ -239,7 +240,11 @@ function InvoiceListTab() {
                   const overdue = invoice.status === "issued" && invoice.due_date < today;
                   return (
                     <Table.Tr key={invoice.id}>
-                      <Table.Td>{invoice.number ?? "—"}</Table.Td>
+                      <Table.Td>
+                        <Anchor component={Link} to={`/invoices/${invoice.id}`}>
+                          {invoice.number ?? "—"}
+                        </Anchor>
+                      </Table.Td>
                       <Table.Td>{invoice.customer_name}</Table.Td>
                       <Table.Td>{invoice.invoice_date}</Table.Td>
                       <Table.Td>{invoice.due_date}</Table.Td>
