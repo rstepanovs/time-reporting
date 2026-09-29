@@ -205,7 +205,7 @@ def _generate_lines(
                 _GeneratedLine(
                     kind=InvoiceLineKind.TIME,
                     article_number=item.article_number,
-                    description=f"{project.name} — {item.name} ({ref.period_start:%Y-%m})",
+                    description=f"{item.name} ({ref.period_start:%b %Y})",
                     quantity=quantity,
                     unit=item.unit.value,
                     unit_price=item.unit_rate,
