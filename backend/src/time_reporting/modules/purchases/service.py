@@ -1,6 +1,7 @@
 """Purchase-document use cases: storing a file in the inbox, discarding."""
 
 import hashlib
+from decimal import Decimal
 from uuid import UUID
 
 from time_reporting.core.config import get_settings
@@ -9,6 +10,7 @@ from time_reporting.modules.audit.contracts import AuditAction, RecordAuditEvent
 from time_reporting.modules.purchases.contracts import (
     AddPurchaseDocument,
     DiscardPurchaseDocument,
+    LinkCardReceipts,
     MarkPurchasePaid,
     MarkPurchaseUnpaid,
     PaymentMethod,
@@ -19,8 +21,12 @@ from time_reporting.modules.purchases.contracts import (
     PurchaseFileDTO,
     PurchaseKind,
     PurchaseStage,
+    PurchaseValidationError,
+    RateSource,
     RegisterPurchaseDocument,
     ReturnPurchaseToInbox,
+    UnlinkCardReceipt,
+    UpdateCardReceiptAmount,
     UpdatePurchaseDocument,
 )
 from time_reporting.modules.purchases.conversion import Converter, is_converted_by_hand
@@ -103,6 +109,12 @@ class PurchaseService:
             raise PurchaseDocumentStateError("The document is already discarded")
         if document.rebilled_expense_line_id is not None:
             raise PurchaseDocumentStateError("The document has been rebilled to a project")
+        if document.kind is PurchaseKind.CARD_INVOICE and (
+            await self._documents.count_linked_receipts(document.id)
+        ):
+            raise PurchaseDocumentStateError("Unlink the card invoice's receipts first")
+        if document.card_invoice_id is not None:
+            self._detach(document)
         document.stage = PurchaseStage.DISCARDED
         await self._documents.save(document)
         await self._audit(command.actor_id, AuditAction.PURCHASE_DISCARDED, document, "Discarded")
@@ -204,6 +216,87 @@ class PurchaseService:
         await self._audit(command.actor_id, AuditAction.PURCHASE_UNPAID, document, "Marked unpaid")
         return document
 
+    # --- card invoices ---
+
+    async def get_card_invoice(
+        self, card_invoice_id: UUID
+    ) -> tuple[PurchaseDocument, list[PurchaseDocument]]:
+        invoice = await self._get_card_invoice(card_invoice_id)
+        return invoice, list(await self._documents.list_linked_receipts(card_invoice_id))
+
+    async def link_card_receipts(
+        self, command: LinkCardReceipts
+    ) -> tuple[PurchaseDocument, list[PurchaseDocument]]:
+        invoice = await self._get_card_invoice(command.card_invoice_id)
+        ids = [link.receipt_id for link in command.links]
+        if len(set(ids)) != len(ids):
+            raise PurchaseValidationError("A receipt can be linked only once")
+        if any(link.amount_base <= Decimal(0) for link in command.links):
+            raise PurchaseValidationError("Every amount must be positive")
+        receipts = [await self.get(receipt_id) for receipt_id in ids]
+        for receipt in receipts:
+            if not _is_card_receipt(receipt):
+                raise PurchaseDocumentStateError(
+                    f"{receipt.file_name} isn't a registered card-paid receipt"
+                )
+            if receipt.card_invoice_id is not None:
+                raise PurchaseDocumentStateError(
+                    f"{receipt.file_name} is already linked to a card invoice"
+                )
+        for receipt, link in zip(receipts, command.links, strict=True):
+            receipt.card_invoice_id = invoice.id
+            self._set_card_amount(receipt, link.amount_base)
+            await self._documents.save(receipt)
+        return await self.get_card_invoice(invoice.id)
+
+    async def unlink_card_receipt(self, command: UnlinkCardReceipt) -> PurchaseDocument:
+        receipt = await self.get(command.receipt_id)
+        if receipt.card_invoice_id is None:
+            raise PurchaseDocumentStateError("The receipt isn't linked to a card invoice")
+        self._detach(receipt)
+        await self._documents.save(receipt)
+        return receipt
+
+    async def update_card_receipt_amount(
+        self, command: UpdateCardReceiptAmount
+    ) -> PurchaseDocument:
+        receipt = await self.get(command.receipt_id)
+        if receipt.card_invoice_id is None:
+            raise PurchaseDocumentStateError("The receipt isn't linked to a card invoice")
+        if command.amount_base <= Decimal(0):
+            raise PurchaseValidationError("The amount must be positive")
+        self._set_card_amount(receipt, command.amount_base)
+        await self._documents.save(receipt)
+        return receipt
+
+    async def _get_card_invoice(self, card_invoice_id: UUID) -> PurchaseDocument:
+        invoice = await self.get(card_invoice_id)
+        if invoice.stage is not PurchaseStage.REGISTERED or invoice.kind is not (
+            PurchaseKind.CARD_INVOICE
+        ):
+            raise PurchaseDocumentStateError("The document isn't a registered card invoice")
+        return invoice
+
+    @staticmethod
+    def _set_card_amount(receipt: PurchaseDocument, amount_base: Decimal) -> None:
+        """The amount typed from the card invoice's line: final, and never recomputed."""
+        assert receipt.amount is not None
+        receipt.amount_base = amount_base.quantize(Decimal("0.01"))
+        receipt.exchange_rate = (amount_base / receipt.amount).quantize(Decimal("0.00000001"))
+        receipt.rate_date = None
+        receipt.rate_source = RateSource.CARD_INVOICE
+        receipt.amount_base_final = True
+
+    @staticmethod
+    def _detach(receipt: PurchaseDocument) -> None:
+        """Unlink from the card invoice and forget the amount it supplied."""
+        receipt.card_invoice_id = None
+        receipt.amount_base = None
+        receipt.exchange_rate = None
+        receipt.rate_date = None
+        receipt.rate_source = None
+        receipt.amount_base_final = False
+
     # --- helpers ---
 
     async def _get_registered(self, document_id: UUID) -> PurchaseDocument:
@@ -257,3 +350,12 @@ class PurchaseService:
                 details={"kind": document.kind.value if document.kind else None},
             )
         )
+
+
+def _is_card_receipt(document: PurchaseDocument) -> bool:
+    return (
+        document.stage is PurchaseStage.REGISTERED
+        and document.kind in (PurchaseKind.RECEIPT, PurchaseKind.INVOICE)
+        and document.payment_method is PaymentMethod.CARD
+        and document.amount is not None
+    )

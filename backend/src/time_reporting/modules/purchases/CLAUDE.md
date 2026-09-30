@@ -67,6 +67,24 @@ Every registered document with an amount gets `amount_base`, `exchange_rate`, `r
 - No published rate (`ExchangeRateUnavailableError`) → the document is still registered with the
   amount left empty, for the user to type in.
 
+## Card invoices (`service.py`, "card invoices" section)
+
+A card receipt is a registered `receipt`/`invoice` with `payment_method = card`; its base-currency
+amount is open until a `card_invoice` (registered) settles it.
+
+- `LinkCardReceipts(card_invoice_id, links=[(receipt_id, amount_base)])` is all-or-nothing: every
+  receipt must be a registered, card-paid, unlinked document, amounts positive, receipts distinct.
+  Each gets `card_invoice_id`, the typed `amount_base` (rate derived), `rate_source = card_invoice`
+  and `amount_base_final` — never recomputed by edits, Paid or Unpaid. `UpdateCardReceiptAmount`
+  retypes it; `UnlinkCardReceipt` clears it back to open.
+- `GetCardInvoice` → `CardInvoiceDTO`: the card invoice, its receipts, `receipts_total_base` and
+  `difference_base` (card invoice total minus the sum: fees, interest, purchases without a
+  receipt; `None` while the card invoice has no base-currency amount).
+  `ListUnlinkedCardReceipts(date_from, date_to)` feeds the picker.
+- Guards: a card invoice with linked receipts can't be returned to the inbox, discarded, or turned
+  into another kind; a linked receipt stays a card-paid receipt (edits to its other fields keep the
+  card amount) and discarding one unlinks it first.
+
 ## HTTP API
 
 Under `/purchases`, all `AccountantDep`: `POST /documents` (multipart, `files` — several at once;
@@ -75,5 +93,8 @@ every file's type and size is checked before any is stored, so one bad file reje
 `POST /documents/{id}/discard` (409 on a state error), `POST /documents/{id}/register` and `PUT
 /documents/{id}` (`PurchaseDetailsRequest`; 400 on a rule error, 409 on state), `POST
 /documents/{id}/return-to-inbox`, `POST /documents/{id}/paid` (`paid_on`, `payment_method`,
-optional `amount_base`) and `POST /documents/{id}/unpaid`. `frontend/nginx.conf`'s 12 MB body limit
+optional `amount_base`) `POST /documents/{id}/unpaid`; for card invoices `GET /card-receipts/unlinked?date_from=&date_to=`,
+`GET /documents/{id}/card-invoice`, `POST /documents/{id}/card-receipts` (`{links: [{receipt_id,
+amount_base}]}`), `PUT /documents/{id}/card-amount` and `POST /documents/{id}/unlink-card` (the last
+two take the *receipt's* id). `frontend/nginx.conf`'s 12 MB body limit
 covers one file at a time; a batch of files larger than that in total would need it raised.

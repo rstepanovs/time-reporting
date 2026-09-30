@@ -290,11 +290,11 @@ sorting suggestions (deferred).
 
 #### A5 — backend `purchases`: card invoices
 
-- [ ] `LinkCardReceipts(card_invoice_id, [(receipt_id, amount_base)])`, `UnlinkCardReceipt`,
+- [x] `LinkCardReceipts(card_invoice_id, [(receipt_id, amount_base)])`, `UnlinkCardReceipt`,
       `UpdateCardReceiptAmount`.
-- [ ] `GetPurchaseDocument` for a card invoice: linked receipts, their SEK sum, the card invoice
+- [x] `GetCardInvoice` (a dedicated query rather than `GetPurchaseDocument`): linked receipts, their SEK sum, the card invoice
       total and the difference; `ListUnlinkedCardReceipts(date_from, date_to)` for the picker.
-- [ ] Tests: only card receipts, one card invoice per receipt, final SEK on link, back to open on
+- [x] Tests: only card receipts, one card invoice per receipt, final SEK on link, back to open on
       unlink, sums and difference.
 
 #### A6 — backend `purchases`: summary and month list

@@ -132,6 +132,30 @@ class PurchaseDocumentDTO:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class CardInvoiceDTO:
+    """A card invoice with the receipts settled by it.
+
+    ``receipts_total_base`` sums the receipts' base-currency amounts; ``difference_base`` is the
+    card invoice's own total minus that sum — fees, interest and purchases with no receipt (yet).
+    Both are ``None``-safe: a receipt without an amount counts as zero, and the difference is
+    ``None`` while the card invoice itself has no base-currency amount.
+    """
+
+    invoice: PurchaseDocumentDTO
+    receipts: tuple[PurchaseDocumentDTO, ...]
+    receipts_total_base: Decimal
+    difference_base: Decimal | None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CardReceiptLink:
+    """One receipt to link, with its amount in the base currency as printed on the card invoice."""
+
+    receipt_id: UUID
+    amount_base: Decimal
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class PurchaseFileDTO:
     """Where a document's file lives on disk, plus what to call it when serving it."""
 
@@ -189,6 +213,22 @@ class ListPurchaseDocuments(Query[tuple[PurchaseDocumentDTO, ...]]):
 @dataclass(frozen=True, slots=True, kw_only=True)
 class GetPurchaseDocument(Query[PurchaseDocumentDTO]):
     document_id: UUID
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetCardInvoice(Query[CardInvoiceDTO]):
+    """Raises ``PurchaseDocumentStateError`` when the document isn't a registered card invoice."""
+
+    card_invoice_id: UUID
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ListUnlinkedCardReceipts(Query[tuple[PurchaseDocumentDTO, ...]]):
+    """Registered card-paid receipts/invoices not yet linked to a card invoice, dated within the
+    range (either bound optional), oldest first — the picker when building a card invoice."""
+
+    date_from: date | None = None
+    date_to: date | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -286,3 +326,31 @@ class MarkPurchaseUnpaid(Command[PurchaseDocumentDTO]):
 
     document_id: UUID
     actor_id: UUID
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class LinkCardReceipts(Command[CardInvoiceDTO]):
+    """Settle card receipts under a card invoice, all or nothing. Each becomes final in the base
+    currency at the given amount (``rate_source = card_invoice``, never recomputed). Only a
+    registered, card-paid, not yet linked receipt/invoice qualifies
+    (``PurchaseDocumentStateError`` otherwise); amounts must be positive and receipts distinct
+    (``PurchaseValidationError``)."""
+
+    card_invoice_id: UUID
+    actor_id: UUID
+    links: tuple[CardReceiptLink, ...]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class UnlinkCardReceipt(Command[PurchaseDocumentDTO]):
+    """Detach a receipt from its card invoice; its base-currency amount goes back to open."""
+
+    receipt_id: UUID
+    actor_id: UUID
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class UpdateCardReceiptAmount(Command[PurchaseDocumentDTO]):
+    receipt_id: UUID
+    actor_id: UUID
+    amount_base: Decimal

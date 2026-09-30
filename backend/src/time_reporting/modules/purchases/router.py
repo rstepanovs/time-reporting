@@ -1,5 +1,6 @@
 """Purchases HTTP API: the company's register of incoming receipts and invoices, accountant only."""
 
+from datetime import date
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -13,10 +14,14 @@ from time_reporting.modules.purchases.contracts import (
     ALLOWED_PURCHASE_CONTENT_TYPES,
     DEFAULT_LIST_LIMIT,
     AddPurchaseDocument,
+    CardReceiptLink,
     DiscardPurchaseDocument,
+    GetCardInvoice,
     GetPurchaseDocument,
     GetPurchaseFilePath,
+    LinkCardReceipts,
     ListPurchaseDocuments,
+    ListUnlinkedCardReceipts,
     MarkPurchasePaid,
     MarkPurchaseUnpaid,
     PurchaseDocumentNotFoundError,
@@ -28,9 +33,14 @@ from time_reporting.modules.purchases.contracts import (
     PurchaseValidationError,
     RegisterPurchaseDocument,
     ReturnPurchaseToInbox,
+    UnlinkCardReceipt,
+    UpdateCardReceiptAmount,
     UpdatePurchaseDocument,
 )
 from time_reporting.modules.purchases.schemas import (
+    CardInvoiceResponse,
+    CardReceiptAmountRequest,
+    LinkCardReceiptsRequest,
     MarkPaidRequest,
     PurchaseDetailsRequest,
     PurchaseDocumentResponse,
@@ -279,3 +289,96 @@ async def mark_purchase_unpaid(
     except PurchaseDocumentStateError as exc:
         raise _conflict(exc) from exc
     return PurchaseDocumentResponse.model_validate(document)
+
+
+@router.get("/card-receipts/unlinked", summary="Card receipts not yet linked to a card invoice")
+async def list_unlinked_card_receipts(
+    _: AccountantDep, bus: BusDep, date_from: date | None = None, date_to: date | None = None
+) -> list[PurchaseDocumentResponse]:
+    receipts = await bus.query(ListUnlinkedCardReceipts(date_from=date_from, date_to=date_to))
+    return [PurchaseDocumentResponse.model_validate(receipt) for receipt in receipts]
+
+
+@router.get(
+    "/documents/{document_id}/card-invoice",
+    responses={**_NOT_FOUND_RESPONSE, **_CONFLICT_RESPONSE},
+    summary="A card invoice with its linked receipts, their sum and the difference",
+)
+async def get_card_invoice(document_id: UUID, _: AccountantDep, bus: BusDep) -> CardInvoiceResponse:
+    try:
+        card_invoice = await bus.query(GetCardInvoice(card_invoice_id=document_id))
+    except PurchaseDocumentNotFoundError as exc:
+        raise _not_found(str(exc)) from exc
+    except PurchaseDocumentStateError as exc:
+        raise _conflict(exc) from exc
+    return CardInvoiceResponse.model_validate(card_invoice)
+
+
+@router.post(
+    "/documents/{document_id}/card-receipts",
+    responses={**_NOT_FOUND_RESPONSE, **_CONFLICT_RESPONSE, **_INVALID_RESPONSE},
+    summary="Link card receipts to a card invoice, with their amounts from its lines",
+)
+async def link_card_receipts(
+    document_id: UUID, body: LinkCardReceiptsRequest, current_user: AccountantDep, bus: BusDep
+) -> CardInvoiceResponse:
+    try:
+        card_invoice = await bus.execute(
+            LinkCardReceipts(
+                card_invoice_id=document_id,
+                actor_id=current_user.id,
+                links=tuple(
+                    CardReceiptLink(receipt_id=link.receipt_id, amount_base=link.amount_base)
+                    for link in body.links
+                ),
+            )
+        )
+    except PurchaseDocumentNotFoundError as exc:
+        raise _not_found(str(exc)) from exc
+    except PurchaseValidationError as exc:
+        raise _bad_request(exc) from exc
+    except PurchaseDocumentStateError as exc:
+        raise _conflict(exc) from exc
+    return CardInvoiceResponse.model_validate(card_invoice)
+
+
+@router.put(
+    "/documents/{document_id}/card-amount",
+    responses={**_NOT_FOUND_RESPONSE, **_CONFLICT_RESPONSE, **_INVALID_RESPONSE},
+    summary="Change a linked card receipt's amount from the card invoice",
+)
+async def update_card_receipt_amount(
+    document_id: UUID, body: CardReceiptAmountRequest, current_user: AccountantDep, bus: BusDep
+) -> PurchaseDocumentResponse:
+    try:
+        receipt = await bus.execute(
+            UpdateCardReceiptAmount(
+                receipt_id=document_id, actor_id=current_user.id, amount_base=body.amount_base
+            )
+        )
+    except PurchaseDocumentNotFoundError as exc:
+        raise _not_found(str(exc)) from exc
+    except PurchaseValidationError as exc:
+        raise _bad_request(exc) from exc
+    except PurchaseDocumentStateError as exc:
+        raise _conflict(exc) from exc
+    return PurchaseDocumentResponse.model_validate(receipt)
+
+
+@router.post(
+    "/documents/{document_id}/unlink-card",
+    responses={**_NOT_FOUND_RESPONSE, **_CONFLICT_RESPONSE},
+    summary="Detach a card receipt from its card invoice",
+)
+async def unlink_card_receipt(
+    document_id: UUID, current_user: AccountantDep, bus: BusDep
+) -> PurchaseDocumentResponse:
+    try:
+        receipt = await bus.execute(
+            UnlinkCardReceipt(receipt_id=document_id, actor_id=current_user.id)
+        )
+    except PurchaseDocumentNotFoundError as exc:
+        raise _not_found(str(exc)) from exc
+    except PurchaseDocumentStateError as exc:
+        raise _conflict(exc) from exc
+    return PurchaseDocumentResponse.model_validate(receipt)

@@ -3,20 +3,28 @@
 Handlers translate between bus messages and the service/repository and never return ORM entities.
 """
 
+from decimal import Decimal
+
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.purchases.contracts import (
     AddPurchaseDocument,
+    CardInvoiceDTO,
     DiscardPurchaseDocument,
+    GetCardInvoice,
     GetPurchaseDocument,
     GetPurchaseFilePath,
+    LinkCardReceipts,
     ListPurchaseDocuments,
     ListPurchaseStorageKeys,
+    ListUnlinkedCardReceipts,
     MarkPurchasePaid,
     MarkPurchaseUnpaid,
     PurchaseDocumentDTO,
     PurchaseFileDTO,
     RegisterPurchaseDocument,
     ReturnPurchaseToInbox,
+    UnlinkCardReceipt,
+    UpdateCardReceiptAmount,
     UpdatePurchaseDocument,
 )
 from time_reporting.modules.purchases.models import PurchaseDocument
@@ -56,6 +64,16 @@ def to_dto(document: PurchaseDocument) -> PurchaseDocumentDTO:
         rebilled_expense_line_id=document.rebilled_expense_line_id,
         created_at=document.created_at,
         updated_at=document.updated_at,
+    )
+
+
+def card_invoice_dto(invoice: PurchaseDocument, receipts: list[PurchaseDocument]) -> CardInvoiceDTO:
+    total = sum((r.amount_base or Decimal(0) for r in receipts), Decimal(0))
+    return CardInvoiceDTO(
+        invoice=to_dto(invoice),
+        receipts=tuple(to_dto(receipt) for receipt in receipts),
+        receipts_total_base=total,
+        difference_base=None if invoice.amount_base is None else invoice.amount_base - total,
     )
 
 
@@ -128,3 +146,29 @@ class MarkPurchasePaidHandler(_Handler):
 class MarkPurchaseUnpaidHandler(_Handler):
     async def handle(self, command: MarkPurchaseUnpaid) -> PurchaseDocumentDTO:
         return to_dto(await self._service.mark_unpaid(command))
+
+
+class GetCardInvoiceHandler(_Handler):
+    async def handle(self, query: GetCardInvoice) -> CardInvoiceDTO:
+        return card_invoice_dto(*await self._service.get_card_invoice(query.card_invoice_id))
+
+
+class ListUnlinkedCardReceiptsHandler(_Handler):
+    async def handle(self, query: ListUnlinkedCardReceipts) -> tuple[PurchaseDocumentDTO, ...]:
+        receipts = await self._documents.list_unlinked_card_receipts(query.date_from, query.date_to)
+        return tuple(to_dto(receipt) for receipt in receipts)
+
+
+class LinkCardReceiptsHandler(_Handler):
+    async def handle(self, command: LinkCardReceipts) -> CardInvoiceDTO:
+        return card_invoice_dto(*await self._service.link_card_receipts(command))
+
+
+class UnlinkCardReceiptHandler(_Handler):
+    async def handle(self, command: UnlinkCardReceipt) -> PurchaseDocumentDTO:
+        return to_dto(await self._service.unlink_card_receipt(command))
+
+
+class UpdateCardReceiptAmountHandler(_Handler):
+    async def handle(self, command: UpdateCardReceiptAmount) -> PurchaseDocumentDTO:
+        return to_dto(await self._service.update_card_receipt_amount(command))

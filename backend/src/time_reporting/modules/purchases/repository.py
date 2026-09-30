@@ -2,13 +2,18 @@
 transactions."""
 
 from collections.abc import Sequence
+from datetime import date
 from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from time_reporting.modules.purchases.contracts import PurchaseKind, PurchaseStage
+from time_reporting.modules.purchases.contracts import (
+    PaymentMethod,
+    PurchaseKind,
+    PurchaseStage,
+)
 from time_reporting.modules.purchases.models import PurchaseDocument
 
 _EXTERNAL_REF_CONSTRAINT = "uq_purchase_documents_external_ref"
@@ -68,3 +73,31 @@ class PurchaseDocumentRepository:
             .where(PurchaseDocument.card_invoice_id == card_invoice_id)
         )
         return result or 0
+
+    async def list_linked_receipts(self, card_invoice_id: UUID) -> Sequence[PurchaseDocument]:
+        result = await self._session.scalars(
+            select(PurchaseDocument)
+            .where(PurchaseDocument.card_invoice_id == card_invoice_id)
+            .order_by(PurchaseDocument.document_date, PurchaseDocument.created_at)
+        )
+        return result.all()
+
+    async def list_unlinked_card_receipts(
+        self, date_from: date | None, date_to: date | None
+    ) -> Sequence[PurchaseDocument]:
+        statement = (
+            select(PurchaseDocument)
+            .where(
+                PurchaseDocument.stage == PurchaseStage.REGISTERED,
+                PurchaseDocument.kind.in_((PurchaseKind.RECEIPT, PurchaseKind.INVOICE)),
+                PurchaseDocument.payment_method == PaymentMethod.CARD,
+                PurchaseDocument.card_invoice_id.is_(None),
+            )
+            .order_by(PurchaseDocument.document_date, PurchaseDocument.created_at)
+        )
+        if date_from is not None:
+            statement = statement.where(PurchaseDocument.document_date >= date_from)
+        if date_to is not None:
+            statement = statement.where(PurchaseDocument.document_date <= date_to)
+        result = await self._session.scalars(statement)
+        return result.all()

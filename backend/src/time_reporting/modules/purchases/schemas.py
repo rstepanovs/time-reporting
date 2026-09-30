@@ -68,6 +68,25 @@ class MarkPaidRequest(BaseModel):
     amount_base: Money | None = None
 
 
+class CardReceiptLinkRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    receipt_id: UUID
+    amount_base: Money
+
+
+class LinkCardReceiptsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    links: Annotated[list[CardReceiptLinkRequest], Field(min_length=1)]
+
+
+class CardReceiptAmountRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    amount_base: Money
+
+
 class PurchaseDocumentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -101,3 +120,12 @@ class PurchaseDocumentResponse(BaseModel):
     rebilled_expense_line_id: UUID | None
     created_at: datetime
     updated_at: datetime
+
+
+class CardInvoiceResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    invoice: PurchaseDocumentResponse
+    receipts: list[PurchaseDocumentResponse]
+    receipts_total_base: Decimal
+    difference_base: Decimal | None
