@@ -14,6 +14,7 @@ from sqlalchemy import (
     Numeric,
     String,
     UniqueConstraint,
+    false,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -64,6 +65,10 @@ class ExpenseReport(TimestampMixin, Base):
     )
     return_comment: Mapped[str | None] = mapped_column(String(10_000))
     locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Created by rebilling a company purchase (`AddExpenseLineWithAttachment`): the owner is
+    # whoever did the rebilling — typically the accountant — and needn't be a project member, so
+    # the billing items a line may use come from the project itself, not the owner's membership.
+    company_purchase: Mapped[bool] = mapped_column(default=False, server_default=false())
 
 
 class ExpenseReportLine(TimestampMixin, Base):

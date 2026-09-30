@@ -307,12 +307,12 @@ sorting suggestions (deferred).
 
 #### A7 — backend: rebilling a purchase
 
-- [ ] `expenses.AddExpenseLineWithAttachment(project_id, year, month, actor_id, line, file)` — the
+- [x] `expenses.AddExpenseLineWithAttachment(project_id, year, month, actor_id, line, file)` — the
       report created when missing, line + linked attachment in one transaction, locked/non-editable
       refused.
-- [ ] `purchases.RebillPurchase` executes it with the file's bytes and stores the ids; prefill
+- [x] `purchases.RebillPurchase` executes it with the file's bytes and stores the ids; prefill
       helper converting to the project's customer currency; audit `purchase.rebilled`.
-- [ ] Tests: new and existing report, locked report refused, already rebilled refused, the copy
+- [x] Tests: new and existing report, locked report refused, already rebilled refused, the copy
       downloads from the expense report, return-to-inbox refused once rebilled.
 
 #### A8 — backend `accounting`: purchases in the package

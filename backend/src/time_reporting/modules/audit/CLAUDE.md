@@ -66,6 +66,6 @@ the whole transaction — including any `AuditEvent` row already flushed — rol
   `timesheets`/`expenses`, which only audit the billing handoff/review, not day-to-day edits).
 - `purchases.RegisterPurchaseDocument` → `purchase.registered`, `MarkPurchasePaid` →
   `purchase.paid`, `MarkPurchaseUnpaid` → `purchase.unpaid`, `DiscardPurchaseDocument` →
-  `purchase.discarded` — recorded by `purchases.service.PurchaseService`, `entity_type`
+  `purchase.discarded`, `RebillPurchase` → `purchase.rebilled` (`details`: project, expense report, amount) — recorded by `purchases.service.PurchaseService`, `entity_type`
   `purchase_document`, `entity_id` the document's id; editing, returning to inbox and uploading
   are not audited — see `purchases/CLAUDE.md`.

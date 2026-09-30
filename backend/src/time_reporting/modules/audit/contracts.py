@@ -47,6 +47,7 @@ class AuditAction(StrEnum):
     PURCHASE_PAID = "purchase.paid"
     PURCHASE_UNPAID = "purchase.unpaid"
     PURCHASE_DISCARDED = "purchase.discarded"
+    PURCHASE_REBILLED = "purchase.rebilled"
 
 
 # --- DTOs ---

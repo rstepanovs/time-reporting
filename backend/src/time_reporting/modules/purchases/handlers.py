@@ -30,8 +30,11 @@ from time_reporting.modules.purchases.contracts import (
     PurchaseFileDTO,
     PurchaseKind,
     PurchasesSummaryDTO,
+    RebillPurchase,
+    RebillSuggestionDTO,
     RegisterPurchaseDocument,
     ReturnPurchaseToInbox,
+    SuggestRebillAmount,
     UnlinkCardReceipt,
     UpdateCardReceiptAmount,
     UpdatePurchaseDocument,
@@ -219,3 +222,13 @@ class ListMonthPurchasesHandler(_Handler):
             )
             for document in documents
         )
+
+
+class SuggestRebillAmountHandler(_Handler):
+    async def handle(self, command: SuggestRebillAmount) -> RebillSuggestionDTO:
+        return await self._service.suggest_rebill(command)
+
+
+class RebillPurchaseHandler(_Handler):
+    async def handle(self, command: RebillPurchase) -> PurchaseDocumentDTO:
+        return to_dto(await self._service.rebill(command))

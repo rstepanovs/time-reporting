@@ -7,6 +7,21 @@ from uuid import UUID
 from time_reporting.core.config import get_settings
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.audit.contracts import AuditAction, RecordAuditEvent
+from time_reporting.modules.company.contracts import GetCompanySettings
+from time_reporting.modules.currency.contracts import (
+    ExchangeRateUnavailableError,
+    GetExchangeRate,
+)
+from time_reporting.modules.expenses.contracts import (
+    AddExpenseLineWithAttachment,
+    ExpenseBillingItemNotFoundError,
+    ExpenseDateOutsidePeriodError,
+    ExpenseLineChange,
+    ExpenseProjectClosedError,
+    ExpenseReportLockedError,
+    ExpenseReportNotEditableError,
+)
+from time_reporting.modules.projects.contracts import GetProjectById
 from time_reporting.modules.purchases.contracts import (
     AddPurchaseDocument,
     DiscardPurchaseDocument,
@@ -23,8 +38,11 @@ from time_reporting.modules.purchases.contracts import (
     PurchaseStage,
     PurchaseValidationError,
     RateSource,
+    RebillPurchase,
+    RebillSuggestionDTO,
     RegisterPurchaseDocument,
     ReturnPurchaseToInbox,
+    SuggestRebillAmount,
     UnlinkCardReceipt,
     UpdateCardReceiptAmount,
     UpdatePurchaseDocument,
@@ -215,6 +233,115 @@ class PurchaseService:
         await self._documents.save(document)
         await self._audit(command.actor_id, AuditAction.PURCHASE_UNPAID, document, "Marked unpaid")
         return document
+
+    # --- rebilling ---
+
+    async def suggest_rebill(self, command: SuggestRebillAmount) -> RebillSuggestionDTO:
+        document = await self._get_rebillable(command.document_id)
+        project = await self._bus.query(GetProjectById(project_id=command.project_id))
+        if project is None:
+            raise PurchaseValidationError("Unknown project")
+        currency = project.customer.currency
+        return RebillSuggestionDTO(
+            amount=await self._amount_in(document, currency),
+            currency=currency,
+            expense_date=document.document_date,
+            description=" — ".join(filter(None, (document.vendor, document.description))),
+        )
+
+    async def rebill(self, command: RebillPurchase) -> PurchaseDocument:
+        document = await self._get_rebillable(command.document_id)
+        project = await self._bus.query(GetProjectById(project_id=command.project_id))
+        if project is None:
+            raise PurchaseValidationError("Unknown project")
+        amount = command.amount
+        if amount is None:
+            amount = await self._amount_in(document, project.customer.currency)
+        if amount is None or amount <= Decimal(0):
+            raise PurchaseValidationError(
+                f"Give the amount in {project.customer.currency}: it can't be derived"
+            )
+        path = self._storage.path_for(document.storage_key)
+        if path is None:
+            raise PurchaseDocumentNotFoundError(document.id)
+        assert document.document_date is not None
+
+        try:
+            rebilled = await self._bus.execute(
+                AddExpenseLineWithAttachment(
+                    project_id=command.project_id,
+                    year=command.year,
+                    month=command.month,
+                    actor_id=command.actor_id,
+                    line=ExpenseLineChange(
+                        line_id=None,
+                        billing_item_id=command.billing_item_id,
+                        expense_date=command.expense_date or document.document_date,
+                        amount=amount,
+                        description=command.description,
+                        vendor=document.vendor,
+                        document_no=document.document_no,
+                    ),
+                    file_name=document.file_name,
+                    content_type=document.content_type,
+                    content=path.read_bytes(),
+                )
+            )
+        except (
+            ExpenseProjectClosedError,
+            ExpenseBillingItemNotFoundError,
+            ExpenseDateOutsidePeriodError,
+        ) as exc:
+            raise PurchaseValidationError(str(exc)) from exc
+        except (ExpenseReportNotEditableError, ExpenseReportLockedError) as exc:
+            raise PurchaseDocumentStateError(str(exc)) from exc
+
+        document.rebilled_expense_line_id = rebilled.line_id
+        document.rebilled_expense_attachment_id = rebilled.attachment_id
+        await self._documents.save(document)
+        await self._bus.execute(
+            RecordAuditEvent(
+                actor_id=command.actor_id,
+                action=AuditAction.PURCHASE_REBILLED,
+                entity_type=_ENTITY_TYPE,
+                entity_id=str(document.id),
+                summary=f"Rebilled {document.vendor or document.file_name} to {project.name}",
+                details={
+                    "project_id": str(project.id),
+                    "expense_report_id": str(rebilled.report_id),
+                    "amount": str(amount),
+                    "currency": project.customer.currency,
+                },
+            )
+        )
+        return document
+
+    async def _get_rebillable(self, document_id: UUID) -> PurchaseDocument:
+        document = await self._get_registered(document_id)
+        if document.kind not in (PurchaseKind.RECEIPT, PurchaseKind.INVOICE):
+            raise PurchaseDocumentStateError("Only a receipt or an invoice can be rebilled")
+        self._ensure_not_rebilled(document)
+        return document
+
+    async def _amount_in(self, document: PurchaseDocument, currency: str) -> Decimal | None:
+        """``document``'s amount in ``currency``, or ``None`` when it can't be derived."""
+        if document.amount is None:
+            return None
+        if document.currency == currency:
+            return document.amount
+        if document.amount_base is None:
+            return None
+        base_currency = (await self._bus.query(GetCompanySettings())).base_currency
+        if currency == base_currency:
+            return document.amount_base
+        rate_on = document.paid_on or document.document_date
+        if rate_on is None:
+            return None
+        try:
+            rate = await self._bus.execute(GetExchangeRate(currency=currency, on_date=rate_on))
+        except ExchangeRateUnavailableError:
+            return None
+        return (document.amount_base / rate.rate).quantize(Decimal("0.01"))
 
     # --- card invoices ---
 

@@ -6,7 +6,7 @@ supplier invoices, card invoices and other documents worth keeping. Accountant-o
 spending through `expenses`. Design and lifecycle: `.claude/plans/email-integration.md`.
 
 Depends on `currency.contracts` (`GetExchangeRate`), `company.contracts` (`GetCompanySettings` for
-`base_currency`) and `audit.contracts`; rebilling will add `expenses.contracts`.
+`base_currency`) and `audit.contracts`; `expenses.contracts` and `projects.contracts` (rebilling).
 
 ## Stages
 
@@ -67,6 +67,26 @@ Every registered document with an amount gets `amount_base`, `exchange_rate`, `r
 - No published rate (`ExchangeRateUnavailableError`) → the document is still registered with the
   amount left empty, for the user to type in.
 
+## Rebilling
+
+`RebillPurchase(document_id, actor_id, project_id, year, month, billing_item_id, description,
+amount?, expense_date?)` files a registered `receipt`/`invoice` to a project: it executes
+`expenses.AddExpenseLineWithAttachment`, which puts a line — with a **copy** of the file as an
+ordinary `ExpenseAttachment` linked to it — on the **actor's own** expense report for the project's
+month (created as a `draft` when missing), then stores the new line/attachment ids on the document
+and records `purchase.rebilled`. So the rebilled cost follows the usual submit → approve → billing
+path, and each module keeps owning its own file. `expense_date` defaults to the document date and
+must fall in the chosen month; `amount` (in the customer's currency) defaults to the suggestion.
+
+`SuggestRebillAmount(document_id, project_id)` → `RebillSuggestionDTO` (amount, customer currency,
+date, description) is the form's prefill: the printed amount when the currencies match, else the
+base-currency amount divided by the customer currency's Riksbank rate of the payment (or document)
+date; `amount` is `None` when that can't be derived (then the user types it). It is a *command*
+only because the rate lookup may fill the cache.
+
+Once rebilled a document is frozen (no edit, return to inbox, discard or second rebill). Deleting
+the expense line in `expenses` clears the ids (`ON DELETE SET NULL`), making it rebillable again.
+
 ## Card invoices (`service.py`, "card invoices" section)
 
 A card receipt is a registered `receipt`/`invoice` with `payment_method = card`; its base-currency
@@ -106,7 +126,8 @@ every file's type and size is checked before any is stored, so one bad file reje
 `POST /documents/{id}/discard` (409 on a state error), `POST /documents/{id}/register` and `PUT
 /documents/{id}` (`PurchaseDetailsRequest`; 400 on a rule error, 409 on state), `POST
 /documents/{id}/return-to-inbox`, `POST /documents/{id}/paid` (`paid_on`, `payment_method`,
-optional `amount_base`) `POST /documents/{id}/unpaid`; `GET /summary?today=`, `GET /months/{year}/{month}`; for card invoices `GET /card-receipts/unlinked?date_from=&date_to=`,
+optional `amount_base`) `POST /documents/{id}/unpaid`, `GET /documents/{id}/rebill-suggestion?project_id=` and `POST
+/documents/{id}/rebill`; `GET /summary?today=`, `GET /months/{year}/{month}`; for card invoices `GET /card-receipts/unlinked?date_from=&date_to=`,
 `GET /documents/{id}/card-invoice`, `POST /documents/{id}/card-receipts` (`{links: [{receipt_id,
 amount_base}]}`), `PUT /documents/{id}/card-amount` and `POST /documents/{id}/unlink-card` (the last
 two take the *receipt's* id). `frontend/nginx.conf`'s 12 MB body limit

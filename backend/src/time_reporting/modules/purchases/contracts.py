@@ -188,6 +188,18 @@ class CardReceiptLink:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class RebillSuggestionDTO:
+    """Defaults for the rebill form. ``amount`` is in the project's customer's currency
+    (``currency``); ``None`` when it can't be derived (the document has no amount in a usable
+    currency yet) and must be typed in."""
+
+    amount: Decimal | None
+    currency: str
+    expense_date: date | None
+    description: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class PurchaseFileDTO:
     """Where a document's file lives on disk, plus what to call it when serving it."""
 
@@ -401,3 +413,39 @@ class UpdateCardReceiptAmount(Command[PurchaseDocumentDTO]):
     receipt_id: UUID
     actor_id: UUID
     amount_base: Decimal
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class SuggestRebillAmount(Command[RebillSuggestionDTO]):
+    """Prefill for rebilling ``document_id`` to ``project_id``: the document's amount in the
+    customer's currency — as printed when the currencies match, otherwise its base-currency amount
+    converted at the Riksbank rate of the payment (or document) date. A command only because that
+    lookup may store a rate in the cache."""
+
+    document_id: UUID
+    project_id: UUID
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RebillPurchase(Command[PurchaseDocumentDTO]):
+    """File a registered receipt or invoice to a project's expense report for ``year``/``month``.
+
+    A copy of the file is stored as an ordinary expense attachment linked to the new line, on the
+    actor's own report (created when missing), so it then goes through that report's submit/approve
+    flow and reaches the customer's invoice. ``amount`` defaults to ``SuggestRebillAmount``'s and
+    ``expense_date`` to the document date; ``description`` is what the line says. Refused when
+    already rebilled or not a registered receipt/invoice (``PurchaseDocumentStateError``) and when
+    the expense module rejects the line (``PurchaseValidationError``: closed project, wrong
+    billing item, date outside the month, no amount; ``PurchaseDocumentStateError``: the report
+    isn't editable or is locked).
+    """
+
+    document_id: UUID
+    actor_id: UUID
+    project_id: UUID
+    year: int
+    month: int
+    billing_item_id: UUID
+    description: str
+    amount: Decimal | None = None
+    expense_date: date | None = None

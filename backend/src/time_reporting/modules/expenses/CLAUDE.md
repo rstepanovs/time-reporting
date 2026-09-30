@@ -41,6 +41,18 @@ handoff runs the dependency the other way (see "Billing handoff and locking" bel
 - Editability: `ExpenseReportNotEditableError` when the status isn't `draft`/`returned`;
   `ExpenseReportLockedError` when `locked_at` is set. Both gate line changes and attachment writes.
 
+## Company-purchase reports
+
+`AddExpenseLineWithAttachment(project_id, year, month, actor_id, line, file…)` is how `purchases`
+rebills a company cost: one line plus its receipt file, linked, in one transaction, on the
+actor's own report for the project-month. A missing report is created as a `draft` with
+`company_purchase = true`; an existing one (of any origin) must still be editable and unlocked.
+The actor — typically the accountant — **needn't be a project member**: for a `company_purchase`
+report `_open_items` takes the project's own active `amount` items instead of the member's
+options, so the owner can keep editing, attaching and submitting it like any report (and a manager
+approves it, or the owner does if `allow_self_review` is on). Membership is otherwise still required
+to create or edit a report.
+
 ## Workflow
 
 `ExpenseReportStatus`: `draft` → `submitted` → `approved`/`returned`, the same shape and rules as

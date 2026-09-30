@@ -33,8 +33,10 @@ from time_reporting.modules.purchases.contracts import (
     PurchaseKind,
     PurchaseStage,
     PurchaseValidationError,
+    RebillPurchase,
     RegisterPurchaseDocument,
     ReturnPurchaseToInbox,
+    SuggestRebillAmount,
     UnlinkCardReceipt,
     UpdateCardReceiptAmount,
     UpdatePurchaseDocument,
@@ -48,6 +50,8 @@ from time_reporting.modules.purchases.schemas import (
     PurchaseDetailsRequest,
     PurchaseDocumentResponse,
     PurchasesSummaryResponse,
+    RebillRequest,
+    RebillSuggestionResponse,
     UpdatePurchaseRequest,
 )
 
@@ -408,3 +412,45 @@ async def list_month_purchases(
 ) -> list[MonthPurchaseResponse]:
     entries = await bus.query(ListMonthPurchases(year=year, month=month))
     return [MonthPurchaseResponse.model_validate(entry) for entry in entries]
+
+
+@router.get(
+    "/documents/{document_id}/rebill-suggestion",
+    responses={**_NOT_FOUND_RESPONSE, **_CONFLICT_RESPONSE, **_INVALID_RESPONSE},
+    summary="Prefill for rebilling a document to a project",
+)
+async def get_rebill_suggestion(
+    document_id: UUID, project_id: UUID, _: AccountantDep, bus: BusDep
+) -> RebillSuggestionResponse:
+    try:
+        suggestion = await bus.execute(
+            SuggestRebillAmount(document_id=document_id, project_id=project_id)
+        )
+    except PurchaseDocumentNotFoundError as exc:
+        raise _not_found(str(exc)) from exc
+    except PurchaseValidationError as exc:
+        raise _bad_request(exc) from exc
+    except PurchaseDocumentStateError as exc:
+        raise _conflict(exc) from exc
+    return RebillSuggestionResponse.model_validate(suggestion)
+
+
+@router.post(
+    "/documents/{document_id}/rebill",
+    responses={**_NOT_FOUND_RESPONSE, **_CONFLICT_RESPONSE, **_INVALID_RESPONSE},
+    summary="File a document to a project's expense report (your own, for the month)",
+)
+async def rebill_purchase(
+    document_id: UUID, body: RebillRequest, current_user: AccountantDep, bus: BusDep
+) -> PurchaseDocumentResponse:
+    try:
+        document = await bus.execute(
+            RebillPurchase(document_id=document_id, actor_id=current_user.id, **body.model_dump())
+        )
+    except PurchaseDocumentNotFoundError as exc:
+        raise _not_found(str(exc)) from exc
+    except PurchaseValidationError as exc:
+        raise _bad_request(exc) from exc
+    except PurchaseDocumentStateError as exc:
+        raise _conflict(exc) from exc
+    return PurchaseDocumentResponse.model_validate(document)

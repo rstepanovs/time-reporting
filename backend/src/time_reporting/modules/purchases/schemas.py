@@ -149,3 +149,25 @@ class MonthPurchaseResponse(BaseModel):
 
     document: PurchaseDocumentResponse
     card_receipts: list[PurchaseDocumentResponse]
+
+
+class RebillRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: UUID
+    year: Annotated[int, Field(ge=2000, le=2100)]
+    month: Annotated[int, Field(ge=1, le=12)]
+    billing_item_id: UUID
+    description: Text
+    # In the project's customer's currency; omit to use the suggestion.
+    amount: Money | None = None
+    expense_date: date | None = None
+
+
+class RebillSuggestionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    amount: Decimal | None
+    currency: str
+    expense_date: date | None
+    description: str

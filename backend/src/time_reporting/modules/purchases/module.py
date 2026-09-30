@@ -15,8 +15,10 @@ from time_reporting.modules.purchases.contracts import (
     ListUnlinkedCardReceipts,
     MarkPurchasePaid,
     MarkPurchaseUnpaid,
+    RebillPurchase,
     RegisterPurchaseDocument,
     ReturnPurchaseToInbox,
+    SuggestRebillAmount,
     UnlinkCardReceipt,
     UpdateCardReceiptAmount,
     UpdatePurchaseDocument,
@@ -35,8 +37,10 @@ from time_reporting.modules.purchases.handlers import (
     ListUnlinkedCardReceiptsHandler,
     MarkPurchasePaidHandler,
     MarkPurchaseUnpaidHandler,
+    RebillPurchaseHandler,
     RegisterPurchaseDocumentHandler,
     ReturnPurchaseToInboxHandler,
+    SuggestRebillAmountHandler,
     UnlinkCardReceiptHandler,
     UpdateCardReceiptAmountHandler,
     UpdatePurchaseDocumentHandler,
@@ -63,3 +67,5 @@ def register(registry: HandlerRegistry) -> None:
     registry.command(LinkCardReceipts, LinkCardReceiptsHandler)
     registry.command(UnlinkCardReceipt, UnlinkCardReceiptHandler)
     registry.command(UpdateCardReceiptAmount, UpdateCardReceiptAmountHandler)
+    registry.command(SuggestRebillAmount, SuggestRebillAmountHandler)
+    registry.command(RebillPurchase, RebillPurchaseHandler)
