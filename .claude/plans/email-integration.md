@@ -327,13 +327,13 @@ sorting suggestions (deferred).
 
 #### A9 — frontend: purchases API and the inbox
 
-- [ ] `npm run gen:api`; `frontend/src/purchases/{api,hooks}.ts` + `CLAUDE.md`; test fixtures.
-- [ ] `/purchases?tab=inbox` page, route under `RequireRole roles={["accountant"]}`, nav item in
+- [x] `npm run gen:api`; `frontend/src/purchases/{api,hooks}.ts` + `CLAUDE.md`; test fixtures.
+- [x] `/purchases?tab=inbox` page, route under `RequireRole roles={["accountant"]}`, nav item in
       the "Billing" group with an inbox count badge.
-- [ ] Inbox: list, multi-file upload, preview panel (PDF/image), Discard.
-- [ ] Register form beside the preview: kind switch, vendor, number, dates, amount + currency with
+- [x] Inbox: list, multi-file upload, preview panel (PDF/image), Discard.
+- [x] Register form beside the preview: kind switch, vendor, number, dates, amount + currency with
       the live SEK preview (`/currency/rates`), payment method.
-- [ ] Tests: upload, register each kind, SEK preview, discard.
+- [x] Tests: upload, register each kind, SEK preview, discard.
 
 #### A10 — frontend: register, to pay, document page
 

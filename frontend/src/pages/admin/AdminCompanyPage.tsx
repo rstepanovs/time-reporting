@@ -188,6 +188,8 @@ function CompanyForm({ settings }: { settings: CompanySettings }) {
       customer_number_prefix: values.customerNumberPrefix,
       next_customer_number: values.nextCustomerNumber,
       allow_self_review: values.allowSelfReview,
+      // Not editable here yet: sent back unchanged so saving the form doesn't reset it.
+      base_currency: settings.base_currency,
     };
     await updateSettings.mutateAsync(body);
     notifications.show({ title: "Company settings saved", message: "" });

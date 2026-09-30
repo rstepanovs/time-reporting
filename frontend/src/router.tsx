@@ -21,6 +21,7 @@ import { ExpensesPage } from "@/pages/ExpensesPage";
 import { HoursPage } from "@/pages/HoursPage";
 import { InvoicePage } from "@/pages/InvoicePage";
 import { InvoicesPage } from "@/pages/InvoicesPage";
+import { PurchasesPage } from "@/pages/PurchasesPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { ProjectDetailsPage } from "@/pages/ProjectDetailsPage";
@@ -61,6 +62,11 @@ export const routes: RouteObject[] = [
               { index: true, element: <InvoicesPage /> },
               { path: ":invoiceId", element: <InvoicePage /> },
             ],
+          },
+          {
+            path: "purchases",
+            element: <RequireRole roles={["accountant"]} />,
+            children: [{ index: true, element: <PurchasesPage /> }],
           },
           {
             path: "accounting",

@@ -20,6 +20,7 @@ import type {
   InvoiceSummary,
 } from "@/invoices/api";
 import type { BillingItem, Project, ProjectMember } from "@/projects/api";
+import type { PurchaseDocument, PurchasesSummary } from "@/purchases/api";
 import type { Backup, BackupList, SystemConfig, SystemStatus } from "@/system/api";
 import type {
   BillingPeriodListItem,
@@ -246,6 +247,7 @@ export const testCompanySettings: CompanySettings = {
   customer_number_prefix: "",
   next_customer_number: 1,
   allow_self_review: false,
+  base_currency: "SEK",
   has_logo: false,
   updated_at: "2026-09-16T10:00:00Z",
 };
@@ -916,6 +918,50 @@ export const testInvoicingSummary: InvoicingSummary = {
   overdue_count: 1,
 };
 
+export const testPurchaseInboxDocument: PurchaseDocument = {
+  id: "a1a1a1a1-1111-4111-8111-111111111111",
+  stage: "inbox",
+  kind: null,
+  vendor: null,
+  document_no: null,
+  description: null,
+  document_date: null,
+  due_date: null,
+  payment_status: null,
+  paid_on: null,
+  payment_method: null,
+  card_invoice_id: null,
+  amount: null,
+  currency: null,
+  vat_amount: null,
+  amount_base: null,
+  exchange_rate: null,
+  rate_date: null,
+  rate_source: null,
+  amount_base_final: false,
+  file_name: "scan-001.pdf",
+  content_type: "application/pdf",
+  size_bytes: 120_000,
+  source: "email",
+  email_from: "scanner@acme.example",
+  email_subject: "Scan from MFP",
+  received_at: "2026-09-25T08:00:00Z",
+  rebilled_expense_line_id: null,
+  created_at: "2026-09-25T08:00:00Z",
+  updated_at: "2026-09-25T08:00:00Z",
+};
+
+export const testPurchasesSummary: PurchasesSummary = {
+  base_currency: "SEK",
+  inbox_count: 1,
+  unpaid_count: 0,
+  unpaid_total_base: "0.00",
+  unpaid_provisional: false,
+  unpaid_unconverted_count: 0,
+  overdue_count: 0,
+  due_soon_count: 0,
+};
+
 export const testAccountantPackageStatus: AccountantPackageStatus = {
   year: 2026,
   month: 9,
@@ -925,6 +971,13 @@ export const testAccountantPackageStatus: AccountantPackageStatus = {
   draft_invoice_count: 0,
   unapproved_expense_report_count: 0,
   uninvoiced_sent_period_count: 0,
+  purchase_count: 0,
+  purchase_base_currency: "SEK",
+  purchase_total_base: "0.00",
+  purchase_total_provisional: false,
+  purchase_unconverted_count: 0,
+  inbox_document_count: 0,
+  unlinked_card_receipt_count: 0,
 };
 
 export const testAuditEvent: AuditEvent = {

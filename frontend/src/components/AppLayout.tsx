@@ -14,6 +14,7 @@ import {
 import { useDisclosure } from "@mantine/hooks";
 import { Link, Outlet, useLocation } from "react-router";
 
+import { usePurchasesSummary } from "@/purchases/hooks";
 import { useAuthenticatedUser, useSignOut } from "@/auth/hooks";
 import { EMPLOYEE_LABEL, canManage, isAccountant, isAdmin, roleLabels } from "@/auth/roles";
 
@@ -79,6 +80,7 @@ const TEAM_NAV_ITEM = { to: "/team", label: "Team" };
 // Shown only to accountants.
 const BILLING_NAV_ITEMS = [
   { to: "/invoices", label: "Invoices" },
+  { to: "/purchases", label: "Purchases" },
   { to: "/accounting", label: "Accountant package" },
 ];
 
@@ -93,6 +95,18 @@ const ADMIN_NAV_ITEMS = [
   { to: "/admin/backups", label: "Backups" },
   { to: "/admin/status", label: "System status" },
 ];
+
+/** The inbox count next to "Purchases" — rendered only for accountants, who alone may read it. */
+function PurchasesInboxBadge() {
+  const summary = usePurchasesSummary();
+  const count = summary.data?.inbox_count ?? 0;
+  if (count === 0) return null;
+  return (
+    <Badge size="sm" circle aria-label={`${count} documents in the inbox`}>
+      {count}
+    </Badge>
+  );
+}
 
 function Navigation({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
@@ -126,6 +140,7 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
               component={Link}
               to={item.to}
               label={item.label}
+              rightSection={item.to === "/purchases" ? <PurchasesInboxBadge /> : undefined}
               active={location.pathname.startsWith(item.to)}
               onClick={onNavigate}
             />

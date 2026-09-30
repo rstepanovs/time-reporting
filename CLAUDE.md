@@ -177,7 +177,7 @@ owning module's `PATCH` endpoint (`ManagerDep`).
   401, marks the app signed out (sets the `currentUserQueryKey` query data to `null`).
 - **`api/queryClient.ts`** — shared TanStack Query `QueryClient`.
 - **Feature areas** — `auth/`, `customers/`, `users/`, `projects/`, `calendar/`, `timesheets/`,
-  `expenses/`, `invoices/`, `accounting/`, `company/`, `admin/`, `system/`, `audit/`: each typically
+  `expenses/`, `invoices/`, `purchases/`, `accounting/`, `company/`, `admin/`, `system/`, `audit/`: each typically
   has `api.ts` (typed calls plus the area's own error classes mapped from HTTP status codes, with
   the backend's `detail` as the message where it's user-facing), `hooks.ts` (a `<area>Keys`
   query-key factory plus TanStack Query queries/mutations) and its modals/components. Each area's
