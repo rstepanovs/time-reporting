@@ -11,8 +11,13 @@ from time_reporting.modules.purchases.contracts import (
     GetPurchaseFilePath,
     ListPurchaseDocuments,
     ListPurchaseStorageKeys,
+    MarkPurchasePaid,
+    MarkPurchaseUnpaid,
     PurchaseDocumentDTO,
     PurchaseFileDTO,
+    RegisterPurchaseDocument,
+    ReturnPurchaseToInbox,
+    UpdatePurchaseDocument,
 )
 from time_reporting.modules.purchases.models import PurchaseDocument
 from time_reporting.modules.purchases.repository import PurchaseDocumentRepository
@@ -58,7 +63,7 @@ class _Handler:
     def __init__(self, bus: Bus) -> None:
         self._bus = bus
         self._documents = PurchaseDocumentRepository(bus.session)
-        self._service = PurchaseService(self._documents)
+        self._service = PurchaseService(bus, self._documents)
 
 
 # --- Queries ---
@@ -98,3 +103,28 @@ class AddPurchaseDocumentHandler(_Handler):
 class DiscardPurchaseDocumentHandler(_Handler):
     async def handle(self, command: DiscardPurchaseDocument) -> PurchaseDocumentDTO:
         return to_dto(await self._service.discard(command))
+
+
+class RegisterPurchaseDocumentHandler(_Handler):
+    async def handle(self, command: RegisterPurchaseDocument) -> PurchaseDocumentDTO:
+        return to_dto(await self._service.register(command))
+
+
+class UpdatePurchaseDocumentHandler(_Handler):
+    async def handle(self, command: UpdatePurchaseDocument) -> PurchaseDocumentDTO:
+        return to_dto(await self._service.update(command))
+
+
+class ReturnPurchaseToInboxHandler(_Handler):
+    async def handle(self, command: ReturnPurchaseToInbox) -> PurchaseDocumentDTO:
+        return to_dto(await self._service.return_to_inbox(command))
+
+
+class MarkPurchasePaidHandler(_Handler):
+    async def handle(self, command: MarkPurchasePaid) -> PurchaseDocumentDTO:
+        return to_dto(await self._service.mark_paid(command))
+
+
+class MarkPurchaseUnpaidHandler(_Handler):
+    async def handle(self, command: MarkPurchaseUnpaid) -> PurchaseDocumentDTO:
+        return to_dto(await self._service.mark_unpaid(command))

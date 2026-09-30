@@ -2,18 +2,70 @@
 
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from time_reporting.modules.purchases.contracts import (
     PaymentMethod,
     PaymentStatus,
+    PurchaseDetails,
     PurchaseKind,
     PurchaseSource,
     PurchaseStage,
     RateSource,
 )
+
+Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
+LongText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+DocumentNo = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+CurrencyCode = Annotated[str, StringConstraints(pattern=r"^[A-Za-z]{3}$")]
+Money = Annotated[Decimal, Field(gt=0, max_digits=12, decimal_places=2)]
+Rate = Annotated[Decimal, Field(gt=0, max_digits=18, decimal_places=8)]
+
+
+class PurchaseDetailsRequest(BaseModel):
+    """The classification form; per-kind rules are enforced by the service (400)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: PurchaseKind
+    vendor: Text | None = None
+    document_no: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+        | None
+    ) = None
+    description: LongText | None = None
+    document_date: date | None = None
+    due_date: date | None = None
+    payment_status: PaymentStatus | None = None
+    paid_on: date | None = None
+    payment_method: PaymentMethod | None = None
+    amount: Money | None = None
+    currency: CurrencyCode | None = None
+    vat_amount: Annotated[Decimal, Field(ge=0, max_digits=12, decimal_places=2)] | None = None
+    amount_base: Money | None = None
+    exchange_rate: Rate | None = None
+
+    def to_details(self) -> PurchaseDetails:
+        return PurchaseDetails(**self.model_dump())
+
+
+class UpdatePurchaseRequest(PurchaseDetailsRequest):
+    recompute_conversion: bool = False
+
+    def to_details(self) -> PurchaseDetails:
+        return PurchaseDetails(**self.model_dump(exclude={"recompute_conversion"}))
+
+
+class MarkPaidRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    paid_on: date
+    payment_method: PaymentMethod
+    # What the bank actually debited, in the base currency; omit to convert at the paid_on rate.
+    amount_base: Money | None = None
 
 
 class PurchaseDocumentResponse(BaseModel):

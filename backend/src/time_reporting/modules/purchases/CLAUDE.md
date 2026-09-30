@@ -5,9 +5,8 @@ supplier invoices, card invoices and other documents worth keeping. Accountant-o
 (`AccountantDep`, admin via the usual level combination) — employees keep claiming their own
 spending through `expenses`. Design and lifecycle: `.claude/plans/email-integration.md`.
 
-Depends on nothing yet besides `core/file_storage.py`; later tasks add `currency.contracts`
-(SEK conversion), `audit.contracts`, `company.contracts` (`base_currency`) and `expenses.contracts`
-(rebilling).
+Depends on `currency.contracts` (`GetExchangeRate`), `company.contracts` (`GetCompanySettings` for
+`base_currency`) and `audit.contracts`; rebilling will add `expenses.contracts`.
 
 ## Stages
 
@@ -38,10 +37,43 @@ the purchases directory, reporting those keys with a `purchases/` prefix).
   `GetPurchaseFilePath` (a missing row *or* missing file is `PurchaseDocumentNotFoundError`),
   `ListPurchaseStorageKeys`.
 
+## Registering, editing, paying
+
+`PurchaseDetails` (contracts) is the one payload for `RegisterPurchaseDocument` (inbox →
+`registered`) and `UpdatePurchaseDocument` (full replace of a registered document, refused once
+rebilled); `rules.py: normalize` validates it per kind (`PurchaseValidationError` → 400) — see its
+docstring: a receipt is always paid (on the purchase date by default) and needs a payment method;
+an invoice/card invoice is unpaid (due date required, no payment fields) or paid (`paid_on` +
+method required), a card invoice never by card; `other` takes descriptive fields only.
+`ReturnPurchaseToInbox` clears the classification (refused when rebilled or when a card invoice
+still has linked receipts). `MarkPurchasePaid`/`MarkPurchaseUnpaid` only work on a registered
+invoice or card invoice in the opposite state (`PurchaseDocumentStateError` → 409).
+
+## Conversion to the base currency (`conversion.py`)
+
+Every registered document with an amount gets `amount_base`, `exchange_rate`, `rate_date`,
+`rate_source` and `amount_base_final` from `Converter.apply`:
+
+- Already in `company.base_currency` → as is, `rate_source = none`.
+- Otherwise the Riksbank rate (`currency.GetExchangeRate`, executed nested so the cached rates
+  commit with the document): **paid** → the rate of `paid_on`, `amount_base_final = true`;
+  **unpaid** → the rate of `document_date`, provisional (`final = false`) until "Paid".
+- A **card** payment of a receipt/invoice is never converted (`amount_base` stays empty) — A5 types
+  it in from the card invoice's line (`rate_source = card_invoice`, never recomputed).
+- A **manual** amount (`amount_base`, rate derived) or rate (`exchange_rate`) is never recomputed by
+  later edits, by Paid or by Unpaid; an update that changes `amount`/`currency`, or sets
+  `recompute_conversion`, discards it. `MarkPurchasePaid.amount_base` (what the bank really debited)
+  is the same manual amount.
+- No published rate (`ExchangeRateUnavailableError`) → the document is still registered with the
+  amount left empty, for the user to type in.
+
 ## HTTP API
 
 Under `/purchases`, all `AccountantDep`: `POST /documents` (multipart, `files` — several at once;
 every file's type and size is checked before any is stored, so one bad file rejects the batch:
 415/413), `GET /documents?stage=&kind=&limit=`, `GET /documents/{id}`, `GET /documents/{id}/file`,
-`POST /documents/{id}/discard` (409 on a state error). `frontend/nginx.conf`'s 12 MB body limit
+`POST /documents/{id}/discard` (409 on a state error), `POST /documents/{id}/register` and `PUT
+/documents/{id}` (`PurchaseDetailsRequest`; 400 on a rule error, 409 on state), `POST
+/documents/{id}/return-to-inbox`, `POST /documents/{id}/paid` (`paid_on`, `payment_method`,
+optional `amount_base`) and `POST /documents/{id}/unpaid`. `frontend/nginx.conf`'s 12 MB body limit
 covers one file at a time; a batch of files larger than that in total would need it raised.

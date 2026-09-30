@@ -64,3 +64,8 @@ the whole transaction — including any `AuditEvent` row already flushed — rol
   `invoices.service.InvoiceService`, `entity_id` is the invoice's own id — see
   `invoices/CLAUDE.md`. Saving header/line changes (`UpdateInvoiceDraft`) is not audited (mirrors
   `timesheets`/`expenses`, which only audit the billing handoff/review, not day-to-day edits).
+- `purchases.RegisterPurchaseDocument` → `purchase.registered`, `MarkPurchasePaid` →
+  `purchase.paid`, `MarkPurchaseUnpaid` → `purchase.unpaid`, `DiscardPurchaseDocument` →
+  `purchase.discarded` — recorded by `purchases.service.PurchaseService`, `entity_type`
+  `purchase_document`, `entity_id` the document's id; editing, returning to inbox and uploading
+  are not audited — see `purchases/CLAUDE.md`.

@@ -87,7 +87,11 @@ class PurchaseFileTypeNotAllowedError(PurchaseError):
 
 
 class PurchaseDocumentStateError(PurchaseError):
-    """The document's stage doesn't allow the requested change."""
+    """The document's stage or payment state doesn't allow the requested change."""
+
+
+class PurchaseValidationError(PurchaseError):
+    """The submitted fields break the rules of the document's kind."""
 
 
 # --- DTOs ---
@@ -134,6 +138,40 @@ class PurchaseFileDTO:
     path: Path
     file_name: str
     content_type: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class PurchaseDetails:
+    """What a user fills in when classifying a document; the same payload registers and edits.
+
+    Per kind (``PurchaseValidationError`` otherwise):
+
+    - ``receipt`` — ``document_date`` (the purchase date), ``amount``, ``currency`` and
+      ``payment_method`` are required; it is always paid, on ``paid_on`` (default: the purchase
+      date); no ``due_date``.
+    - ``invoice`` / ``card_invoice`` — ``document_date``, ``amount``, ``currency`` and
+      ``payment_status`` are required. Unpaid needs a ``due_date`` and has no ``paid_on``/
+      ``payment_method``; paid needs both. A card invoice is never paid by card.
+    - ``other`` — descriptive fields only (vendor, number, description, date).
+
+    ``amount_base`` / ``exchange_rate`` are optional manual overrides of the automatic conversion
+    (mutually exclusive); a manual value is never recomputed by later edits or by "Paid".
+    """
+
+    kind: PurchaseKind
+    vendor: str | None = None
+    document_no: str | None = None
+    description: str | None = None
+    document_date: date | None = None
+    due_date: date | None = None
+    payment_status: PaymentStatus | None = None
+    paid_on: date | None = None
+    payment_method: PaymentMethod | None = None
+    amount: Decimal | None = None
+    currency: str | None = None
+    vat_amount: Decimal | None = None
+    amount_base: Decimal | None = None
+    exchange_rate: Decimal | None = None
 
 
 # --- Queries ---
@@ -192,6 +230,59 @@ class AddPurchaseDocument(Command[PurchaseDocumentDTO]):
 class DiscardPurchaseDocument(Command[PurchaseDocumentDTO]):
     """Mark a duplicate or junk document ``discarded`` (its file is kept). Refused for one that is
     already discarded or already rebilled to a project."""
+
+    document_id: UUID
+    actor_id: UUID
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RegisterPurchaseDocument(Command[PurchaseDocumentDTO]):
+    """Classify an inbox document (``inbox`` → ``registered``) and convert its amount into the
+    company's base currency. A currency without a published rate leaves ``amount_base`` empty for
+    the user to type in (an update with ``amount_base``)."""
+
+    document_id: UUID
+    actor_id: UUID
+    details: PurchaseDetails
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class UpdatePurchaseDocument(Command[PurchaseDocumentDTO]):
+    """Replace a registered document's fields. Refused once it is rebilled. A manual conversion
+    survives unless ``amount``/``currency`` change or ``recompute_conversion`` is set."""
+
+    document_id: UUID
+    actor_id: UUID
+    details: PurchaseDetails
+    recompute_conversion: bool = False
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ReturnPurchaseToInbox(Command[PurchaseDocumentDTO]):
+    """Undo a registration: every classification field is cleared. Refused when rebilled, or
+    for a card invoice that still has receipts linked to it."""
+
+    document_id: UUID
+    actor_id: UUID
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class MarkPurchasePaid(Command[PurchaseDocumentDTO]):
+    """Pay an unpaid invoice or card invoice. The base-currency amount is recomputed at the rate
+    of ``paid_on`` and becomes final — or ``amount_base`` (what the bank actually debited) is taken
+    as given, and the rate derived from it."""
+
+    document_id: UUID
+    actor_id: UUID
+    paid_on: date
+    payment_method: PaymentMethod
+    amount_base: Decimal | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class MarkPurchaseUnpaid(Command[PurchaseDocumentDTO]):
+    """Undo a payment made by mistake: back to unpaid, with an automatic amount provisional
+    again (a manual one stays)."""
 
     document_id: UUID
     actor_id: UUID

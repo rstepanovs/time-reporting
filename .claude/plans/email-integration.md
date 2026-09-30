@@ -277,15 +277,15 @@ sorting suggestions (deferred).
 
 #### A4 — backend `purchases`: register, currency, paid
 
-- [ ] `RegisterPurchaseDocument`, `UpdatePurchaseDocument`, `ReturnPurchaseToInbox` with per-kind
+- [x] `RegisterPurchaseDocument`, `UpdatePurchaseDocument`, `ReturnPurchaseToInbox` with per-kind
       validation (receipt / invoice / card invoice / other).
-- [ ] SEK conversion per "Riksbank rates of the payment date": paid → rate of `paid_on`, final;
+- [x] SEK conversion per "Riksbank rates of the payment date": paid → rate of `paid_on`, final;
       unpaid → document date's rate, provisional; manual rate/amount never recomputed; card receipt
       left open.
-- [ ] `MarkPurchasePaid(paid_on, payment_method, amount_base | None)`, `MarkPurchaseUnpaid`.
-- [ ] Audit actions `purchase.registered`/`paid`/`unpaid`/`discarded` (+ `audit/CLAUDE.md`).
-- [ ] Router routes for all of the above.
-- [ ] Tests: each kind's rules, provisional → final on Paid, actual SEK amount at Paid, manual rate
+- [x] `MarkPurchasePaid(paid_on, payment_method, amount_base | None)`, `MarkPurchaseUnpaid`.
+- [x] Audit actions `purchase.registered`/`paid`/`unpaid`/`discarded` (+ `audit/CLAUDE.md`).
+- [x] Router routes for all of the above.
+- [x] Tests: each kind's rules, provisional → final on Paid, actual SEK amount at Paid, manual rate
       survives edits, Unpaid, return to inbox, `currency` mocked.
 
 #### A5 — backend `purchases`: card invoices

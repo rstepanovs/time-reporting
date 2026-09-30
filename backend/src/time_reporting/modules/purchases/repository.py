@@ -4,7 +4,7 @@ transactions."""
 from collections.abc import Sequence
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -60,3 +60,11 @@ class PurchaseDocumentRepository:
                 self._session.expunge(document)
                 raise ExternalRefTakenError from exc
             raise
+
+    async def count_linked_receipts(self, card_invoice_id: UUID) -> int:
+        result = await self._session.scalar(
+            select(func.count())
+            .select_from(PurchaseDocument)
+            .where(PurchaseDocument.card_invoice_id == card_invoice_id)
+        )
+        return result or 0

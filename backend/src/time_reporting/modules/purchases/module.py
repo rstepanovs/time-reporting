@@ -8,6 +8,11 @@ from time_reporting.modules.purchases.contracts import (
     GetPurchaseFilePath,
     ListPurchaseDocuments,
     ListPurchaseStorageKeys,
+    MarkPurchasePaid,
+    MarkPurchaseUnpaid,
+    RegisterPurchaseDocument,
+    ReturnPurchaseToInbox,
+    UpdatePurchaseDocument,
 )
 from time_reporting.modules.purchases.handlers import (
     AddPurchaseDocumentHandler,
@@ -16,6 +21,11 @@ from time_reporting.modules.purchases.handlers import (
     GetPurchaseFilePathHandler,
     ListPurchaseDocumentsHandler,
     ListPurchaseStorageKeysHandler,
+    MarkPurchasePaidHandler,
+    MarkPurchaseUnpaidHandler,
+    RegisterPurchaseDocumentHandler,
+    ReturnPurchaseToInboxHandler,
+    UpdatePurchaseDocumentHandler,
 )
 
 
@@ -27,3 +37,8 @@ def register(registry: HandlerRegistry) -> None:
 
     registry.command(AddPurchaseDocument, AddPurchaseDocumentHandler)
     registry.command(DiscardPurchaseDocument, DiscardPurchaseDocumentHandler)
+    registry.command(RegisterPurchaseDocument, RegisterPurchaseDocumentHandler)
+    registry.command(UpdatePurchaseDocument, UpdatePurchaseDocumentHandler)
+    registry.command(ReturnPurchaseToInbox, ReturnPurchaseToInboxHandler)
+    registry.command(MarkPurchasePaid, MarkPurchasePaidHandler)
+    registry.command(MarkPurchaseUnpaid, MarkPurchaseUnpaidHandler)

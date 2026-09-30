@@ -85,9 +85,11 @@ async def test_same_external_ref_returns_the_existing_document(
     assert len(list((_isolated_storage / "purchases").glob("*/*"))) == 1
 
 
-async def test_discard_then_discard_again_is_a_state_error(bus: Bus) -> None:
+async def test_discard_then_discard_again_is_a_state_error(
+    bus: Bus, make_user: UserFactory
+) -> None:
     document = await bus.execute(_add())
-    user = uuid4()
+    user = (await make_user(roles=ACCOUNTANT)).id
 
     discarded = await bus.execute(DiscardPurchaseDocument(document_id=document.id, actor_id=user))
 

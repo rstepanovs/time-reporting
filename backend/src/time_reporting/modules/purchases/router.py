@@ -17,14 +17,25 @@ from time_reporting.modules.purchases.contracts import (
     GetPurchaseDocument,
     GetPurchaseFilePath,
     ListPurchaseDocuments,
+    MarkPurchasePaid,
+    MarkPurchaseUnpaid,
     PurchaseDocumentNotFoundError,
     PurchaseDocumentStateError,
     PurchaseFileTooLargeError,
     PurchaseFileTypeNotAllowedError,
     PurchaseKind,
     PurchaseStage,
+    PurchaseValidationError,
+    RegisterPurchaseDocument,
+    ReturnPurchaseToInbox,
+    UpdatePurchaseDocument,
 )
-from time_reporting.modules.purchases.schemas import PurchaseDocumentResponse
+from time_reporting.modules.purchases.schemas import (
+    MarkPaidRequest,
+    PurchaseDetailsRequest,
+    PurchaseDocumentResponse,
+    UpdatePurchaseRequest,
+)
 
 router = APIRouter(prefix="/purchases", tags=["purchases"])
 
@@ -35,6 +46,22 @@ _NOT_FOUND_RESPONSE: dict[int | str, dict[str, Any]] = {
 
 def _not_found(message: str) -> HTTPException:
     return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=message)
+
+
+_CONFLICT_RESPONSE: dict[int | str, dict[str, Any]] = {
+    status.HTTP_409_CONFLICT: {"description": "The document's state doesn't allow this"}
+}
+_INVALID_RESPONSE: dict[int | str, dict[str, Any]] = {
+    status.HTTP_400_BAD_REQUEST: {"description": "The fields break the rules of the kind"}
+}
+
+
+def _bad_request(exc: PurchaseValidationError) -> HTTPException:
+    return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+def _conflict(exc: PurchaseDocumentStateError) -> HTTPException:
+    return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
 
 def _too_large(exc: PurchaseFileTooLargeError) -> HTTPException:
@@ -140,4 +167,115 @@ async def discard_purchase_document(
         raise _not_found(str(exc)) from exc
     except PurchaseDocumentStateError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return PurchaseDocumentResponse.model_validate(document)
+
+
+@router.post(
+    "/documents/{document_id}/register",
+    responses={**_NOT_FOUND_RESPONSE, **_CONFLICT_RESPONSE, **_INVALID_RESPONSE},
+    summary="Classify an inbox document",
+)
+async def register_purchase_document(
+    document_id: UUID, body: PurchaseDetailsRequest, current_user: AccountantDep, bus: BusDep
+) -> PurchaseDocumentResponse:
+    try:
+        document = await bus.execute(
+            RegisterPurchaseDocument(
+                document_id=document_id, actor_id=current_user.id, details=body.to_details()
+            )
+        )
+    except PurchaseDocumentNotFoundError as exc:
+        raise _not_found(str(exc)) from exc
+    except PurchaseValidationError as exc:
+        raise _bad_request(exc) from exc
+    except PurchaseDocumentStateError as exc:
+        raise _conflict(exc) from exc
+    return PurchaseDocumentResponse.model_validate(document)
+
+
+@router.put(
+    "/documents/{document_id}",
+    responses={**_NOT_FOUND_RESPONSE, **_CONFLICT_RESPONSE, **_INVALID_RESPONSE},
+    summary="Replace a registered document's fields",
+)
+async def update_purchase_document(
+    document_id: UUID, body: UpdatePurchaseRequest, current_user: AccountantDep, bus: BusDep
+) -> PurchaseDocumentResponse:
+    try:
+        document = await bus.execute(
+            UpdatePurchaseDocument(
+                document_id=document_id,
+                actor_id=current_user.id,
+                details=body.to_details(),
+                recompute_conversion=body.recompute_conversion,
+            )
+        )
+    except PurchaseDocumentNotFoundError as exc:
+        raise _not_found(str(exc)) from exc
+    except PurchaseValidationError as exc:
+        raise _bad_request(exc) from exc
+    except PurchaseDocumentStateError as exc:
+        raise _conflict(exc) from exc
+    return PurchaseDocumentResponse.model_validate(document)
+
+
+@router.post(
+    "/documents/{document_id}/return-to-inbox",
+    responses={**_NOT_FOUND_RESPONSE, **_CONFLICT_RESPONSE},
+)
+async def return_purchase_to_inbox(
+    document_id: UUID, current_user: AccountantDep, bus: BusDep
+) -> PurchaseDocumentResponse:
+    try:
+        document = await bus.execute(
+            ReturnPurchaseToInbox(document_id=document_id, actor_id=current_user.id)
+        )
+    except PurchaseDocumentNotFoundError as exc:
+        raise _not_found(str(exc)) from exc
+    except PurchaseDocumentStateError as exc:
+        raise _conflict(exc) from exc
+    return PurchaseDocumentResponse.model_validate(document)
+
+
+@router.post(
+    "/documents/{document_id}/paid",
+    responses={**_NOT_FOUND_RESPONSE, **_CONFLICT_RESPONSE},
+    summary="Mark an unpaid invoice paid",
+)
+async def mark_purchase_paid(
+    document_id: UUID, body: MarkPaidRequest, current_user: AccountantDep, bus: BusDep
+) -> PurchaseDocumentResponse:
+    try:
+        document = await bus.execute(
+            MarkPurchasePaid(
+                document_id=document_id,
+                actor_id=current_user.id,
+                paid_on=body.paid_on,
+                payment_method=body.payment_method,
+                amount_base=body.amount_base,
+            )
+        )
+    except PurchaseDocumentNotFoundError as exc:
+        raise _not_found(str(exc)) from exc
+    except PurchaseDocumentStateError as exc:
+        raise _conflict(exc) from exc
+    return PurchaseDocumentResponse.model_validate(document)
+
+
+@router.post(
+    "/documents/{document_id}/unpaid",
+    responses={**_NOT_FOUND_RESPONSE, **_CONFLICT_RESPONSE},
+    summary="Undo a payment",
+)
+async def mark_purchase_unpaid(
+    document_id: UUID, current_user: AccountantDep, bus: BusDep
+) -> PurchaseDocumentResponse:
+    try:
+        document = await bus.execute(
+            MarkPurchaseUnpaid(document_id=document_id, actor_id=current_user.id)
+        )
+    except PurchaseDocumentNotFoundError as exc:
+        raise _not_found(str(exc)) from exc
+    except PurchaseDocumentStateError as exc:
+        raise _conflict(exc) from exc
     return PurchaseDocumentResponse.model_validate(document)
