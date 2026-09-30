@@ -1284,7 +1284,6 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "httpx" },
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -1297,7 +1296,6 @@ requires-dist = [{ name = "time-reporting-backend", editable = "backend" }]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "httpx", specifier = ">=0.28.1" },
     { name = "mypy", specifier = ">=2.3" },
     { name = "pytest", specifier = ">=9.1" },
     { name = "pytest-asyncio", specifier = ">=1.4" },
@@ -1316,6 +1314,7 @@ dependencies = [
     { name = "faktura-printer" },
     { name = "fastapi" },
     { name = "holidays" },
+    { name = "httpx" },
     { name = "jinja2" },
     { name = "openpyxl" },
     { name = "pwdlib", extra = ["argon2"] },
@@ -1336,6 +1335,7 @@ requires-dist = [
     { name = "faktura-printer", git = "https://github.com/rstepanovs/faktura-printer?rev=v0.3.0" },
     { name = "fastapi", specifier = ">=0.141" },
     { name = "holidays", specifier = ">=0.104" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "jinja2", specifier = ">=3.1.6" },
     { name = "openpyxl", specifier = ">=3.1.5" },
     { name = "pwdlib", extras = ["argon2"], specifier = ">=0.3.1" },

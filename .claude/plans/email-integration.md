@@ -243,18 +243,21 @@ sorting suggestions (deferred).
 
 #### A2 — backend `currency`: Riksbank rates
 
-- [ ] `modules/currency/{contracts,models,repository,service,handlers,module,riksbank}.py` +
+- [x] `modules/currency/{contracts,models,repository,service,handlers,module,riksbank}.py` +
       `CLAUDE.md`; register in `modules/registry.py`, models in `models/__init__.py`.
-- [ ] Migration: `exchange_rates`.
-- [ ] `riksbank.py`: SWEA client over `httpx.AsyncClient` (injectable transport); `httpx` moves to
+- [x] Migration: `exchange_rates`.
+- [x] `riksbank.py`: SWEA client over `httpx.AsyncClient` (injectable transport); `httpx` moves to
       runtime dependencies.
-- [ ] `GetExchangeRate(currency, on_date)` — cache first, else fetch the latest observation on or
+- [x] `GetExchangeRate(currency, on_date)` (a command, since a miss writes the cache) — cache first, else fetch the latest observation on or
       before `on_date` (look back at most 10 days), store it; SEK → 1 without a call;
       `ExchangeRateUnavailableError` otherwise.
-- [ ] `GET /currency/rates/{currency}?on=` (`AccountantDep`).
-- [ ] Tests (`httpx.MockTransport`): cache hit makes no call, weekend falls back, unavailable, SEK.
-- [ ] Before merging: one manual call against the live SWEA API to confirm series ids and response
+- [x] `GET /currency/rates/{currency}?on=` (`AccountantDep`).
+- [x] Tests (`httpx.MockTransport`): cache hit makes no call, weekend falls back, unavailable, SEK.
+- [x] Before merging: one manual call against the live SWEA API to confirm series ids and response
       shape (the Riksbank half of B1's spike, pulled forward since A doesn't wait for Google).
+      Result: anonymous access works; `GET /Observations/SEK<CCY>PMI/<from>/<to>` returns
+      `[{date, value}]` (SEK per 1 unit, JPY included), banking days only; `204` for an empty range or
+      unknown series; `429` past a few requests per minute.
 
 #### A3 — backend `purchases`: module, inbox, upload
 

@@ -153,6 +153,8 @@ Modules (each documented in its own `CLAUDE.md`):
 - **`accounting`** — no tables; assembles the external accountant's monthly handoff package
   (`summary.pdf`/`summary.xlsx` plus every issued invoice's PDF and every expense receipt,
   zipped) purely by reading `invoices`/`expenses`/`company` through the bus.
+- **`currency`** — `ExchangeRate`: cached daily Riksbank rates (SEK per one unit), looked up with
+  `GetExchangeRate`; `GET /currency/rates/{currency}?on=` (`AccountantDep`).
 - **`admin`** — no tables; orchestrates archiving/permanent deletion of users, customers, projects.
 - **`system`** — no tables; backend/database version and status, non-secret configuration view, read
   from PostgreSQL catalogs and application settings, under `/admin/system/*`; `pg_dump`/`pg_restore`
