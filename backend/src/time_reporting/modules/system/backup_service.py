@@ -8,6 +8,7 @@ import asyncio
 import logging
 import os
 import re
+import shutil
 import tarfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -188,23 +189,24 @@ class BackupService:
         )
         archive_path = self._backup_dir / _archive_name_for(path.name)
         if not archive_path.is_file():
-            # Not a hard failure: an `expense_attachments` row whose file is missing already
-            # degrades gracefully (`AttachmentNotFoundError`), the same way a manually deleted
-            # upload would — see `expenses.CLAUDE.md`'s "File writes are never transactional".
+            # Not a hard failure: an `expense_attachments`/`purchase_documents` row whose file is
+            # missing already degrades gracefully (`AttachmentNotFoundError`/
+            # `PurchaseDocumentNotFoundError`), the same way a manually deleted upload would — see
+            # `expenses.CLAUDE.md`'s "File writes are never transactional".
             logger.warning(
-                "No attachments archive found for %s; any expense_attachments rows in the "
-                "restored database may reference missing files",
+                "No attachments archive found for %s; any expense_attachments or "
+                "purchase_documents rows in the restored database may reference missing files",
                 path.name,
             )
             return
         self._attachment_dir.mkdir(parents=True, exist_ok=True)
         # A restore replaces the whole database, so it replaces the attachment directory too,
         # rather than merging archived files over whatever happened to be on disk beforehand.
+        # `rmtree`, not a one-level loop: purchase documents sit two levels down
+        # (`purchases/<hex>/<file>`).
         for existing in self._attachment_dir.iterdir():
             if existing.is_dir():
-                for child in existing.iterdir():
-                    child.unlink()
-                existing.rmdir()
+                shutil.rmtree(existing)
             else:
                 existing.unlink()
         with tarfile.open(archive_path, "r:gz") as tar:

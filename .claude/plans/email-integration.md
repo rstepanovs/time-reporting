@@ -363,10 +363,18 @@ sorting suggestions (deferred).
 
 #### A13 — documentation for stage A
 
-- [ ] Root `CLAUDE.md` (`currency`, `purchases` modules, `purchases/` frontend area, routes, nav),
+- [x] Root `CLAUDE.md` (`currency`, `purchases` modules, `purchases/` frontend area, routes, nav),
       `expenses`, `accounting`, `company`, `audit`, `pages/CLAUDE.md`, `README.md`,
       `docs/operations.md` (purchase files in the backup, prune pass).
-- [ ] The stage A manual verification (see "Verification"), then deploy.
+- [x] The stage A manual verification (see "Verification"), run on a scratch database with the real
+      Riksbank API: SEK receipt (final, no rate), unpaid EUR invoice (provisional at its date's
+      rate), two USD card receipts (no SEK amount), card invoice with the receipts linked at SEK
+      amounts (difference 13.50), EUR invoice paid on a later date (recomputed at that date's rate,
+      final), card invoice paid, a USD receipt rebilled to a EUR project (suggestion 9.39 EUR via
+      SEK) and found on the expense report with its file, and the month's package listing
+      everything with the card receipts under their card invoice. It found a real bug — a restore
+      crashed on the nested `purchases/` directory — fixed with a test.
+- [ ] Deploy (needs the user's explicit go-ahead).
 
 ### Stage B — mail
 

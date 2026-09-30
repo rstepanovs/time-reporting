@@ -336,3 +336,29 @@ async def test_create_runs_a_real_pg_dump(tmp_path: Path) -> None:
     backup = await service.create(revision=_REVISION)
 
     assert (tmp_path / backup.name).stat().st_size > 0
+
+
+async def test_restore_replaces_a_nested_purchases_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Purchase documents live two levels down (`purchases/<hex>/<file>`), below the one level of
+    `<hex>/<file>` expense attachments — the restore must clear and restore them too."""
+    _stub_subprocess(monkeypatch, _FakeProcess(returncode=0))
+    dump_name = f"time-reporting-20260101T000000Z-{_REVISION}.dump"
+    dump_path = tmp_path / dump_name
+    dump_path.write_bytes(b"not a real dump")
+    archive_path = tmp_path / f"{dump_name.removesuffix('.dump')}-attachments.tar.gz"
+    source_dir = tmp_path / "archive-source"
+    (source_dir / "purchases" / "cd").mkdir(parents=True)
+    (source_dir / "purchases" / "cd" / "scan.pdf").write_bytes(b"a purchase scan")
+    with tarfile.open(archive_path, "w:gz") as tar:
+        tar.add(source_dir, arcname=".")
+    attachment_dir = tmp_path / "attachments"
+    (attachment_dir / "purchases" / "ef").mkdir(parents=True)
+    (attachment_dir / "purchases" / "ef" / "stale.pdf").write_bytes(b"gone after restore")
+    service = BackupService(_settings(tmp_path, attachment_dir=attachment_dir))
+
+    await service.restore(dump_path)
+
+    assert not (attachment_dir / "purchases" / "ef").exists()
+    assert (attachment_dir / "purchases" / "cd" / "scan.pdf").read_bytes() == b"a purchase scan"

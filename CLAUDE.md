@@ -11,8 +11,11 @@ a health-check endpoint, user accounts with JWT authentication (`admin`/`manager
 access levels), a company profile, customers and their projects (including internal ones, never
 billed), a shared non-working-day calendar, weekly timesheets and expense reports (with receipt/
 invoice attachments), invoices (drafted from sent billing periods, issued/PDF-rendered via
-`faktura-printer`, paid or void) and the accountant's monthly package (`summary.pdf`/`summary.xlsx`
-plus every invoice and receipt, zipped) all exist.
+`faktura-printer`, paid or void), the company's own purchases (an accountant-only register of
+scanned/uploaded receipts and supplier invoices: an inbox that is classified, converted to SEK at
+the Riksbank rate of the payment date, tracked as paid/unpaid, grouped under card invoices and
+rebilled to customers through an expense report) and the accountant's monthly package
+(`summary.pdf`/`summary.xlsx` plus every invoice, receipt and purchase, zipped) all exist.
 
 Detailed notes live next to the code and load only when files in that directory are read:
 `backend/src/time_reporting/modules/<module>/CLAUDE.md` for each backend module and
@@ -65,8 +68,9 @@ via `time-reporting backup --if-pending-migrations`, then `alembic upgrade head`
 `frontend` (nginx, proxies `/api/` to `backend`). A `backup` service loops `time-reporting backup`
 every `BACKUP_INTERVAL_HOURS`; all three backend-image services share the `backups` named volume
 (`/var/backups/time-reporting`) and the `attachments` named volume
-(`/var/lib/time-reporting/attachments`, the `expenses` module's uploaded receipt/invoice scans,
-archived alongside each backup — see `system/CLAUDE.md`). An optional `pgadmin` service (profile
+(`/var/lib/time-reporting/attachments`, the `expenses` module's uploaded receipt/invoice scans and,
+under `purchases/`, the `purchases` module's documents, archived alongside each backup — see
+`system/CLAUDE.md`). An optional `pgadmin` service (profile
 `tools`, `127.0.0.1` only: `docker compose --profile tools up pgadmin`) pre-registers the `db`
 server from `deploy/pgadmin/servers.json`.
 
@@ -190,15 +194,15 @@ owning module's `PATCH` endpoint (`ManagerDep`).
   params `week`/`user`), `/hours` (`month`), `/expenses` (`month`) and `/expenses/:reportId`,
   `/projects`, `/projects/:projectId`, `/account/password`; `/approvals` and `/team`
   sit under `RequireRole roles={["manager"]}` (any-of, so an admin who is also a manager passes too);
-  `/invoices?tab=` and `/invoices/:invoiceId`, `/accounting?month=` sit under `RequireRole
-  roles={["accountant"]}`;
+  `/invoices?tab=` and `/invoices/:invoiceId`, `/purchases?tab=inbox|register|to-pay` and
+  `/purchases/:documentId`, `/accounting?month=` sit under `RequireRole roles={["accountant"]}`;
   `/admin/{users,customers,projects,calendar,billing,company,audit,backups,status}` sit under `RequireRole
   roles={["admin"]}`, with `/admin` redirecting to `/admin/users`.
 - **`components/AppLayout.tsx`** — the signed-in shell: header with the account menu (shows a badge
   per access level the user holds, or "Employee" if none) and an `AppShell.Navbar` (collapsible on
   mobile via a `Burger`) linking to the pages in `pages/` (Dashboard, Timesheet, My hours, Expenses,
   Projects, in that order — plus Approvals then Team, inserted right after Expenses, shown only when
-  `canManage(user)`), plus a "Billing" nav group (Invoices, Accountant package) shown only when
+  `canManage(user)`), plus a "Billing" nav group (Invoices, Purchases — with the inbox count —, Accountant package) shown only when
   `isAccountant(user)`, and an "Administration" nav group (Users/Customers/Projects/Calendar/
   Billing/Company/Audit log/Backups/System status) shown only when `isAdmin(user)`.
   `components/DashboardCard.tsx` is the shared frame the dashboard's widget cards render inside

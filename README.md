@@ -33,7 +33,7 @@ for a one-person consultancy. Monorepo containing a Python API and a React web c
 │   │   ├── core/           # settings, CQRS bus, password hashing
 │   │   ├── db/             # declarative base, engine, sessions
 │   │   ├── api/            # root router and shared dependencies (all routes under /api/v1)
-│   │   └── modules/        # feature modules (company, users, auth, customers, projects, timesheets, expenses, invoices, accounting, admin, ...), via the CQRS bus — see CLAUDE.md for the full list
+│   │   └── modules/        # feature modules (company, users, auth, customers, projects, timesheets, expenses, invoices, purchases, currency, accounting, admin, ...), via the CQRS bus — see CLAUDE.md for the full list
 │   └── tests/
 └── frontend/
     ├── package.json
