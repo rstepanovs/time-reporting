@@ -55,6 +55,7 @@ def to_dto(settings: CompanySettings) -> CompanySettingsDTO:
         customer_number_prefix=settings.customer_number_prefix,
         next_customer_number=settings.next_customer_number,
         allow_self_review=settings.allow_self_review,
+        base_currency=settings.base_currency,
         has_logo=settings.logo is not None,
         updated_at=settings.updated_at,
     )

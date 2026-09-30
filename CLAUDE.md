@@ -155,6 +155,8 @@ Modules (each documented in its own `CLAUDE.md`):
   zipped) purely by reading `invoices`/`expenses`/`company` through the bus.
 - **`currency`** — `ExchangeRate`: cached daily Riksbank rates (SEK per one unit), looked up with
   `GetExchangeRate`; `GET /currency/rates/{currency}?on=` (`AccountantDep`).
+- **`purchases`** — `PurchaseDocument`: the accountant-only register of incoming receipts and
+  invoices; an inbox of uploaded/imported files that are later classified, paid and rebilled.
 - **`admin`** — no tables; orchestrates archiving/permanent deletion of users, customers, projects.
 - **`system`** — no tables; backend/database version and status, non-secret configuration view, read
   from PostgreSQL catalogs and application settings, under `/admin/system/*`; `pg_dump`/`pg_restore`

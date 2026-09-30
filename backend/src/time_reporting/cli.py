@@ -15,6 +15,8 @@ from time_reporting.core.passwords import PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENG
 from time_reporting.db.session import SessionFactory, engine
 from time_reporting.modules.expenses.contracts import ListAttachmentStorageKeys
 from time_reporting.modules.expenses.storage import ExpenseAttachmentStorage
+from time_reporting.modules.purchases.contracts import ListPurchaseStorageKeys
+from time_reporting.modules.purchases.storage import PurchaseFileStorage
 from time_reporting.modules.registry import build_registry
 from time_reporting.modules.system.backup_service import BackupService, parse_backup_filename
 from time_reporting.modules.system.contracts import (
@@ -270,8 +272,17 @@ async def _restore_in_database(path: Path) -> None:
 
 async def _prune_attachments_in_database(*, dry_run: bool) -> tuple[str, ...]:
     referenced_keys = await _with_bus(lambda bus: bus.query(ListAttachmentStorageKeys()))
-    storage = ExpenseAttachmentStorage(get_settings())
-    return storage.prune_orphans(referenced_keys=referenced_keys, dry_run=dry_run)
+    purchase_keys = await _with_bus(lambda bus: bus.query(ListPurchaseStorageKeys()))
+    settings = get_settings()
+    # Two independent key spaces: expense attachments directly under attachment_dir, purchase
+    # documents under attachment_dir/purchases. Purchase keys are reported with their prefix.
+    expense_orphans = ExpenseAttachmentStorage(settings).prune_orphans(
+        referenced_keys=referenced_keys, dry_run=dry_run
+    )
+    purchase_orphans = PurchaseFileStorage(settings).prune_orphans(
+        referenced_keys=purchase_keys, dry_run=dry_run
+    )
+    return expense_orphans + tuple(f"purchases/{key}" for key in purchase_orphans)
 
 
 async def _with_bus[T](action: Callable[[Bus], Awaitable[T]]) -> T:

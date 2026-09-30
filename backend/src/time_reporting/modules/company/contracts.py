@@ -59,6 +59,7 @@ class CompanySettingsDTO:
     customer_number_prefix: str
     next_customer_number: int
     allow_self_review: bool
+    base_currency: str
     # The logo bytes never travel in this DTO — see GetCompanyLogo.
     has_logo: bool
     updated_at: datetime
@@ -116,6 +117,8 @@ class UpdateCompanySettings(Command[CompanySettingsDTO]):
     # Settable here (not only via AllocateCustomerNumber) for the same reason.
     next_customer_number: int
     allow_self_review: bool
+    # ISO 4217 code, upper-case; validated by the HTTP schema.
+    base_currency: str = "SEK"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

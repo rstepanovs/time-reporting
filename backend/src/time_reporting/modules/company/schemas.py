@@ -18,6 +18,11 @@ CountryCode = Annotated[
 LateInterest = Annotated[str, StringConstraints(strip_whitespace=True, max_length=255)]
 InvoiceNumberPrefix = Annotated[str, StringConstraints(strip_whitespace=True, max_length=20)]
 CustomerNumberPrefix = Annotated[str, StringConstraints(strip_whitespace=True, max_length=20)]
+CurrencyCode = Annotated[
+    str,
+    StringConstraints(pattern=r"^[A-Z]{3}$"),
+    Field(examples=["SEK"], description="ISO 4217 code, upper-case"),
+]
 
 
 class CompanyAddressRequest(BaseModel):
@@ -56,6 +61,7 @@ class CompanySettingsUpdateRequest(BaseModel):
     customer_number_prefix: CustomerNumberPrefix = ""
     next_customer_number: Annotated[int, Field(ge=1)] = 1
     allow_self_review: bool = False
+    base_currency: CurrencyCode = "SEK"
 
 
 class CompanyAddressResponse(BaseModel):
@@ -89,5 +95,6 @@ class CompanySettingsResponse(BaseModel):
     customer_number_prefix: str
     next_customer_number: int
     allow_self_review: bool
+    base_currency: str
     has_logo: bool
     updated_at: datetime

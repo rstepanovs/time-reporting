@@ -103,6 +103,7 @@ _SCALAR_FIELDS = (
     "customer_number_prefix",
     "next_customer_number",
     "allow_self_review",
+    "base_currency",
 )
 
 

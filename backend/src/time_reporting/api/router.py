@@ -13,6 +13,7 @@ from time_reporting.modules.customers.router import router as customers_router
 from time_reporting.modules.expenses.router import router as expenses_router
 from time_reporting.modules.invoices.router import router as invoices_router
 from time_reporting.modules.projects.router import router as projects_router
+from time_reporting.modules.purchases.router import router as purchases_router
 from time_reporting.modules.system.router import backups_router as system_backups_router
 from time_reporting.modules.system.router import router as system_router
 from time_reporting.modules.timesheets.router import router as timesheets_router
@@ -30,6 +31,7 @@ api_router.include_router(work_calendar_router)
 api_router.include_router(timesheets_router)
 api_router.include_router(expenses_router)
 api_router.include_router(currency_router)
+api_router.include_router(purchases_router)
 api_router.include_router(invoices_router)
 api_router.include_router(accounting_router)
 api_router.include_router(admin_router)

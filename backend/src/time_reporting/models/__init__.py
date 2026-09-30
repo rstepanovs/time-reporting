@@ -16,6 +16,7 @@ from time_reporting.modules.expenses.models import (
 )
 from time_reporting.modules.invoices.models import Invoice, InvoiceBillingPeriod, InvoiceLine
 from time_reporting.modules.projects.models import Project, ProjectBillingItem, ProjectMember
+from time_reporting.modules.purchases.models import PurchaseDocument
 from time_reporting.modules.timesheets.models import (
     TimeEntry,
     TimesheetRowComment,
@@ -40,6 +41,7 @@ __all__ = [
     "Project",
     "ProjectBillingItem",
     "ProjectMember",
+    "PurchaseDocument",
     "TimeEntry",
     "TimesheetRowComment",
     "TimesheetWeek",

@@ -16,7 +16,8 @@ registered first, before it, in `modules/registry.py`; its own contract depends 
   `f_tax_approved`, `default_invoice_locale` (`"sv"`/`"en"`, see `INVOICE_LOCALES` in
   `contracts.py`), `late_interest` (free text, printed on an invoice as-is), invoice numbering
   (`invoice_number_prefix`, `next_invoice_number`), customer numbering (`customer_number_prefix`,
-  `next_customer_number` — see "Customer numbering" below), `allow_self_review` (read by
+  `next_customer_number` — see "Customer numbering" below), `base_currency` (ISO 4217, default `SEK`; the currency
+  `purchases` states every document in), `allow_self_review` (read by
   `timesheets` and `expenses` to let a manager approve/return their own week or report — see their
   `CLAUDE.md` `Workflow` sections) and the logo. Every text
   field defaults to `""` rather than `NULL` — an empty company profile is a valid, if incomplete,

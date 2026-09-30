@@ -178,10 +178,11 @@ about to run before continuing.
 
 ## Orphaned attachment files
 
-Uploading an expense-report attachment writes its file, then its database row, in that order —
+Uploading an expense-report attachment or a purchase document writes its file, then its database row, in that order —
 not one transaction. If a command fails or the process is killed between the two, the file is
 never referenced by any row. `time-reporting prune-attachments` (add `--dry-run` to only list what
 it would remove) deletes every file under `attachment_dir` that no `expense_attachments` row
+references, and every file under `attachment_dir/purchases` that no `purchase_documents` row
 references; safe to run at any time, including on a schedule alongside backups.
 
 ## pgAdmin

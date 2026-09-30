@@ -261,18 +261,18 @@ sorting suggestions (deferred).
 
 #### A3 — backend `purchases`: module, inbox, upload
 
-- [ ] `modules/purchases/*` + `CLAUDE.md`, registered after `expenses`/`currency`, before
+- [x] `modules/purchases/*` + `CLAUDE.md`, registered after `expenses`/`currency`, before
       `invoices`.
-- [ ] Migration: `purchase_documents` with its enums, checks and indexes (the full table, including
+- [x] Migration: `purchase_documents` with its enums, checks and indexes (the full table, including
       the columns later tasks fill); `company.base_currency` (default `SEK`) through company's
       contracts/schemas.
-- [ ] Storage under `<attachment_dir>/purchases/` via `FileStorage`.
-- [ ] `AddPurchaseDocument` (duplicate `external_ref` returns the existing one),
+- [x] Storage under `<attachment_dir>/purchases/` via `FileStorage`.
+- [x] `AddPurchaseDocument` (duplicate `external_ref` returns the existing one),
       `DiscardPurchaseDocument`, `GetPurchaseFilePath`, `ListPurchaseDocuments(stage, ...)`.
-- [ ] Router `/purchases` (`AccountantDep`): multipart upload of several files, list, get, file
+- [x] Router `/purchases` (`AccountantDep`): multipart upload of several files, list, get, file
       download, discard.
-- [ ] `prune-attachments` gains the purchases pass.
-- [ ] Tests: upload/download round trip, type/size limits, idempotent `external_ref`, discard,
+- [x] `prune-attachments` gains the purchases pass.
+- [x] Tests: upload/download round trip, type/size limits, idempotent `external_ref`, discard,
       access (non-accountant 403), prune keeps referenced files.
 
 #### A4 — backend `purchases`: register, currency, paid
