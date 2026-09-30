@@ -270,6 +270,13 @@ async def test_status_is_empty_for_a_month_with_nothing(bus: Bus) -> None:
         draft_invoice_count=0,
         unapproved_expense_report_count=0,
         uninvoiced_sent_period_count=0,
+        purchase_count=0,
+        purchase_base_currency="SEK",
+        purchase_total_base=Decimal(0),
+        purchase_total_provisional=False,
+        purchase_unconverted_count=0,
+        inbox_document_count=status.inbox_document_count,  # global, not per month
+        unlinked_card_receipt_count=0,
     )
 
 

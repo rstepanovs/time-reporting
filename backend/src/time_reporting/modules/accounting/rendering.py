@@ -33,6 +33,8 @@ _TEMPLATE_SOURCE = """
   td.num, th.num { text-align: right; white-space: nowrap; }
   .empty { color: #777; font-style: italic; }
   .group-heading { font-weight: bold; padding-top: 6pt; }
+  td.nested { padding-left: 14pt; color: #444; }
+  .note { color: #555; font-size: 8.5pt; }
 </style>
 </head>
 <body>
@@ -112,6 +114,47 @@ _TEMPLATE_SOURCE = """
   <p class="empty">No expenses this month.</p>
   {% endif %}
 
+  <h2>Purchases</h2>
+  {% if content.purchase_rows %}
+  <table>
+    <thead>
+      <tr>
+        <th>File</th><th>Date</th><th>Kind</th><th>Vendor</th><th>Doc. no.</th>
+        <th>Description</th><th class="num">Amount</th>
+        <th class="num">{{ content.base_currency }}</th><th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in content.purchase_rows %}
+      <tr>
+        <td>{{ row.file_number | receipts_one }}</td>
+        <td>{{ row.document_date }}</td>
+        <td>{{ row.kind | replace("_", " ") }}</td>
+        <td class="{{ 'nested' if row.is_card_receipt else '' }}">{{ row.vendor }}</td>
+        <td>{{ row.document_no }}</td>
+        <td>{{ row.description }}</td>
+        <td class="num">
+          {% if row.amount is not none %}{{ row.amount | money }} {{ row.currency }}{% endif %}
+        </td>
+        <td class="num">
+          {% if row.amount_base is not none %}
+          {{ row.amount_base | money }}{{ "*" if row.provisional }}
+          {% endif %}
+        </td>
+        <td>{{ row.status }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="note">
+    * provisional: the base-currency amount is an estimate at the document date's rate until the
+    document is paid. Receipts listed under a card invoice are documentation for it; only the card
+    invoice's own amount counts towards the total.
+  </p>
+  {% else %}
+  <p class="empty">No purchases this month.</p>
+  {% endif %}
+
   <h2>Totals</h2>
   {% if content.totals %}
   <table>
@@ -130,6 +173,14 @@ _TEMPLATE_SOURCE = """
   </table>
   {% else %}
   <p class="empty">Nothing to total.</p>
+  {% endif %}
+  {% if content.purchase_rows %}
+  <p>
+    Purchases total ({{ content.base_currency }}):
+    <strong>
+      {{ content.purchase_total_base | money }}{{ "*" if content.purchase_total_provisional }}
+    </strong>
+  </p>
   {% endif %}
 </body>
 </html>
@@ -152,6 +203,7 @@ def _receipts(numbers: tuple[int, ...]) -> str:
 _env = Environment(autoescape=True)
 _env.filters["money"] = _money
 _env.filters["receipts"] = _receipts
+_env.filters["receipts_one"] = lambda number: f"{number:03d}" if number else "—"
 _template = _env.from_string(_TEMPLATE_SOURCE)
 
 

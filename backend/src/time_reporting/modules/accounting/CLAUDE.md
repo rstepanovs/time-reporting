@@ -4,7 +4,8 @@ No tables of its own — assembles the monthly handoff package an external accou
 purely by reading other modules' data through the bus. Depends on `invoices.contracts`
 (`ListInvoicesForMonth`, `ListInvoices`, `ListInvoiceablePeriods`), `expenses.contracts`
 (`ListMonthExpenseLines`, `CountMonthReportsNotApproved`, `GetAttachmentPath`) and
-`company.contracts` (`GetCompanySettings`, for the `summary.pdf` header). Nothing depends on
+`purchases.contracts` (`ListMonthPurchases`, `GetPurchaseFilePath`, `GetPurchasesSummary`) and
+`company.contracts` (`GetCompanySettings`, for the `summary.pdf` header and `base_currency`). Nothing depends on
 `accounting`, so it registers last in `modules/registry.py`, after `invoices`.
 
 `content.py` holds plain, module-private dataclasses (`PackageContent`, `InvoiceRow`,
@@ -29,6 +30,25 @@ receipt-numbering/grouping logic that produces it exists in exactly one place.
   `ListMonthExpenseLines` rather than folded into it, so that query stays exactly what its name
   says: approved reports only.
 
+## Purchases in the package
+
+`purchases.ListMonthPurchases(year, month)` (registered documents dated in the month, card
+receipts nested under their card invoice — see `purchases/CLAUDE.md`) adds a third section:
+
+- **Numbering/files**: `PurchaseRow.file_number` is 1.. across the section, separate from the
+  expense-receipt numbering; each file goes to `purchases/<NNN>_<date>_<vendor>_<amount>-<ccy>
+  <ext>`, and a card invoice plus the receipts it settled share `purchases/card-<invoice date>/`.
+  A document whose file is gone is still listed, with no number. `_build_purchases` builds rows
+  and files together.
+- **`summary.pdf`**: a Purchases table (card receipts indented under their card invoice; a `*`
+  marks a provisional base-currency amount) and a "Purchases total" line; **`summary.xlsx`**: a
+  flat `Purchases` sheet (with `Provisional`, `Status` — "paid <date>"/"due <date>" — and `Card
+  invoice` columns; filter the last one blank to sum without double counting).
+- **Total** (`_purchase_figures`): the base-currency sum over top-level entries only — the card
+  invoice's own amount, not the receipts under it, which are documentation — skipping `other`
+  documents; provisional when any term isn't final; documents with no base amount yet are
+  counted, not summed. Purchases are never mixed into the invoiced/expense per-currency `totals`.
+
 ## `GetAccountantPackageStatus(year, month)`
 
 What `BuildAccountantPackage` would produce right now, plus three warnings — read before
@@ -43,6 +63,11 @@ downloading anything:
   total. `expense_total` sums every approved line's `amount`, `is_internal` or not — the
   accountant needs the true spend either way, `summary.pdf` just prints it under a different
   heading. The two are never summed together, even when they share a currency.
+- Purchases: `purchase_count`, `purchase_base_currency`/`purchase_total_base`/
+  `purchase_total_provisional`/`purchase_unconverted_count` as above, plus two warnings —
+  `inbox_document_count` (undated documents waiting in the purchases inbox, not part of any month)
+  and `unlinked_card_receipt_count` (the month's card-paid receipts not settled by a card invoice,
+  so their real amount is unknown).
 - `draft_invoice_count` — `invoices.ListInvoices(status=DRAFT, date_from=.., date_to=..,
   limit=1, offset=0)`'s `.total` (only the count is used, so `limit=1` avoids paging every draft).
 - `unapproved_expense_report_count` — `expenses.CountMonthReportsNotApproved`.

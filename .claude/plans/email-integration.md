@@ -317,13 +317,13 @@ sorting suggestions (deferred).
 
 #### A8 — backend `accounting`: purchases in the package
 
-- [ ] `accounting` → `purchases.contracts`; `PackageContent` gains purchase rows and files.
-- [ ] `summary.pdf`: a Purchases section (card receipts under their card invoice, provisional
+- [x] `accounting` → `purchases.contracts`; `PackageContent` gains purchase rows and files.
+- [x] `summary.pdf`: a Purchases section (card receipts under their card invoice, provisional
       amounts marked); `summary.xlsx`: a `Purchases` sheet.
-- [ ] ZIP: `purchases/<NNN>_<date>_<vendor>_<amount><ext>`, `purchases/card-<date>/...`.
-- [ ] `GetAccountantPackageStatus`: warnings for documents still in the inbox and unlinked card
+- [x] ZIP: `purchases/<NNN>_<date>_<vendor>_<amount><ext>`, `purchases/card-<date>/...`.
+- [x] `GetAccountantPackageStatus`: warnings for documents still in the inbox and unlinked card
       receipts; the provisional SEK total.
-- [ ] Tests: contents, grouping, warnings.
+- [x] Tests: contents, grouping, warnings.
 
 #### A9 — frontend: purchases API and the inbox
 
