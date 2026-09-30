@@ -3341,6 +3341,8 @@ export interface components {
             received_at: string | null;
             /** Rebilled Expense Line Id */
             rebilled_expense_line_id: string | null;
+            /** Rebilled Expense Report Id */
+            rebilled_expense_report_id: string | null;
             /**
              * Created At
              * Format: date-time

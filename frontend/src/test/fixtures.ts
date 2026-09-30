@@ -947,6 +947,7 @@ export const testPurchaseInboxDocument: PurchaseDocument = {
   email_subject: "Scan from MFP",
   received_at: "2026-09-25T08:00:00Z",
   rebilled_expense_line_id: null,
+  rebilled_expense_report_id: null,
   created_at: "2026-09-25T08:00:00Z",
   updated_at: "2026-09-25T08:00:00Z",
 };
@@ -989,6 +990,40 @@ export const testPurchaseReceipt: PurchaseDocument = {
   rate_date: "2026-09-25",
   amount_base_final: true,
   file_name: "hotel.pdf",
+};
+
+export const testCardInvoice: PurchaseDocument = {
+  ...testPurchaseInvoice,
+  id: "e5e5e5e5-5555-4555-8555-555555555555",
+  kind: "card_invoice",
+  vendor: "Bank Card",
+  document_no: "K-1",
+  document_date: "2026-10-01",
+  due_date: "2026-10-25",
+  amount: "300.00",
+  currency: "SEK",
+  amount_base: "300.00",
+  exchange_rate: "1.00000000",
+  rate_date: null,
+  rate_source: "none",
+  file_name: "card.pdf",
+};
+
+export const testCardReceipt: PurchaseDocument = {
+  ...testPurchaseReceipt,
+  id: "f6f6f6f6-6666-4666-8666-666666666666",
+  vendor: "Cafe",
+  document_date: "2026-09-20",
+  payment_method: "card",
+  amount: "10.00",
+  currency: "SEK",
+  amount_base: "112.50",
+  exchange_rate: "11.25000000",
+  rate_date: null,
+  rate_source: "card_invoice",
+  amount_base_final: true,
+  card_invoice_id: testCardInvoice.id,
+  file_name: "cafe.pdf",
 };
 
 export const testPurchasesSummary: PurchasesSummary = {

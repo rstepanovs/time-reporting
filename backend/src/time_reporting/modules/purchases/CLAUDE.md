@@ -78,7 +78,8 @@ amount?, expense_date?)` files a registered `receipt`/`invoice` to a project: it
 `expenses.AddExpenseLineWithAttachment`, which puts a line — with a **copy** of the file as an
 ordinary `ExpenseAttachment` linked to it — on the **actor's own** expense report for the project's
 month (created as a `draft` when missing), then stores the new line/attachment ids on the document
-and records `purchase.rebilled`. So the rebilled cost follows the usual submit → approve → billing
+and records `purchase.rebilled`. The document keeps `rebilled_expense_line_id`, `…_attachment_id` and
+`rebilled_expense_report_id` (all `ON DELETE SET NULL`), so a page can link to the report. So the rebilled cost follows the usual submit → approve → billing
 path, and each module keeps owning its own file. `expense_date` defaults to the document date and
 must fall in the chosen month; `amount` (in the customer's currency) defaults to the suggestion.
 

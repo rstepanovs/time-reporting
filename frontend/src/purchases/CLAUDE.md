@@ -60,3 +60,25 @@ on `/purchases`).
   Mark unpaid (invoices and card invoices) and "Back to inbox…" (confirmed). A rebilled document
   shows a notice and no form or return action, matching the backend freeze. The form is keyed by
   `id + updated_at`, so a save or payment change resets it from the server's copy.
+
+## Card invoices and rebilling
+
+- **`CardInvoiceSection`** (on the document page of a registered card invoice): the linked
+  receipts, each with its own amount and an editable base-currency amount — the figure from the
+  card invoice's line — saved per row (`updateCardReceiptAmount`, enabled only once changed) and
+  **Unlink**; beneath, *Receipts total*, *Card invoice total* and the **difference** (green at
+  zero, orange otherwise: fees, interest, purchases with no receipt yet). **Add receipts…**
+  (`LinkCardReceiptsModal`) lists unlinked card-paid receipts over a date range (default: the 62
+  days up to the invoice date), each selectable with the amount from the invoice typed beside it;
+  the Link button stays disabled until every selected receipt has an amount > 0, and the backend
+  links all or none. A linked receipt's own page links back to its card invoice; an unlinked
+  card-paid receipt carries a notice that its base amount is open until linked.
+- **`RebillModal`** ("Rebill to project…", registered receipts/invoices that aren't rebilled yet):
+  project (active ones, from `useProjects`), billing item (only the project's active `amount`
+  items), expense date (its month picks the expense report), amount and description. The amount
+  and description start as the server's suggestion (`getRebillSuggestion`: the printed amount if
+  the currencies match, else converted through the base currency) until the user types over them;
+  when it can't be derived a hint asks for it. On success the line is on the accountant's *own*
+  expense report for the project-month, which still has to be submitted and approved there; the
+  rebilled document then links to it (`rebilled_expense_report_id` → `/expenses/:id`) and loses
+  its edit and return actions.

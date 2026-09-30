@@ -8,6 +8,8 @@ export type PurchaseKind = NonNullable<PurchaseDocument["kind"]>;
 export type PaymentMethod = NonNullable<PurchaseDocument["payment_method"]>;
 export type PaymentStatus = NonNullable<PurchaseDocument["payment_status"]>;
 export type PurchaseDocumentPage = components["schemas"]["PurchaseDocumentPageResponse"];
+export type CardInvoice = components["schemas"]["CardInvoiceResponse"];
+export type RebillSuggestion = components["schemas"]["RebillSuggestionResponse"];
 export type PurchaseSort = components["schemas"]["PurchaseSort"];
 export type PurchaseDetails = components["schemas"]["PurchaseDetailsRequest"];
 export type PurchasesSummary = components["schemas"]["PurchasesSummaryResponse"];
@@ -207,6 +209,118 @@ export async function returnPurchaseToInbox(documentId: string): Promise<Purchas
     "/api/v1/purchases/documents/{document_id}/return-to-inbox",
     { params: { path: { document_id: documentId } } },
   );
+  if (!data) throw await purchaseAwareError(response);
+  return data;
+}
+
+/** A card invoice with its linked receipts, their base-currency sum and the difference from the
+ * card invoice's own total (fees, interest, purchases without a receipt). */
+export async function getCardInvoice(documentId: string): Promise<CardInvoice> {
+  const { data, response } = await api.GET("/api/v1/purchases/documents/{document_id}/card-invoice", {
+    params: { path: { document_id: documentId } },
+  });
+  if (!data) throw await purchaseAwareError(response);
+  return data;
+}
+
+/** Card-paid receipts not yet linked to a card invoice, oldest first, optionally date-bounded. */
+export async function listUnlinkedCardReceipts(
+  params: { dateFrom?: string; dateTo?: string } = {},
+): Promise<PurchaseDocument[]> {
+  const { data, response } = await api.GET("/api/v1/purchases/card-receipts/unlinked", {
+    params: {
+      query: { date_from: params.dateFrom || undefined, date_to: params.dateTo || undefined },
+    },
+  });
+  if (!data) throw await purchaseAwareError(response);
+  return data;
+}
+
+/** Link receipts to a card invoice, each with its base-currency amount from the card invoice's
+ * lines; all or nothing. */
+export async function linkCardReceipts(params: {
+  cardInvoiceId: string;
+  links: { receiptId: string; amountBase: string }[];
+}): Promise<CardInvoice> {
+  const { data, response } = await api.POST(
+    "/api/v1/purchases/documents/{document_id}/card-receipts",
+    {
+      params: { path: { document_id: params.cardInvoiceId } },
+      body: {
+        links: params.links.map((link) => ({
+          receipt_id: link.receiptId,
+          amount_base: link.amountBase,
+        })),
+      },
+    },
+  );
+  if (!data) throw await purchaseAwareError(response);
+  return data;
+}
+
+/** Retype a linked receipt's base-currency amount (the receipt's id, not the card invoice's). */
+export async function updateCardReceiptAmount(params: {
+  receiptId: string;
+  amountBase: string;
+}): Promise<PurchaseDocument> {
+  const { data, response } = await api.PUT("/api/v1/purchases/documents/{document_id}/card-amount", {
+    params: { path: { document_id: params.receiptId } },
+    body: { amount_base: params.amountBase },
+  });
+  if (!data) throw await purchaseAwareError(response);
+  return data;
+}
+
+export async function unlinkCardReceipt(receiptId: string): Promise<PurchaseDocument> {
+  const { data, response } = await api.POST("/api/v1/purchases/documents/{document_id}/unlink-card", {
+    params: { path: { document_id: receiptId } },
+  });
+  if (!data) throw await purchaseAwareError(response);
+  return data;
+}
+
+/** Defaults for rebilling to `projectId`: the amount in the customer's currency, the date and a
+ * description. */
+export async function getRebillSuggestion(params: {
+  documentId: string;
+  projectId: string;
+}): Promise<RebillSuggestion> {
+  const { data, response } = await api.GET(
+    "/api/v1/purchases/documents/{document_id}/rebill-suggestion",
+    {
+      params: {
+        path: { document_id: params.documentId },
+        query: { project_id: params.projectId },
+      },
+    },
+  );
+  if (!data) throw await purchaseAwareError(response);
+  return data;
+}
+
+/** File a receipt/invoice to a project's expense report (the caller's own, for the month). */
+export async function rebillPurchase(params: {
+  documentId: string;
+  projectId: string;
+  year: number;
+  month: number;
+  billingItemId: string;
+  description: string;
+  amount?: string | null;
+  expenseDate?: string | null;
+}): Promise<PurchaseDocument> {
+  const { data, response } = await api.POST("/api/v1/purchases/documents/{document_id}/rebill", {
+    params: { path: { document_id: params.documentId } },
+    body: {
+      project_id: params.projectId,
+      year: params.year,
+      month: params.month,
+      billing_item_id: params.billingItemId,
+      description: params.description,
+      amount: params.amount || null,
+      expense_date: params.expenseDate || null,
+    },
+  });
   if (!data) throw await purchaseAwareError(response);
   return data;
 }

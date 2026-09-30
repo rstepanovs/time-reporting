@@ -36,8 +36,10 @@ import {
   useMarkPurchaseUnpaid,
   useReturnPurchaseToInbox,
 } from "@/purchases/hooks";
+import { CardInvoiceSection } from "@/purchases/CardInvoiceSection";
 import { MarkPaidModal } from "@/purchases/MarkPaidModal";
 import { PurchaseRegisterForm } from "@/purchases/PurchaseRegisterForm";
+import { RebillModal } from "@/purchases/RebillModal";
 
 function Preview({ document }: { document: PurchaseDocument }) {
   const url = purchaseFileUrl(document.id);
@@ -66,6 +68,7 @@ export function PurchaseDocumentPage() {
   const markUnpaid = useMarkPurchaseUnpaid();
   const returnToInbox = useReturnPurchaseToInbox();
   const [paying, setPaying] = useState(false);
+  const [rebilling, setRebilling] = useState(false);
   const [confirmOpened, { open: openConfirm, close: closeConfirm }] = useDisclosure();
   const [error, setError] = useState<string | null>(null);
 
@@ -77,6 +80,8 @@ export function PurchaseDocumentPage() {
   const baseCurrency = summary.data.base_currency;
   const isPayable = doc.kind === "invoice" || doc.kind === "card_invoice";
   const rebilled = doc.rebilled_expense_line_id !== null;
+  const canRebill =
+    doc.stage === "registered" && !rebilled && (doc.kind === "receipt" || doc.kind === "invoice");
 
   async function run(action: () => Promise<unknown>, after?: () => void) {
     setError(null);
@@ -146,6 +151,11 @@ export function PurchaseDocumentPage() {
               Mark unpaid
             </Button>
           )}
+          {canRebill && (
+            <Button size="xs" variant="default" onClick={() => setRebilling(true)}>
+              Rebill to project…
+            </Button>
+          )}
           {doc.stage === "registered" && !rebilled && (
             <Button size="xs" variant="default" color="red" onClick={openConfirm}>
               Back to inbox…
@@ -166,9 +176,31 @@ export function PurchaseDocumentPage() {
       )}
       {rebilled && (
         <Alert color="teal">
-          This document has been rebilled to a project, so it can no longer be edited.
+          This document has been rebilled to a project, so it can no longer be edited.{" "}
+          {doc.rebilled_expense_report_id && (
+            <Anchor component={Link} to={`/expenses/${doc.rebilled_expense_report_id}`}>
+              View the expense report
+            </Anchor>
+          )}
         </Alert>
       )}
+      {doc.card_invoice_id && (
+        <Alert color="blue" variant="light">
+          Settled by a card invoice:{" "}
+          <Anchor component={Link} to={`/purchases/${doc.card_invoice_id}`}>
+            open the card invoice
+          </Anchor>
+        </Alert>
+      )}
+      {doc.stage === "registered" &&
+        doc.payment_method === "card" &&
+        doc.kind !== "card_invoice" &&
+        !doc.card_invoice_id && (
+          <Alert color="yellow" variant="light">
+            Paid by card: the {baseCurrency} amount stays open until this receipt is linked to a
+            card invoice.
+          </Alert>
+        )}
 
       <Grid>
         <Grid.Col span={{ base: 12, lg: 6 }}>
@@ -187,6 +219,19 @@ export function PurchaseDocumentPage() {
           )}
         </Grid.Col>
       </Grid>
+
+      {doc.stage === "registered" && doc.kind === "card_invoice" && (
+        <CardInvoiceSection card={doc} baseCurrency={baseCurrency} />
+      )}
+
+      {canRebill && (
+        <RebillModal
+          key={`${doc.id}-${rebilling}`}
+          document={doc}
+          opened={rebilling}
+          onClose={() => setRebilling(false)}
+        />
+      )}
 
       <MarkPaidModal
         key={`${doc.id}-${paying}`}

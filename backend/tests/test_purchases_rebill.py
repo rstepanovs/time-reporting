@@ -140,6 +140,7 @@ async def test_rebilling_copies_the_file_onto_the_actors_report(
     file = await bus.query(GetAttachmentPath(attachment_id=attachment.id, viewer_id=accountant.id))
     assert file.path.read_bytes() == PDF
     assert rebilled.rebilled_expense_line_id == line.id
+    assert rebilled.rebilled_expense_report_id == report_id
 
 
 def uuid_of(details: dict[str, object] | None, key: str):  # type: ignore[no-untyped-def]

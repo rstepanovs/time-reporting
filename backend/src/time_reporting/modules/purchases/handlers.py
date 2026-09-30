@@ -75,6 +75,7 @@ def to_dto(document: PurchaseDocument) -> PurchaseDocumentDTO:
         email_subject=document.email_subject,
         received_at=document.received_at,
         rebilled_expense_line_id=document.rebilled_expense_line_id,
+        rebilled_expense_report_id=document.rebilled_expense_report_id,
         created_at=document.created_at,
         updated_at=document.updated_at,
     )

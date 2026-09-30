@@ -118,6 +118,7 @@ class PurchaseDocumentResponse(BaseModel):
     email_subject: str | None
     received_at: datetime | None
     rebilled_expense_line_id: UUID | None
+    rebilled_expense_report_id: UUID | None
     created_at: datetime
     updated_at: datetime
 

@@ -298,6 +298,7 @@ class PurchaseService:
 
         document.rebilled_expense_line_id = rebilled.line_id
         document.rebilled_expense_attachment_id = rebilled.attachment_id
+        document.rebilled_expense_report_id = rebilled.report_id
         await self._documents.save(document)
         await self._bus.execute(
             RecordAuditEvent(

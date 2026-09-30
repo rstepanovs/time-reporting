@@ -2,14 +2,21 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   discardPurchaseDocument,
+  getCardInvoice,
   getExchangeRate,
+  getRebillSuggestion,
   getPurchaseDocument,
   getPurchasesSummary,
+  linkCardReceipts,
   listPurchaseDocuments,
+  listUnlinkedCardReceipts,
   markPurchasePaid,
   markPurchaseUnpaid,
+  rebillPurchase,
   registerPurchaseDocument,
   returnPurchaseToInbox,
+  unlinkCardReceipt,
+  updateCardReceiptAmount,
   updatePurchaseDocument,
   uploadPurchaseDocuments,
   type PurchaseListParams,
@@ -21,6 +28,12 @@ export const purchaseKeys = {
   documents: () => [...purchaseKeys.all, "documents"] as const,
   list: (params: PurchaseListParams) => [...purchaseKeys.documents(), "list", params] as const,
   document: (documentId: string) => [...purchaseKeys.documents(), documentId] as const,
+  cardInvoice: (documentId: string) =>
+    [...purchaseKeys.documents(), "card-invoice", documentId] as const,
+  unlinkedReceipts: (dateFrom: string, dateTo: string) =>
+    [...purchaseKeys.documents(), "unlinked", dateFrom, dateTo] as const,
+  suggestion: (documentId: string, projectId: string) =>
+    [...purchaseKeys.documents(), "rebill-suggestion", documentId, projectId] as const,
   summary: () => [...purchaseKeys.all, "summary"] as const,
   rate: (currency: string, on: string) => [...purchaseKeys.all, "rate", currency, on] as const,
 };
@@ -116,6 +129,64 @@ export function useReturnPurchaseToInbox() {
   const invalidate = useInvalidatePurchases();
   return useMutation({
     mutationFn: (documentId: string) => returnPurchaseToInbox(documentId),
+    onSuccess: invalidate,
+  });
+}
+
+export function useCardInvoice(documentId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: purchaseKeys.cardInvoice(documentId),
+    queryFn: () => getCardInvoice(documentId),
+    enabled,
+  });
+}
+
+export function useUnlinkedCardReceipts(dateFrom: string, dateTo: string) {
+  return useQuery({
+    queryKey: purchaseKeys.unlinkedReceipts(dateFrom, dateTo),
+    queryFn: () => listUnlinkedCardReceipts({ dateFrom, dateTo }),
+  });
+}
+
+export function useLinkCardReceipts() {
+  const invalidate = useInvalidatePurchases();
+  return useMutation({
+    mutationFn: (params: Parameters<typeof linkCardReceipts>[0]) => linkCardReceipts(params),
+    onSuccess: invalidate,
+  });
+}
+
+export function useUnlinkCardReceipt() {
+  const invalidate = useInvalidatePurchases();
+  return useMutation({
+    mutationFn: (receiptId: string) => unlinkCardReceipt(receiptId),
+    onSuccess: invalidate,
+  });
+}
+
+export function useUpdateCardReceiptAmount() {
+  const invalidate = useInvalidatePurchases();
+  return useMutation({
+    mutationFn: (params: Parameters<typeof updateCardReceiptAmount>[0]) =>
+      updateCardReceiptAmount(params),
+    onSuccess: invalidate,
+  });
+}
+
+/** The rebill form's prefill; a missing amount is an ordinary outcome, so no retries. */
+export function useRebillSuggestion(documentId: string, projectId: string) {
+  return useQuery({
+    queryKey: purchaseKeys.suggestion(documentId, projectId),
+    queryFn: () => getRebillSuggestion({ documentId, projectId }),
+    enabled: projectId !== "",
+    retry: false,
+  });
+}
+
+export function useRebillPurchase() {
+  const invalidate = useInvalidatePurchases();
+  return useMutation({
+    mutationFn: (params: Parameters<typeof rebillPurchase>[0]) => rebillPurchase(params),
     onSuccess: invalidate,
   });
 }

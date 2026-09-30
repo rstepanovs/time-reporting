@@ -347,11 +347,12 @@ sorting suggestions (deferred).
 
 #### A11 — frontend: card invoices and rebilling
 
-- [ ] Card invoice page section: linked receipts with editable SEK amounts, sum/total/difference,
+- [x] Card invoice page section: linked receipts with editable SEK amounts, sum/total/difference,
       "Add receipts…" picker, unlink.
-- [ ] "Rebill to project…" dialog (project, month, billing item, prefilled amount, description) and
+- [x] "Rebill to project…" dialog (project, month, billing item, prefilled amount, description) and
       a link to the resulting expense report.
-- [ ] Tests: linking and the difference, rebill.
+- [x] Tests: linking and the difference, rebill.
+      (Backend: purchase documents also keep `rebilled_expense_report_id`, for that link.)
 
 #### A12 — frontend: dashboard and settings
 

@@ -121,6 +121,10 @@ class PurchaseDocument(TimestampMixin, Base):
     rebilled_expense_attachment_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("expense_attachments.id", ondelete="SET NULL")
     )
+    # The report the line sits on, so the document can link to it.
+    rebilled_expense_report_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("expense_reports.id", ondelete="SET NULL")
+    )
 
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
