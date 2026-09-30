@@ -82,3 +82,10 @@ on `/purchases`).
   expense report for the project-month, which still has to be submitted and approved there; the
   rebilled document then links to it (`rebilled_expense_report_id` → `/expenses/:id`) and loses
   its edit and return actions.
+
+## Dashboard card
+
+`PurchasesCard` ("Bills to pay", in the dashboard's Billing section for accountants, beside
+`InvoicingCard`): inbox count, unpaid count and total in the base currency (`~` while any term is
+an estimate), overdue and due-within-7-days counts, a note for unpaid documents that have no base
+amount yet, and a `Details →` link to the To pay tab. The card is tinted when anything is overdue.

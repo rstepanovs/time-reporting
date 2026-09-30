@@ -39,6 +39,9 @@ Backend: `modules/company` — a singleton settings row, always readable, never 
   its own (`customers/CustomerFormModal.tsx` leaves the field blank) gets the next one allocated
   automatically — see `modules/company/CLAUDE.md`'s "Customer numbering" and
   `modules/customers/CLAUDE.md`.
+- The Bookkeeping section's **Base currency** (`base_currency`, a 3-letter ISO 4217 code, sent
+  upper-cased; default `SEK`) is the currency `purchases` converts into and totals in; changing it
+  doesn't restate documents already converted.
 - The Workflow section's `allow_self_review` `Switch` carries an inline description explaining
   what it does (needed for [[t3-self-approval]] once that reads this flag) rather than linking out
   to documentation.

@@ -356,10 +356,10 @@ sorting suggestions (deferred).
 
 #### A12 — frontend: dashboard and settings
 
-- [ ] "Bills to pay" card in the dashboard's Billing section (`GetPurchasesSummary`).
-- [ ] Company page: base currency.
-- [ ] Accounting page shows the new warnings.
-- [ ] Tests.
+- [x] "Bills to pay" card in the dashboard's Billing section (`GetPurchasesSummary`).
+- [x] Company page: base currency.
+- [x] Accounting page shows the new warnings.
+- [x] Tests.
 
 #### A13 — documentation for stage A
 

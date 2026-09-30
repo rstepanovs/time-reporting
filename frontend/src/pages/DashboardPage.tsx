@@ -5,6 +5,7 @@ import { AdminShortcutsCard } from "@/admin/AdminShortcutsCard";
 import { useAuthenticatedUser } from "@/auth/hooks";
 import { canManage, isAccountant, isAdmin } from "@/auth/roles";
 import { InvoicingCard } from "@/invoices/InvoicingCard";
+import { PurchasesCard } from "@/purchases/PurchasesCard";
 import type { TeamScope } from "@/timesheets/api";
 import { MonthTimeCard } from "@/timesheets/MonthTimeCard";
 import { MyProjectsCard } from "@/timesheets/MyProjectsCard";
@@ -61,6 +62,7 @@ export function DashboardPage() {
           <Title order={3}>Billing</Title>
           <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
             <InvoicingCard />
+            <PurchasesCard />
           </SimpleGrid>
         </>
       )}

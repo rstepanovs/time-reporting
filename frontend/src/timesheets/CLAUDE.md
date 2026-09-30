@@ -104,6 +104,12 @@ All render inside `components/DashboardCard.tsx`, in a responsive `SimpleGrid`.
   rather than paging through every invoice/period on the dashboard), linking to `/invoices`. See
   `invoices/CLAUDE.md`.
 
+- `purchases/PurchasesCard.tsx` ("Bills to pay") — documents waiting in the purchases inbox, the
+  unpaid count and total in the base currency (`~` while any term is an estimate, plus a note for
+  unpaid documents without a base amount), overdue and due-within-7-days counts, from
+  `purchases.GetPurchasesSummary`; highlighted when something is overdue; links to
+  `/purchases?tab=to-pay`. See `purchases/CLAUDE.md`.
+
 The Administration section (`admin`) is `admin/AdminShortcutsCard.tsx`, documented in
 `admin/CLAUDE.md`.
 

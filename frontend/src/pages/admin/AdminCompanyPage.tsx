@@ -57,6 +57,7 @@ type FormValues = {
   customerNumberPrefix: string;
   nextCustomerNumber: number;
   allowSelfReview: boolean;
+  baseCurrency: string;
 };
 
 function valuesFromSettings(settings: CompanySettings): FormValues {
@@ -83,6 +84,7 @@ function valuesFromSettings(settings: CompanySettings): FormValues {
     customerNumberPrefix: settings.customer_number_prefix,
     nextCustomerNumber: settings.next_customer_number,
     allowSelfReview: settings.allow_self_review,
+    baseCurrency: settings.base_currency,
   };
 }
 
@@ -159,6 +161,7 @@ function CompanyForm({ settings }: { settings: CompanySettings }) {
       country: matches(/^([A-Za-z]{2})?$/, "Use a 2-letter country code, e.g. SE"),
       nextInvoiceNumber: (value) => (value >= 1 ? null : "Use 1 or higher"),
       nextCustomerNumber: (value) => (value >= 1 ? null : "Use 1 or higher"),
+      baseCurrency: matches(/^[A-Za-z]{3}$/, "Use a 3-letter currency code, e.g. SEK"),
     },
   });
 
@@ -188,8 +191,7 @@ function CompanyForm({ settings }: { settings: CompanySettings }) {
       customer_number_prefix: values.customerNumberPrefix,
       next_customer_number: values.nextCustomerNumber,
       allow_self_review: values.allowSelfReview,
-      // Not editable here yet: sent back unchanged so saving the form doesn't reset it.
-      base_currency: settings.base_currency,
+      base_currency: values.baseCurrency.toUpperCase(),
     };
     await updateSettings.mutateAsync(body);
     notifications.show({ title: "Company settings saved", message: "" });
@@ -313,6 +315,18 @@ function CompanyForm({ settings }: { settings: CompanySettings }) {
             {...form.getInputProps("nextCustomerNumber")}
           />
         </Group>
+
+        <Title order={4} mt="md">
+          Bookkeeping
+        </Title>
+        <TextInput
+          label="Base currency"
+          description="The currency purchases are converted into (at the Riksbank rate of the payment date) and totalled in. Changing it doesn't restate documents already converted."
+          maxLength={3}
+          w={260}
+          key={form.key("baseCurrency")}
+          {...form.getInputProps("baseCurrency")}
+        />
 
         <Title order={4} mt="md">
           Workflow
