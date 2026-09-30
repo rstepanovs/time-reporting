@@ -68,9 +68,11 @@ report owner's; re-query with `viewer_id=<owner>` to see the owner's view. Advis
 
 - `ExpenseAttachment` metadata (`file_name`, `content_type`, `size_bytes`, `sha256`,
   `storage_key`, `uploaded_by_id`, `line_id`) lives in the database; the file itself lives on disk
-  under `settings.attachment_dir`, managed by `storage.py: ExpenseAttachmentStorage` — modelled
-  closely on `system.backup_service.BackupService` (dotfile-then-rename writes, a filename/key
-  pattern that doubles as path-traversal validation). Attachments hang off the **report** as a
+  under `settings.attachment_dir`, managed by `storage.py: ExpenseAttachmentStorage` — a thin
+  wrapper over the shared `core/file_storage.py: FileStorage` (dotfile-then-rename writes, a key
+  pattern that doubles as path-traversal validation) that fixes the allowed types and maps its
+  errors to `Attachment*Error`. `prune_orphans` only looks at `<hex>/<file>` keys, so the
+  `purchases` module's files under `<attachment_dir>/purchases/` are never swept by it. Attachments hang off the **report** as a
   whole; `line_id` (nullable, `ON DELETE SET NULL` — deleting a line unlinks its receipts rather
   than deleting them) optionally says which of the report's own lines a receipt substantiates. It
   is the one field a write ever changes after creation, via `SetAttachmentLine` — everything else

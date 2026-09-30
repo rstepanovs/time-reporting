@@ -12,6 +12,7 @@ import pytest
 from support import MANAGER, ProjectFactory, UserFactory
 from time_reporting.core.config import get_settings
 from time_reporting.core.cqrs import Bus
+from time_reporting.core.file_storage import FileStorage
 from time_reporting.modules.expenses.contracts import (
     AddExpenseAttachment,
     ApproveExpenseReport,
@@ -132,6 +133,20 @@ def test_prune_orphans_removes_only_unreferenced_files(tmp_path: Path) -> None:
     assert removed == (orphan_key,)
     assert storage.path_for(kept_key) is not None
     assert storage.path_for(orphan_key) is None
+
+
+def test_prune_orphans_ignores_the_purchases_subdirectory(tmp_path: Path) -> None:
+    storage = _storage(tmp_path)
+    purchases = FileStorage(
+        tmp_path / "purchases", max_bytes=1024, extensions={"application/pdf": "pdf"}
+    )
+    purchase_key = purchases.save(content=_PDF_BYTES, content_type="application/pdf")
+    orphan_key = storage.save(content=_PDF_BYTES, content_type="application/pdf")
+
+    removed = storage.prune_orphans(referenced_keys=frozenset(), dry_run=False)
+
+    assert removed == (orphan_key,)
+    assert purchases.path_for(purchase_key) is not None
 
 
 # --- Bus-level handlers ---

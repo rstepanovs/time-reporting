@@ -103,7 +103,8 @@ restore`, backups, pgAdmin over an SSH tunnel) — read it before touching eithe
 - **`seed.py`** — idempotent demo data for local development; tests seed uniquely renamed copies,
   because the test database doubles as the dev database. Details: the `seed-test-data` skill.
 - **Shared kernel** (not owned by a module): `core/passwords.py` (Argon2id via `pwdlib`, hashing off
-  the event loop in a thread), `db/queries.py` (`escape_like` — a literal, non-wildcard `ILIKE`
+  the event loop in a thread), `core/file_storage.py` (`FileStorage`: random-key file storage on
+  disk, shared by modules that keep uploaded documents), `db/queries.py` (`escape_like` — a literal, non-wildcard `ILIKE`
   pattern from user input) and `db/mixins.py:TimestampMixin` (`created_at`/`updated_at`).
 
 ### Feature modules (`modules/`) and the CQRS bus

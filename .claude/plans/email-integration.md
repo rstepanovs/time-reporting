@@ -235,11 +235,11 @@ sorting suggestions (deferred).
 
 #### A1 — backend: shared file storage
 
-- [ ] Move `ExpenseAttachmentStorage`'s logic into `core/file_storage.py` (`FileStorage(root: Path,
+- [x] Move `ExpenseAttachmentStorage`'s logic into `core/file_storage.py` (`FileStorage(root: Path,
       max_bytes, allowed_types)`); `expenses/storage.py` becomes a thin wrapper over
       `attachment_dir`, no behavior change.
-- [ ] Existing attachment tests stay green unchanged.
-- [ ] New test: `expenses` pruning ignores files under `<attachment_dir>/purchases/`.
+- [x] Existing attachment tests stay green unchanged.
+- [x] New test: `expenses` pruning ignores files under `<attachment_dir>/purchases/`.
 
 #### A2 — backend `currency`: Riksbank rates
 
