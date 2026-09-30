@@ -3,11 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fetchCurrentUser } from "@/auth/api";
 import { getInvoicingSummary } from "@/invoices/api";
+import { getPurchasesSummary } from "@/purchases/api";
 import {
   testAccountant,
   testAdmin,
   testAdminOnly,
   testInvoicingSummary,
+  testPurchasesSummary,
   testMonthTimeSummary,
   testMonthTimeSummaryPrevious,
   testReadyBillingPeriod,
@@ -36,6 +38,11 @@ vi.mock("@/invoices/api", async (importOriginal) => ({
   getInvoicingSummary: vi.fn(),
 }));
 
+vi.mock("@/purchases/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/purchases/api")>()),
+  getPurchasesSummary: vi.fn(),
+}));
+
 vi.mock("@/timesheets/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/timesheets/api")>()),
   getMonthTimeSummary: vi.fn(),
@@ -57,6 +64,7 @@ beforeEach(() => {
   vi.mocked(listTimesheetOptions).mockResolvedValue([testTimesheetOption]);
   vi.mocked(getTeamMonthOverview).mockResolvedValue(testTeamMonthOverview);
   vi.mocked(getInvoicingSummary).mockResolvedValue(testInvoicingSummary);
+  vi.mocked(getPurchasesSummary).mockResolvedValue(testPurchasesSummary);
 });
 
 describe("DashboardPage", () => {
@@ -179,6 +187,41 @@ describe("DashboardPage", () => {
     expect(screen.getByRole("link", { name: "System status" }).getAttribute("href")).toBe(
       "/admin/status",
     );
+  });
+
+  it("shows the bills to pay to an accountant, flagging what is overdue", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testAccountant);
+    vi.mocked(getPurchasesSummary).mockResolvedValue({
+      ...testPurchasesSummary,
+      inbox_count: 3,
+      unpaid_count: 4,
+      unpaid_total_base: "12500.50",
+      unpaid_provisional: true,
+      unpaid_unconverted_count: 1,
+      overdue_count: 2,
+      due_soon_count: 1,
+    });
+    renderApp("/");
+
+    const heading = await screen.findByRole("heading", { level: 4, name: "Bills to pay" });
+    const card = heading.closest(".mantine-Paper-root") as HTMLElement;
+    await within(card).findByText(/~12\s?500,50 SEK/);
+    expect(within(card).getByText("3")).toBeTruthy(); // inbox
+    expect(within(card).getByText("4")).toBeTruthy(); // unpaid
+    expect(within(card).getByText("2")).toBeTruthy(); // overdue
+    expect(within(card).getByText(/1 unpaid document has no SEK amount yet/)).toBeTruthy();
+    expect(card.getAttribute("data-highlighted")).toBe("true");
+    const link = within(card).getByRole("link", { name: "Details →" });
+    expect(link.getAttribute("href")).toBe("/purchases?tab=to-pay");
+  });
+
+  it("does not show bills to pay to a non-accountant", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testManager);
+    renderApp("/");
+
+    await screen.findByRole("heading", { name: "My time" });
+    expect(screen.queryByRole("heading", { level: 4, name: "Bills to pay" })).toBeNull();
+    expect(getPurchasesSummary).not.toHaveBeenCalled();
   });
 
   it("shows the invoicing summary to an accountant, linking to /invoices", async () => {

@@ -895,6 +895,314 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/currency/rates/{currency}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** SEK per one unit of a currency on a date (latest published rate on or before it) */
+        get: operations["get_rate_api_v1_currency_rates__currency__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/purchases/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Purchase Documents */
+        get: operations["list_purchase_documents_api_v1_purchases_documents_get"];
+        put?: never;
+        /** Upload one or more files into the inbox */
+        post: operations["upload_purchase_documents_api_v1_purchases_documents_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/purchases/documents/{document_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Purchase Document */
+        get: operations["get_purchase_document_api_v1_purchases_documents__document_id__get"];
+        /** Replace a registered document's fields */
+        put: operations["update_purchase_document_api_v1_purchases_documents__document_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/purchases/documents/{document_id}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Purchase File */
+        get: operations["download_purchase_file_api_v1_purchases_documents__document_id__file_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/purchases/documents/{document_id}/discard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Discard Purchase Document */
+        post: operations["discard_purchase_document_api_v1_purchases_documents__document_id__discard_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/purchases/documents/{document_id}/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Classify an inbox document */
+        post: operations["register_purchase_document_api_v1_purchases_documents__document_id__register_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/purchases/documents/{document_id}/return-to-inbox": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Return Purchase To Inbox */
+        post: operations["return_purchase_to_inbox_api_v1_purchases_documents__document_id__return_to_inbox_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/purchases/documents/{document_id}/paid": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark an unpaid invoice paid */
+        post: operations["mark_purchase_paid_api_v1_purchases_documents__document_id__paid_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/purchases/documents/{document_id}/unpaid": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Undo a payment */
+        post: operations["mark_purchase_unpaid_api_v1_purchases_documents__document_id__unpaid_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/purchases/card-receipts/unlinked": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Card receipts not yet linked to a card invoice */
+        get: operations["list_unlinked_card_receipts_api_v1_purchases_card_receipts_unlinked_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/purchases/documents/{document_id}/card-invoice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A card invoice with its linked receipts, their sum and the difference */
+        get: operations["get_card_invoice_api_v1_purchases_documents__document_id__card_invoice_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/purchases/documents/{document_id}/card-receipts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Link card receipts to a card invoice, with their amounts from its lines */
+        post: operations["link_card_receipts_api_v1_purchases_documents__document_id__card_receipts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/purchases/documents/{document_id}/card-amount": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Change a linked card receipt's amount from the card invoice */
+        put: operations["update_card_receipt_amount_api_v1_purchases_documents__document_id__card_amount_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/purchases/documents/{document_id}/unlink-card": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Detach a card receipt from its card invoice */
+        post: operations["unlink_card_receipt_api_v1_purchases_documents__document_id__unlink_card_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/purchases/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inbox and unpaid figures for the dashboard */
+        get: operations["get_purchases_summary_api_v1_purchases_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/purchases/months/{year}/{month}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Registered documents dated in a month, card receipts under their card invoice */
+        get: operations["list_month_purchases_api_v1_purchases_months__year___month__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/purchases/documents/{document_id}/rebill-suggestion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Prefill for rebilling a document to a project */
+        get: operations["get_rebill_suggestion_api_v1_purchases_documents__document_id__rebill_suggestion_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/purchases/documents/{document_id}/rebill": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** File a document to a project's expense report (your own, for the month) */
+        post: operations["rebill_purchase_api_v1_purchases_documents__document_id__rebill_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/invoices/invoiceable-periods": {
         parameters: {
             query?: never;
@@ -1278,6 +1586,20 @@ export interface components {
             unapproved_expense_report_count: number;
             /** Uninvoiced Sent Period Count */
             uninvoiced_sent_period_count: number;
+            /** Purchase Count */
+            purchase_count: number;
+            /** Purchase Base Currency */
+            purchase_base_currency: string;
+            /** Purchase Total Base */
+            purchase_total_base: string;
+            /** Purchase Total Provisional */
+            purchase_total_provisional: boolean;
+            /** Purchase Unconverted Count */
+            purchase_unconverted_count: number;
+            /** Inbox Document Count */
+            inbox_document_count: number;
+            /** Unlinked Card Receipt Count */
+            unlinked_card_receipt_count: number;
         };
         /** AccountantPackageTotalResponse */
         AccountantPackageTotalResponse: {
@@ -1295,7 +1617,7 @@ export interface components {
          *     add a value (see ``AuditEvent.action`` in ``models.py``).
          * @enum {string}
          */
-        AuditAction: "user.created" | "user.roles_changed" | "user.activated" | "user.deactivated" | "user.password_reset" | "user.deleted" | "customer.archived" | "customer.deleted" | "project.archived" | "project.deleted" | "billing_period.sent" | "billing_period.reopened" | "calendar.public_holidays_imported" | "backup.created" | "expense_report.approved" | "expense_report.returned" | "company.updated" | "invoice.created" | "invoice.deleted" | "invoice.issued" | "invoice.paid" | "invoice.voided";
+        AuditAction: "user.created" | "user.roles_changed" | "user.activated" | "user.deactivated" | "user.password_reset" | "user.deleted" | "customer.archived" | "customer.deleted" | "project.archived" | "project.deleted" | "billing_period.sent" | "billing_period.reopened" | "calendar.public_holidays_imported" | "backup.created" | "expense_report.approved" | "expense_report.returned" | "company.updated" | "invoice.created" | "invoice.deleted" | "invoice.issued" | "invoice.paid" | "invoice.voided" | "purchase.registered" | "purchase.paid" | "purchase.unpaid" | "purchase.discarded" | "purchase.rebilled";
         /** AuditEventPageResponse */
         AuditEventPageResponse: {
             /** Items */
@@ -1581,6 +1903,11 @@ export interface components {
             /** File */
             file: string;
         };
+        /** Body_upload_purchase_documents_api_v1_purchases_documents_post */
+        Body_upload_purchase_documents_api_v1_purchases_documents_post: {
+            /** Files */
+            files: string[];
+        };
         /** CalendarDayHoursResponse */
         CalendarDayHoursResponse: {
             calendar_day: components["schemas"]["CalendarDayResponse"];
@@ -1619,6 +1946,31 @@ export interface components {
             expected_hours: string;
             /** Hours */
             hours: string;
+        };
+        /** CardInvoiceResponse */
+        CardInvoiceResponse: {
+            invoice: components["schemas"]["PurchaseDocumentResponse"];
+            /** Receipts */
+            receipts: components["schemas"]["PurchaseDocumentResponse"][];
+            /** Receipts Total Base */
+            receipts_total_base: string;
+            /** Difference Base */
+            difference_base: string | null;
+        };
+        /** CardReceiptAmountRequest */
+        CardReceiptAmountRequest: {
+            /** Amount Base */
+            amount_base: number | string;
+        };
+        /** CardReceiptLinkRequest */
+        CardReceiptLinkRequest: {
+            /**
+             * Receipt Id
+             * Format: uuid
+             */
+            receipt_id: string;
+            /** Amount Base */
+            amount_base: number | string;
         };
         /** @enum {string} */
         ClearableInvoiceField: "vat_rate" | "vat_note" | "your_reference" | "notes";
@@ -1699,6 +2051,8 @@ export interface components {
             next_customer_number: number;
             /** Allow Self Review */
             allow_self_review: boolean;
+            /** Base Currency */
+            base_currency: string;
             /** Has Logo */
             has_logo: boolean;
             /**
@@ -1795,6 +2149,13 @@ export interface components {
              * @default false
              */
             allow_self_review: boolean;
+            /**
+             * Base Currency
+             * @description ISO 4217 code, upper-case
+             * @default SEK
+             * @example SEK
+             */
+            base_currency: string;
         };
         /** CreateExpenseReportRequest */
         CreateExpenseReportRequest: {
@@ -1983,6 +2344,25 @@ export interface components {
             head_revision: string | null;
             /** Migrations Pending */
             migrations_pending: boolean;
+        };
+        /** ExchangeRateResponse */
+        ExchangeRateResponse: {
+            /** Currency */
+            currency: string;
+            /**
+             * Requested Date
+             * Format: date
+             */
+            requested_date: string;
+            /**
+             * Rate Date
+             * Format: date
+             */
+            rate_date: string;
+            /** Rate */
+            rate: string;
+            /** Source */
+            source: string;
         };
         /** ExpenseAttachmentResponse */
         ExpenseAttachmentResponse: {
@@ -2494,6 +2874,11 @@ export interface components {
             /** Overdue Count */
             overdue_count: number;
         };
+        /** LinkCardReceiptsRequest */
+        LinkCardReceiptsRequest: {
+            /** Links */
+            links: components["schemas"]["CardReceiptLinkRequest"][];
+        };
         /** MarkInvoicePaidRequest */
         MarkInvoicePaidRequest: {
             /**
@@ -2501,6 +2886,17 @@ export interface components {
              * Format: date
              */
             paid_on: string;
+        };
+        /** MarkPaidRequest */
+        MarkPaidRequest: {
+            /**
+             * Paid On
+             * Format: date
+             */
+            paid_on: string;
+            payment_method: components["schemas"]["PaymentMethod"];
+            /** Amount Base */
+            amount_base?: number | string | null;
         };
         /** MonthCalendarResponse */
         MonthCalendarResponse: {
@@ -2535,6 +2931,12 @@ export interface components {
             totals: components["schemas"]["HoursTotalsResponse"];
             /** Projects */
             projects: components["schemas"]["ProjectHoursResponse"][];
+        };
+        /** MonthPurchaseResponse */
+        MonthPurchaseResponse: {
+            document: components["schemas"]["PurchaseDocumentResponse"];
+            /** Card Receipts */
+            card_receipts: components["schemas"]["PurchaseDocumentResponse"][];
         };
         /** MonthTimeSummaryResponse */
         MonthTimeSummaryResponse: {
@@ -2611,6 +3013,16 @@ export interface components {
             /** New Password */
             new_password: string;
         };
+        /**
+         * PaymentMethod
+         * @enum {string}
+         */
+        PaymentMethod: "card" | "bank_transfer" | "direct_debit" | "cash" | "private";
+        /**
+         * PaymentStatus
+         * @enum {string}
+         */
+        PaymentStatus: "unpaid" | "paid";
         /** ProjectBillingItemResponse */
         ProjectBillingItemResponse: {
             /**
@@ -2831,6 +3243,194 @@ export interface components {
             is_internal?: boolean | null;
             /** Manager Id */
             manager_id?: string | null;
+        };
+        /**
+         * PurchaseDetailsRequest
+         * @description The classification form; per-kind rules are enforced by the service (400).
+         */
+        PurchaseDetailsRequest: {
+            kind: components["schemas"]["PurchaseKind"];
+            /** Vendor */
+            vendor?: string | null;
+            /** Document No */
+            document_no?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Document Date */
+            document_date?: string | null;
+            /** Due Date */
+            due_date?: string | null;
+            payment_status?: components["schemas"]["PaymentStatus"] | null;
+            /** Paid On */
+            paid_on?: string | null;
+            payment_method?: components["schemas"]["PaymentMethod"] | null;
+            /** Amount */
+            amount?: number | string | null;
+            /** Currency */
+            currency?: string | null;
+            /** Vat Amount */
+            vat_amount?: number | string | null;
+            /** Amount Base */
+            amount_base?: number | string | null;
+            /** Exchange Rate */
+            exchange_rate?: number | string | null;
+        };
+        /** PurchaseDocumentPageResponse */
+        PurchaseDocumentPageResponse: {
+            /** Items */
+            items: components["schemas"]["PurchaseDocumentResponse"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
+        /** PurchaseDocumentResponse */
+        PurchaseDocumentResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            stage: components["schemas"]["PurchaseStage"];
+            kind: components["schemas"]["PurchaseKind"] | null;
+            /** Vendor */
+            vendor: string | null;
+            /** Document No */
+            document_no: string | null;
+            /** Description */
+            description: string | null;
+            /** Document Date */
+            document_date: string | null;
+            /** Due Date */
+            due_date: string | null;
+            payment_status: components["schemas"]["PaymentStatus"] | null;
+            /** Paid On */
+            paid_on: string | null;
+            payment_method: components["schemas"]["PaymentMethod"] | null;
+            /** Card Invoice Id */
+            card_invoice_id: string | null;
+            /** Amount */
+            amount: string | null;
+            /** Currency */
+            currency: string | null;
+            /** Vat Amount */
+            vat_amount: string | null;
+            /** Amount Base */
+            amount_base: string | null;
+            /** Exchange Rate */
+            exchange_rate: string | null;
+            /** Rate Date */
+            rate_date: string | null;
+            rate_source: components["schemas"]["RateSource"] | null;
+            /** Amount Base Final */
+            amount_base_final: boolean;
+            /** File Name */
+            file_name: string;
+            /** Content Type */
+            content_type: string;
+            /** Size Bytes */
+            size_bytes: number;
+            source: components["schemas"]["PurchaseSource"];
+            /** Email From */
+            email_from: string | null;
+            /** Email Subject */
+            email_subject: string | null;
+            /** Received At */
+            received_at: string | null;
+            /** Rebilled Expense Line Id */
+            rebilled_expense_line_id: string | null;
+            /** Rebilled Expense Report Id */
+            rebilled_expense_report_id: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * PurchaseKind
+         * @enum {string}
+         */
+        PurchaseKind: "receipt" | "invoice" | "card_invoice" | "other";
+        /**
+         * PurchaseSort
+         * @enum {string}
+         */
+        PurchaseSort: "newest" | "document_date" | "due_date";
+        /**
+         * PurchaseSource
+         * @enum {string}
+         */
+        PurchaseSource: "upload" | "email";
+        /**
+         * PurchaseStage
+         * @enum {string}
+         */
+        PurchaseStage: "inbox" | "registered" | "discarded";
+        /** PurchasesSummaryResponse */
+        PurchasesSummaryResponse: {
+            /** Base Currency */
+            base_currency: string;
+            /** Inbox Count */
+            inbox_count: number;
+            /** Unpaid Count */
+            unpaid_count: number;
+            /** Unpaid Total Base */
+            unpaid_total_base: string;
+            /** Unpaid Provisional */
+            unpaid_provisional: boolean;
+            /** Unpaid Unconverted Count */
+            unpaid_unconverted_count: number;
+            /** Overdue Count */
+            overdue_count: number;
+            /** Due Soon Count */
+            due_soon_count: number;
+        };
+        /**
+         * RateSource
+         * @enum {string}
+         */
+        RateSource: "none" | "riksbank" | "card_invoice" | "manual";
+        /** RebillRequest */
+        RebillRequest: {
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Year */
+            year: number;
+            /** Month */
+            month: number;
+            /**
+             * Billing Item Id
+             * Format: uuid
+             */
+            billing_item_id: string;
+            /** Description */
+            description: string;
+            /** Amount */
+            amount?: number | string | null;
+            /** Expense Date */
+            expense_date?: string | null;
+        };
+        /** RebillSuggestionResponse */
+        RebillSuggestionResponse: {
+            /** Amount */
+            amount: string | null;
+            /** Currency */
+            currency: string;
+            /** Expense Date */
+            expense_date: string | null;
+            /** Description */
+            description: string;
         };
         /**
          * RemovalBlockerKind
@@ -3297,6 +3897,39 @@ export interface components {
              * @default []
              */
             clear_fields: components["schemas"]["ClearableInvoiceField"][];
+        };
+        /** UpdatePurchaseRequest */
+        UpdatePurchaseRequest: {
+            kind: components["schemas"]["PurchaseKind"];
+            /** Vendor */
+            vendor?: string | null;
+            /** Document No */
+            document_no?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Document Date */
+            document_date?: string | null;
+            /** Due Date */
+            due_date?: string | null;
+            payment_status?: components["schemas"]["PaymentStatus"] | null;
+            /** Paid On */
+            paid_on?: string | null;
+            payment_method?: components["schemas"]["PaymentMethod"] | null;
+            /** Amount */
+            amount?: number | string | null;
+            /** Currency */
+            currency?: string | null;
+            /** Vat Amount */
+            vat_amount?: number | string | null;
+            /** Amount Base */
+            amount_base?: number | string | null;
+            /** Exchange Rate */
+            exchange_rate?: number | string | null;
+            /**
+             * Recompute Conversion
+             * @default false
+             */
+            recompute_conversion: boolean;
         };
         /** UserCreateRequest */
         UserCreateRequest: {
@@ -6191,6 +6824,911 @@ export interface operations {
                 content?: never;
             };
             /** @description The report's status does not allow this action */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_rate_api_v1_currency_rates__currency__get: {
+        parameters: {
+            query: {
+                on: string;
+            };
+            header?: never;
+            path: {
+                currency: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExchangeRateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description No rate published or the rates source is down */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_purchase_documents_api_v1_purchases_documents_get: {
+        parameters: {
+            query?: {
+                stage?: components["schemas"]["PurchaseStage"] | null;
+                kind?: components["schemas"]["PurchaseKind"] | null;
+                payment_status?: components["schemas"]["PaymentStatus"] | null;
+                search?: string | null;
+                date_from?: string | null;
+                date_to?: string | null;
+                sort?: components["schemas"]["PurchaseSort"];
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseDocumentPageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_purchase_documents_api_v1_purchases_documents_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_purchase_documents_api_v1_purchases_documents_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseDocumentResponse"][];
+                };
+            };
+            /** @description A file is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A file type isn't allowed */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_purchase_document_api_v1_purchases_documents__document_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseDocumentResponse"];
+                };
+            };
+            /** @description Purchase document not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_purchase_document_api_v1_purchases_documents__document_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePurchaseRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseDocumentResponse"];
+                };
+            };
+            /** @description The fields break the rules of the kind */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Purchase document not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The document's state doesn't allow this */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_purchase_file_api_v1_purchases_documents__document_id__file_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Purchase document not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    discard_purchase_document_api_v1_purchases_documents__document_id__discard_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseDocumentResponse"];
+                };
+            };
+            /** @description Purchase document not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Already discarded or already rebilled */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    register_purchase_document_api_v1_purchases_documents__document_id__register_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PurchaseDetailsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseDocumentResponse"];
+                };
+            };
+            /** @description The fields break the rules of the kind */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Purchase document not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The document's state doesn't allow this */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    return_purchase_to_inbox_api_v1_purchases_documents__document_id__return_to_inbox_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseDocumentResponse"];
+                };
+            };
+            /** @description Purchase document not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The document's state doesn't allow this */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_purchase_paid_api_v1_purchases_documents__document_id__paid_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkPaidRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseDocumentResponse"];
+                };
+            };
+            /** @description Purchase document not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The document's state doesn't allow this */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_purchase_unpaid_api_v1_purchases_documents__document_id__unpaid_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseDocumentResponse"];
+                };
+            };
+            /** @description Purchase document not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The document's state doesn't allow this */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_unlinked_card_receipts_api_v1_purchases_card_receipts_unlinked_get: {
+        parameters: {
+            query?: {
+                date_from?: string | null;
+                date_to?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseDocumentResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_card_invoice_api_v1_purchases_documents__document_id__card_invoice_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardInvoiceResponse"];
+                };
+            };
+            /** @description Purchase document not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The document's state doesn't allow this */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    link_card_receipts_api_v1_purchases_documents__document_id__card_receipts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkCardReceiptsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardInvoiceResponse"];
+                };
+            };
+            /** @description The fields break the rules of the kind */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Purchase document not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The document's state doesn't allow this */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_card_receipt_amount_api_v1_purchases_documents__document_id__card_amount_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CardReceiptAmountRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseDocumentResponse"];
+                };
+            };
+            /** @description The fields break the rules of the kind */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Purchase document not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The document's state doesn't allow this */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unlink_card_receipt_api_v1_purchases_documents__document_id__unlink_card_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseDocumentResponse"];
+                };
+            };
+            /** @description Purchase document not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The document's state doesn't allow this */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_purchases_summary_api_v1_purchases_summary_get: {
+        parameters: {
+            query?: {
+                today?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchasesSummaryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_month_purchases_api_v1_purchases_months__year___month__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                year: number;
+                month: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonthPurchaseResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_rebill_suggestion_api_v1_purchases_documents__document_id__rebill_suggestion_get: {
+        parameters: {
+            query: {
+                project_id: string;
+            };
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RebillSuggestionResponse"];
+                };
+            };
+            /** @description The fields break the rules of the kind */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Purchase document not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The document's state doesn't allow this */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rebill_purchase_api_v1_purchases_documents__document_id__rebill_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RebillRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseDocumentResponse"];
+                };
+            };
+            /** @description The fields break the rules of the kind */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Purchase document not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The document's state doesn't allow this */
             409: {
                 headers: {
                     [name: string]: unknown;

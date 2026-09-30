@@ -58,6 +58,7 @@ async def update_company_settings(
             customer_number_prefix=body.customer_number_prefix,
             next_customer_number=body.next_customer_number,
             allow_self_review=body.allow_self_review,
+            base_currency=body.base_currency,
         )
     )
     return CompanySettingsResponse.model_validate(settings)

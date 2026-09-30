@@ -22,6 +22,40 @@ beforeEach(() => {
   vi.mocked(getAccountantPackageStatus).mockResolvedValue(testAccountantPackageStatus);
 });
 
+describe("AccountingPage purchases", () => {
+  it("shows the purchases total and the warnings for the inbox and unlinked card receipts", async () => {
+    vi.mocked(getAccountantPackageStatus).mockResolvedValue({
+      ...testAccountantPackageStatus,
+      purchase_count: 4,
+      purchase_total_base: "260.00",
+      purchase_total_provisional: true,
+      purchase_unconverted_count: 1,
+      inbox_document_count: 2,
+      unlinked_card_receipt_count: 1,
+    });
+    renderApp("/accounting?month=2026-09");
+
+    await screen.findByText("Documents in the purchases inbox");
+    expect(screen.getByText(/2 scanned or emailed documents are still unsorted/)).toBeTruthy();
+    expect(screen.getByText("Card receipts without a card invoice")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Open the inbox" }).getAttribute("href")).toBe(
+      "/purchases?tab=inbox",
+    );
+    expect(screen.getByText(/3 expense lines, 4 purchases/)).toBeTruthy();
+    expect(screen.getByText(/~260 SEK/)).toBeTruthy();
+    expect(screen.getByText(/provisional until the bills are paid/)).toBeTruthy();
+    expect(screen.getByText(/1 without a SEK amount yet, not included/)).toBeTruthy();
+  });
+
+  it("shows none of it for a month without purchases", async () => {
+    renderApp("/accounting?month=2026-09");
+
+    await screen.findByText(/2 invoices, 3 expense lines/);
+    expect(screen.queryByText("Documents in the purchases inbox")).toBeNull();
+    expect(screen.queryByText(/Purchases total/)).toBeNull();
+  });
+});
+
 describe("AccountingPage", () => {
   it("shows the month's status and a download link", async () => {
     renderApp("/accounting?month=2026-09");
@@ -29,7 +63,7 @@ describe("AccountingPage", () => {
     await waitFor(() => {
       expect(getAccountantPackageStatus).toHaveBeenCalledWith(2026, 9);
     });
-    await screen.findByText("2 invoices, 3 expense lines");
+    await screen.findByText(/2 invoices, 3 expense lines/);
     expect(screen.getByText("EUR")).toBeTruthy();
     expect(screen.getByText("1250")).toBeTruthy();
     expect(screen.getByText("42.5")).toBeTruthy();

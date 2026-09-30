@@ -353,6 +353,37 @@ class SaveExpenseReportLines(Command[ExpenseReportDTO]):
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class RebilledExpenseDTO:
+    report_id: UUID
+    line_id: UUID
+    attachment_id: UUID
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class AddExpenseLineWithAttachment(Command[RebilledExpenseDTO]):
+    """Put one line, with its receipt file linked to it, on ``actor_id``'s report for the
+    project's ``year``/``month`` — creating that report (a ``draft`` marked ``company_purchase``)
+    when missing. Used to rebill a company purchase to a customer's project; the actor needn't be
+    a project member.
+
+    Line and file are written in one transaction. Raises ``ExpenseProjectClosedError`` (unknown or
+    archived project), ``ExpenseBillingItemNotFoundError`` (not an active ``amount`` item of the
+    project), ``ExpenseDateOutsidePeriodError``, ``ExpenseReportNotEditableError`` /
+    ``ExpenseReportLockedError`` (an existing report can't take more lines) and the attachment
+    errors of ``AddExpenseAttachment``.
+    """
+
+    project_id: UUID
+    year: int
+    month: int
+    actor_id: UUID
+    line: ExpenseLineChange
+    file_name: str
+    content_type: str
+    content: bytes
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class DeleteExpenseReport(Command[None]):
     """Permanently delete a draft report (and its lines/attachments, by cascade). Raises
     ``ExpenseReportNotFoundError`` or ``ExpenseReportNotEditableError`` (not a draft)."""

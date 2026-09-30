@@ -1,5 +1,5 @@
 import { Alert, Anchor, Button, Group, Loader, Stack, Table, Text, Title } from "@mantine/core";
-import { useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
 
 import { accountantPackageDownloadUrl } from "@/accounting/api";
 import { useAccountantPackageStatus } from "@/accounting/hooks";
@@ -99,10 +99,43 @@ export function AccountingPage() {
             </Alert>
           )}
 
+          {status.inbox_document_count > 0 && (
+            <Alert color="yellow" title="Documents in the purchases inbox">
+              {status.inbox_document_count} scanned or emailed document
+              {status.inbox_document_count === 1 ? " is" : "s are"} still unsorted and{" "}
+              {status.inbox_document_count === 1 ? "isn't" : "aren't"} part of any month.{" "}
+              <Anchor component={Link} to="/purchases?tab=inbox">
+                Open the inbox
+              </Anchor>
+            </Alert>
+          )}
+          {status.unlinked_card_receipt_count > 0 && (
+            <Alert color="yellow" title="Card receipts without a card invoice">
+              {status.unlinked_card_receipt_count} card-paid receipt
+              {status.unlinked_card_receipt_count === 1 ? "" : "s"} this month
+              {status.unlinked_card_receipt_count === 1 ? " isn't" : " aren't"} linked to a card
+              invoice, so {status.unlinked_card_receipt_count === 1 ? "its" : "their"} real{" "}
+              {status.purchase_base_currency} amount is unknown.
+            </Alert>
+          )}
+
           <Text c="dimmed" size="sm">
             {status.invoice_count} invoice{status.invoice_count === 1 ? "" : "s"},{" "}
-            {status.expense_line_count} expense line{status.expense_line_count === 1 ? "" : "s"}
+            {status.expense_line_count} expense line{status.expense_line_count === 1 ? "" : "s"},{" "}
+            {status.purchase_count} purchase{status.purchase_count === 1 ? "" : "s"}
           </Text>
+          {status.purchase_count > 0 && (
+            <Text size="sm">
+              Purchases total:{" "}
+              <strong>
+                {status.purchase_total_provisional ? "~" : ""}
+                {formatHours(status.purchase_total_base)} {status.purchase_base_currency}
+              </strong>
+              {status.purchase_total_provisional && " (provisional until the bills are paid)"}
+              {status.purchase_unconverted_count > 0 &&
+                ` · ${status.purchase_unconverted_count} without a ${status.purchase_base_currency} amount yet, not included`}
+            </Text>
+          )}
 
           <Table>
             <Table.Thead>

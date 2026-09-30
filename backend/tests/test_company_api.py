@@ -181,3 +181,16 @@ async def test_only_admin_can_write_logo(
     )
 
     assert response.status_code == 403
+
+
+async def test_base_currency_is_settable_and_validated(
+    client: AsyncClient, make_user: UserFactory, auth_headers: AuthHeaders
+) -> None:
+    headers = auth_headers(await make_user(roles=ADMIN))
+
+    updated = await client.put("/api/v1/company", headers=headers, json={"base_currency": "EUR"})
+    lowercase = await client.put("/api/v1/company", headers=headers, json={"base_currency": "eur"})
+
+    assert updated.status_code == 200
+    assert updated.json()["base_currency"] == "EUR"
+    assert lowercase.status_code == 422

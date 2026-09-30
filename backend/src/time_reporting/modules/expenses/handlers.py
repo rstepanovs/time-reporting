@@ -11,6 +11,7 @@ from uuid import UUID
 from time_reporting.core.cqrs import Bus
 from time_reporting.modules.expenses.contracts import (
     AddExpenseAttachment,
+    AddExpenseLineWithAttachment,
     ApproveExpenseReport,
     AttachmentFileDTO,
     CountMonthReportsNotApproved,
@@ -36,6 +37,7 @@ from time_reporting.modules.expenses.contracts import (
     ListProjectMonthExpenseReports,
     ListSubmittedExpenseReports,
     LockProjectMonthExpenseReports,
+    RebilledExpenseDTO,
     ReturnExpenseReport,
     SaveExpenseReportLines,
     SetAttachmentLine,
@@ -138,6 +140,14 @@ class AddExpenseAttachmentHandler:
 
     async def handle(self, command: AddExpenseAttachment) -> ExpenseAttachmentDTO:
         return await self._service.add_attachment(command)
+
+
+class AddExpenseLineWithAttachmentHandler:
+    def __init__(self, bus: Bus) -> None:
+        self._service = ExpenseService(bus)
+
+    async def handle(self, command: AddExpenseLineWithAttachment) -> RebilledExpenseDTO:
+        return await self._service.add_line_with_attachment(command)
 
 
 class DeleteExpenseAttachmentHandler:

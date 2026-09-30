@@ -5,10 +5,12 @@ from time_reporting.modules.accounting import module as accounting_module
 from time_reporting.modules.admin import module as admin_module
 from time_reporting.modules.audit import module as audit_module
 from time_reporting.modules.company import module as company_module
+from time_reporting.modules.currency import module as currency_module
 from time_reporting.modules.customers import module as customers_module
 from time_reporting.modules.expenses import module as expenses_module
 from time_reporting.modules.invoices import module as invoices_module
 from time_reporting.modules.projects import module as projects_module
+from time_reporting.modules.purchases import module as purchases_module
 from time_reporting.modules.system import module as system_module
 from time_reporting.modules.timesheets import module as timesheets_module
 from time_reporting.modules.users import module as users_module
@@ -25,6 +27,8 @@ def build_registry() -> HandlerRegistry:
     work_calendar_module.register(registry)
     timesheets_module.register(registry)
     expenses_module.register(registry)
+    currency_module.register(registry)
+    purchases_module.register(registry)
     invoices_module.register(registry)
     accounting_module.register(registry)
     admin_module.register(registry)

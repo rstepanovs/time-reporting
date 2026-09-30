@@ -128,4 +128,37 @@ describe("AdminCompanyPage", () => {
 
     await screen.findByText("Logo is over the size limit");
   });
+
+  it("changes the base currency, upper-casing it", async () => {
+    vi.mocked(updateCompanySettings).mockResolvedValue({
+      ...testCompanySettings,
+      base_currency: "EUR",
+    });
+    renderApp("/admin/company");
+    await screen.findByDisplayValue(testCompanySettings.legal_name);
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Base currency" }), {
+      target: { value: "eur" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => {
+      expect(updateCompanySettings).toHaveBeenCalledWith(
+        expect.objectContaining({ base_currency: "EUR" }),
+      );
+    });
+  });
+
+  it("rejects a base currency that isn't a 3-letter code", async () => {
+    renderApp("/admin/company");
+    await screen.findByDisplayValue(testCompanySettings.legal_name);
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Base currency" }), {
+      target: { value: "SE" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await screen.findByText("Use a 3-letter currency code, e.g. SEK");
+    expect(updateCompanySettings).not.toHaveBeenCalled();
+  });
 });

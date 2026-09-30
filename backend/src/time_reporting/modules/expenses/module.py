@@ -3,6 +3,7 @@
 from time_reporting.core.cqrs import HandlerRegistry
 from time_reporting.modules.expenses.contracts import (
     AddExpenseAttachment,
+    AddExpenseLineWithAttachment,
     ApproveExpenseReport,
     CountMonthReportsNotApproved,
     CreateExpenseReport,
@@ -27,6 +28,7 @@ from time_reporting.modules.expenses.contracts import (
 )
 from time_reporting.modules.expenses.handlers import (
     AddExpenseAttachmentHandler,
+    AddExpenseLineWithAttachmentHandler,
     ApproveExpenseReportHandler,
     CountMonthReportsNotApprovedHandler,
     CreateExpenseReportHandler,
@@ -73,5 +75,6 @@ def register(registry: HandlerRegistry) -> None:
     registry.command(LockProjectMonthExpenseReports, LockProjectMonthExpenseReportsHandler)
     registry.command(UnlockProjectMonthExpenseReports, UnlockProjectMonthExpenseReportsHandler)
     registry.command(AddExpenseAttachment, AddExpenseAttachmentHandler)
+    registry.command(AddExpenseLineWithAttachment, AddExpenseLineWithAttachmentHandler)
     registry.command(DeleteExpenseAttachment, DeleteExpenseAttachmentHandler)
     registry.command(SetAttachmentLine, SetAttachmentLineHandler)

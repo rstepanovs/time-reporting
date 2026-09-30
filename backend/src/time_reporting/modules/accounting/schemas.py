@@ -25,3 +25,10 @@ class AccountantPackageStatusResponse(BaseModel):
     draft_invoice_count: int
     unapproved_expense_report_count: int
     uninvoiced_sent_period_count: int
+    purchase_count: int
+    purchase_base_currency: str
+    purchase_total_base: Decimal
+    purchase_total_provisional: bool
+    purchase_unconverted_count: int
+    inbox_document_count: int
+    unlinked_card_receipt_count: int

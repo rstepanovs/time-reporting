@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     attachment_dir: str = "attachments"
     attachment_max_bytes: int = Field(default=10_485_760, gt=0)
 
+    # Riksbank SWEA API, the source of daily exchange rates (`currency` module).
+    riksbank_api_url: str = "https://api.riksbank.se/swea/v1"
+
     cors_origins: list[str] = ["http://localhost:5173"]
 
     # Signs and verifies JWT access tokens; generate with `openssl rand -hex 32`.

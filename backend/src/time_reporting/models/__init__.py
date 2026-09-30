@@ -7,6 +7,7 @@ Alembic runs autogenerate.
 from time_reporting.db.base import Base
 from time_reporting.modules.audit.models import AuditEvent
 from time_reporting.modules.company.models import CompanySettings
+from time_reporting.modules.currency.models import ExchangeRate
 from time_reporting.modules.customers.models import Customer
 from time_reporting.modules.expenses.models import (
     ExpenseAttachment,
@@ -15,6 +16,7 @@ from time_reporting.modules.expenses.models import (
 )
 from time_reporting.modules.invoices.models import Invoice, InvoiceBillingPeriod, InvoiceLine
 from time_reporting.modules.projects.models import Project, ProjectBillingItem, ProjectMember
+from time_reporting.modules.purchases.models import PurchaseDocument
 from time_reporting.modules.timesheets.models import (
     TimeEntry,
     TimesheetRowComment,
@@ -28,6 +30,7 @@ __all__ = [
     "Base",
     "CompanySettings",
     "Customer",
+    "ExchangeRate",
     "ExpenseAttachment",
     "ExpenseReport",
     "ExpenseReportLine",
@@ -38,6 +41,7 @@ __all__ = [
     "Project",
     "ProjectBillingItem",
     "ProjectMember",
+    "PurchaseDocument",
     "TimeEntry",
     "TimesheetRowComment",
     "TimesheetWeek",

@@ -43,6 +43,11 @@ class AuditAction(StrEnum):
     INVOICE_ISSUED = "invoice.issued"
     INVOICE_PAID = "invoice.paid"
     INVOICE_VOIDED = "invoice.voided"
+    PURCHASE_REGISTERED = "purchase.registered"
+    PURCHASE_PAID = "purchase.paid"
+    PURCHASE_UNPAID = "purchase.unpaid"
+    PURCHASE_DISCARDED = "purchase.discarded"
+    PURCHASE_REBILLED = "purchase.rebilled"
 
 
 # --- DTOs ---

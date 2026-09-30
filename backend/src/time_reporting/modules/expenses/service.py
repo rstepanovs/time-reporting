@@ -17,6 +17,7 @@ from time_reporting.modules.audit.contracts import AuditAction, RecordAuditEvent
 from time_reporting.modules.company.contracts import GetCompanySettings
 from time_reporting.modules.expenses.contracts import (
     AddExpenseAttachment,
+    AddExpenseLineWithAttachment,
     ApproveExpenseReport,
     AttachmentFileDTO,
     AttachmentNotFoundError,
@@ -40,6 +41,7 @@ from time_reporting.modules.expenses.contracts import (
     GetAttachmentPath,
     InvalidExpenseStatusTransitionError,
     LockProjectMonthExpenseReports,
+    RebilledExpenseDTO,
     ReturnExpenseReport,
     SaveExpenseReportLines,
     SetAttachmentLine,
@@ -62,6 +64,7 @@ from time_reporting.modules.projects.contracts import (
     GetProjectBillingItemsByIds,
     GetProjectById,
     ListMemberProjectsWithBillingItems,
+    ListProjectBillingItems,
     ProjectBillingItemDTO,
     ProjectOptionDTO,
 )
@@ -214,7 +217,7 @@ class ExpenseService:
         report_row = await self._get_own_report(command.report_id, command.actor_id)
         self._ensure_editable(report_row)
 
-        open_items = await self._open_items(report_row.user_id, report_row.project_id)
+        open_items = await self._open_items(report_row)
 
         resolved: list[tuple[ExpenseReportLine | None, ExpenseLineChange]] = []
         for change in command.lines:
@@ -378,28 +381,103 @@ class ExpenseService:
         self._ensure_editable(report_row)
         if command.line_id is not None:
             await self._resolve_own_line(report_row.id, command.line_id)
+        return await self._store_attachment(
+            report_row,
+            actor_id=command.actor_id,
+            file_name=command.file_name,
+            content_type=command.content_type,
+            content=command.content,
+            line_id=command.line_id,
+        )
 
-        # Raised here too (not just inside `storage.save`) so a rejected upload never computes a
-        # hash or touches the filesystem at all.
+    async def add_line_with_attachment(
+        self, command: AddExpenseLineWithAttachment
+    ) -> RebilledExpenseDTO:
+        period_start, period_end = _month_bounds(command.year, command.month)
+        project = await self._bus.query(GetProjectById(project_id=command.project_id))
+        if project is None or not project.is_active:
+            raise ExpenseProjectClosedError(command.project_id)
+        items = await self._bus.query(ListProjectBillingItems(project_id=command.project_id))
+        if not any(
+            item.id == command.line.billing_item_id and item.unit is BillingUnit.AMOUNT
+            for item in items
+        ):
+            raise ExpenseBillingItemNotFoundError(command.line.billing_item_id)
+        if not period_start <= command.line.expense_date <= period_end:
+            raise ExpenseDateOutsidePeriodError(command.line.expense_date, period_start, period_end)
+        # Checked before anything is written, so a rejected file leaves no report behind.
         self._storage.ensure_allowed(
             content_type=command.content_type, size_bytes=len(command.content)
         )
-        sha256 = hashlib.sha256(command.content).hexdigest()
-        storage_key = self._storage.save(content=command.content, content_type=command.content_type)
+
+        report_row = await self._reports.get_by_period(
+            user_id=command.actor_id, project_id=command.project_id, period_start=period_start
+        )
+        if report_row is None:
+            report_row = ExpenseReport(
+                user_id=command.actor_id,
+                project_id=command.project_id,
+                period_start=period_start,
+                period_end=period_end,
+                status=ExpenseReportStatus.DRAFT,
+                company_purchase=True,
+            )
+            await self._reports.save(report_row)
+        else:
+            self._ensure_editable(report_row)
+
+        line = ExpenseReportLine(
+            report_id=report_row.id,
+            billing_item_id=command.line.billing_item_id,
+            expense_date=command.line.expense_date,
+            amount=command.line.amount,
+            description=command.line.description,
+            vendor=command.line.vendor,
+            document_no=command.line.document_no,
+            position=await self._lines.next_position(report_row.id),
+        )
+        await self._lines.save(line)
+        attachment = await self._store_attachment(
+            report_row,
+            actor_id=command.actor_id,
+            file_name=command.file_name,
+            content_type=command.content_type,
+            content=command.content,
+            line_id=line.id,
+        )
+        return RebilledExpenseDTO(
+            report_id=report_row.id, line_id=line.id, attachment_id=attachment.id
+        )
+
+    async def _store_attachment(
+        self,
+        report_row: ExpenseReport,
+        *,
+        actor_id: UUID,
+        file_name: str,
+        content_type: str,
+        content: bytes,
+        line_id: UUID | None,
+    ) -> ExpenseAttachmentDTO:
+        # Raised here too (not just inside `storage.save`) so a rejected upload never computes a
+        # hash or touches the filesystem at all.
+        self._storage.ensure_allowed(content_type=content_type, size_bytes=len(content))
+        sha256 = hashlib.sha256(content).hexdigest()
+        storage_key = self._storage.save(content=content, content_type=content_type)
 
         attachment = ExpenseAttachment(
             report_id=report_row.id,
-            line_id=command.line_id,
-            file_name=command.file_name,
-            content_type=command.content_type,
-            size_bytes=len(command.content),
+            line_id=line_id,
+            file_name=file_name,
+            content_type=content_type,
+            size_bytes=len(content),
             sha256=sha256,
             storage_key=storage_key,
-            uploaded_by_id=command.actor_id,
+            uploaded_by_id=actor_id,
         )
         await self._attachments.save(attachment)
 
-        uploader = await self._bus.query(GetUserById(user_id=command.actor_id))
+        uploader = await self._bus.query(GetUserById(user_id=actor_id))
         return ExpenseAttachmentDTO(
             id=attachment.id,
             line_id=attachment.line_id,
@@ -527,10 +605,21 @@ class ExpenseService:
         if option is None or not option.billing_items:
             raise ExpenseProjectClosedError(project_id)
 
-    async def _open_items(
-        self, user_id: UUID, project_id: UUID
-    ) -> dict[UUID, ProjectBillingItemDTO]:
-        option = await self._matching_option(user_id, project_id)
+    async def _open_items(self, report_row: ExpenseReport) -> dict[UUID, ProjectBillingItemDTO]:
+        if report_row.company_purchase:
+            # Owned by whoever rebilled a company purchase, not necessarily a project member: the
+            # project's own active `amount` items apply (and only while the project is active).
+            project = await self._bus.query(GetProjectById(project_id=report_row.project_id))
+            if project is None or not project.is_active:
+                return {}
+            return {
+                item.id: item
+                for item in await self._bus.query(
+                    ListProjectBillingItems(project_id=report_row.project_id)
+                )
+                if item.unit is BillingUnit.AMOUNT
+            }
+        option = await self._matching_option(report_row.user_id, report_row.project_id)
         if option is None:
             return {}
         return {item.id: item for item in option.billing_items}

@@ -143,10 +143,11 @@ docker compose up -d
   newest `BACKUP_RETENTION_COUNT` (default 14) are kept.
 - Alongside the dump, it also writes `time-reporting-<same timestamp>-<same
   revision>-attachments.tar.gz` — a tar of `attachment_dir` (the expense-report receipt/invoice
-  scans, `/var/lib/time-reporting/attachments` in Compose, the `attachments` volume) — so one
+  scans and, in its `purchases/` subdirectory, the purchase documents;
+  `/var/lib/time-reporting/attachments` in Compose, the `attachments` volume) — so one
   backup operation covers both, kept and pruned together. Skipped (no second file, and
   `attachments_size_bytes` is `null` in the API/CLI output) only if `attachment_dir` has never
-  been created, i.e. no attachment has ever been uploaded.
+  been created, i.e. no attachment or purchase document has ever been uploaded.
 - The `backup` service runs it on a loop, every `BACKUP_INTERVAL_HOURS` (default 24h); `migrate`
   also runs one (`--if-pending-migrations`, skipped if the database isn't migrated yet or is
   already at head) before every upgrade.
@@ -168,8 +169,8 @@ docker compose up -d
 --no-owner`) replaces the current database's contents with the backup's, and — if
 `<file minus .dump>-attachments.tar.gz` sits next to it — replaces the whole contents of
 `attachment_dir` with that archive's too. If the archive is missing, the restore still proceeds
-(only a warning is logged); any `expense_attachments` row in the restored database then points at
-a file that doesn't exist, which the app already tolerates (the download/list views just treat it
+(only a warning is logged); any `expense_attachments` or `purchase_documents` row in the restored
+database then points at a file that doesn't exist, which the app already tolerates (the download/list views just treat it
 as gone, the same as a manually deleted upload). It is **CLI-only**, deliberately not exposed over
 HTTP or from the admin UI — see [Rollback](#rollback) for the full sequence (stop `backend` first,
 so nothing writes mid-restore). Without `--yes` it refuses to run. The command also prints the
@@ -178,11 +179,22 @@ about to run before continuing.
 
 ## Orphaned attachment files
 
-Uploading an expense-report attachment writes its file, then its database row, in that order —
-not one transaction. If a command fails or the process is killed between the two, the file is
+Uploading an expense-report attachment or a purchase document writes its file, then its database
+row, in that order — not one transaction. If a command fails or the process is killed between the two, the file is
 never referenced by any row. `time-reporting prune-attachments` (add `--dry-run` to only list what
 it would remove) deletes every file under `attachment_dir` that no `expense_attachments` row
+references, and every file under `attachment_dir/purchases` that no `purchase_documents` row
 references; safe to run at any time, including on a schedule alongside backups.
+
+## Exchange rates (Riksbank)
+
+Purchases in a foreign currency are converted at the Riksbank's daily rate
+(`https://api.riksbank.se/swea/v1`, anonymous; override with `RIKSBANK_API_URL`). The `backend`
+container therefore needs outbound HTTPS to `api.riksbank.se`. Each rate is fetched once and cached
+in `exchange_rates`; the anonymous API allows only a few requests per minute, so a burst of
+registrations in many new currencies/dates can see "No exchange rate available" — the document is
+still registered, with the base-currency amount left empty to type in, or simply retried a minute
+later. Changing `company.base_currency` does not restate documents already converted.
 
 ## pgAdmin
 

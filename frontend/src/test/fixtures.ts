@@ -20,6 +20,7 @@ import type {
   InvoiceSummary,
 } from "@/invoices/api";
 import type { BillingItem, Project, ProjectMember } from "@/projects/api";
+import type { PurchaseDocument, PurchasesSummary } from "@/purchases/api";
 import type { Backup, BackupList, SystemConfig, SystemStatus } from "@/system/api";
 import type {
   BillingPeriodListItem,
@@ -246,6 +247,7 @@ export const testCompanySettings: CompanySettings = {
   customer_number_prefix: "",
   next_customer_number: 1,
   allow_self_review: false,
+  base_currency: "SEK",
   has_logo: false,
   updated_at: "2026-09-16T10:00:00Z",
 };
@@ -916,6 +918,125 @@ export const testInvoicingSummary: InvoicingSummary = {
   overdue_count: 1,
 };
 
+export const testPurchaseInboxDocument: PurchaseDocument = {
+  id: "a1a1a1a1-1111-4111-8111-111111111111",
+  stage: "inbox",
+  kind: null,
+  vendor: null,
+  document_no: null,
+  description: null,
+  document_date: null,
+  due_date: null,
+  payment_status: null,
+  paid_on: null,
+  payment_method: null,
+  card_invoice_id: null,
+  amount: null,
+  currency: null,
+  vat_amount: null,
+  amount_base: null,
+  exchange_rate: null,
+  rate_date: null,
+  rate_source: null,
+  amount_base_final: false,
+  file_name: "scan-001.pdf",
+  content_type: "application/pdf",
+  size_bytes: 120_000,
+  source: "email",
+  email_from: "scanner@acme.example",
+  email_subject: "Scan from MFP",
+  received_at: "2026-09-25T08:00:00Z",
+  rebilled_expense_line_id: null,
+  rebilled_expense_report_id: null,
+  created_at: "2026-09-25T08:00:00Z",
+  updated_at: "2026-09-25T08:00:00Z",
+};
+
+export const testPurchaseInvoice: PurchaseDocument = {
+  ...testPurchaseInboxDocument,
+  id: "b2b2b2b2-2222-4222-8222-222222222222",
+  stage: "registered",
+  kind: "invoice",
+  vendor: "Hosting AB",
+  document_no: "F-100",
+  document_date: "2026-08-20",
+  due_date: "2026-09-01",
+  payment_status: "unpaid",
+  amount: "100.00",
+  currency: "EUR",
+  amount_base: "1126.45",
+  exchange_rate: "11.26450000",
+  rate_date: "2026-08-20",
+  rate_source: "riksbank",
+  amount_base_final: false,
+  file_name: "hosting.pdf",
+  source: "upload",
+  email_from: null,
+  email_subject: null,
+};
+
+export const testPurchaseReceipt: PurchaseDocument = {
+  ...testPurchaseInvoice,
+  id: "c3c3c3c3-3333-4333-8333-333333333333",
+  kind: "receipt",
+  vendor: "Hotel AB",
+  document_no: null,
+  due_date: null,
+  payment_status: "paid",
+  paid_on: "2026-09-25",
+  payment_method: "bank_transfer",
+  amount_base: "1129.00",
+  exchange_rate: "11.29000000",
+  rate_date: "2026-09-25",
+  amount_base_final: true,
+  file_name: "hotel.pdf",
+};
+
+export const testCardInvoice: PurchaseDocument = {
+  ...testPurchaseInvoice,
+  id: "e5e5e5e5-5555-4555-8555-555555555555",
+  kind: "card_invoice",
+  vendor: "Bank Card",
+  document_no: "K-1",
+  document_date: "2026-10-01",
+  due_date: "2026-10-25",
+  amount: "300.00",
+  currency: "SEK",
+  amount_base: "300.00",
+  exchange_rate: "1.00000000",
+  rate_date: null,
+  rate_source: "none",
+  file_name: "card.pdf",
+};
+
+export const testCardReceipt: PurchaseDocument = {
+  ...testPurchaseReceipt,
+  id: "f6f6f6f6-6666-4666-8666-666666666666",
+  vendor: "Cafe",
+  document_date: "2026-09-20",
+  payment_method: "card",
+  amount: "10.00",
+  currency: "SEK",
+  amount_base: "112.50",
+  exchange_rate: "11.25000000",
+  rate_date: null,
+  rate_source: "card_invoice",
+  amount_base_final: true,
+  card_invoice_id: testCardInvoice.id,
+  file_name: "cafe.pdf",
+};
+
+export const testPurchasesSummary: PurchasesSummary = {
+  base_currency: "SEK",
+  inbox_count: 1,
+  unpaid_count: 0,
+  unpaid_total_base: "0.00",
+  unpaid_provisional: false,
+  unpaid_unconverted_count: 0,
+  overdue_count: 0,
+  due_soon_count: 0,
+};
+
 export const testAccountantPackageStatus: AccountantPackageStatus = {
   year: 2026,
   month: 9,
@@ -925,6 +1046,13 @@ export const testAccountantPackageStatus: AccountantPackageStatus = {
   draft_invoice_count: 0,
   unapproved_expense_report_count: 0,
   uninvoiced_sent_period_count: 0,
+  purchase_count: 0,
+  purchase_base_currency: "SEK",
+  purchase_total_base: "0.00",
+  purchase_total_provisional: false,
+  purchase_unconverted_count: 0,
+  inbox_document_count: 0,
+  unlinked_card_receipt_count: 0,
 };
 
 export const testAuditEvent: AuditEvent = {

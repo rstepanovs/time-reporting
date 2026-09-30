@@ -47,6 +47,20 @@ class AccountantPackageStatusDTO:
     unapproved_expense_report_count: int
     # A billing period sent within this month that no invoice covers yet.
     uninvoiced_sent_period_count: int
+    # Purchases (the company's own costs): registered documents dated in the month, counting a
+    # card invoice and each receipt not settled by one (the receipts under a card invoice are
+    # documentation for it, not extra spend). The total is in ``purchase_base_currency`` and
+    # provisional while any term is still an estimate; documents with no base amount yet are
+    # counted in ``purchase_unconverted_count`` and left out of it.
+    purchase_count: int
+    purchase_base_currency: str
+    purchase_total_base: Decimal
+    purchase_total_provisional: bool
+    purchase_unconverted_count: int
+    # Not dated, so not part of the month — but the accountant should know they are waiting.
+    inbox_document_count: int
+    # Card-paid receipts of the month not linked to a card invoice: their real amount is unknown.
+    unlinked_card_receipt_count: int
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

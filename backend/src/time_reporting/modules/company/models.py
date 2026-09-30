@@ -71,6 +71,10 @@ class CompanySettings(TimestampMixin, Base):
     # other company keeps today's "nobody reviews their own work" rule.
     allow_self_review: Mapped[bool] = mapped_column(default=False, server_default=false())
 
+    # The currency the company books in; every purchase document is also stated in it (see
+    # purchases.CLAUDE.md). Changing it doesn't restate documents already converted.
+    base_currency: Mapped[str] = mapped_column(String(3), default="SEK", server_default="SEK")
+
     # Stored as bytea, so `pg_dump` backups already cover it — no new Docker volume. Size and
     # content type are validated in CompanyService, not by a database constraint (mirrors
     # expenses.ExpenseAttachment, which validates size the same way).

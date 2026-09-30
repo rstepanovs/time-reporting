@@ -41,6 +41,18 @@ handoff runs the dependency the other way (see "Billing handoff and locking" bel
 - Editability: `ExpenseReportNotEditableError` when the status isn't `draft`/`returned`;
   `ExpenseReportLockedError` when `locked_at` is set. Both gate line changes and attachment writes.
 
+## Company-purchase reports
+
+`AddExpenseLineWithAttachment(project_id, year, month, actor_id, line, file…)` is how `purchases`
+rebills a company cost: one line plus its receipt file, linked, in one transaction, on the
+actor's own report for the project-month. A missing report is created as a `draft` with
+`company_purchase = true`; an existing one (of any origin) must still be editable and unlocked.
+The actor — typically the accountant — **needn't be a project member**: for a `company_purchase`
+report `_open_items` takes the project's own active `amount` items instead of the member's
+options, so the owner can keep editing, attaching and submitting it like any report (and a manager
+approves it, or the owner does if `allow_self_review` is on). Membership is otherwise still required
+to create or edit a report.
+
 ## Workflow
 
 `ExpenseReportStatus`: `draft` → `submitted` → `approved`/`returned`, the same shape and rules as
@@ -68,9 +80,11 @@ report owner's; re-query with `viewer_id=<owner>` to see the owner's view. Advis
 
 - `ExpenseAttachment` metadata (`file_name`, `content_type`, `size_bytes`, `sha256`,
   `storage_key`, `uploaded_by_id`, `line_id`) lives in the database; the file itself lives on disk
-  under `settings.attachment_dir`, managed by `storage.py: ExpenseAttachmentStorage` — modelled
-  closely on `system.backup_service.BackupService` (dotfile-then-rename writes, a filename/key
-  pattern that doubles as path-traversal validation). Attachments hang off the **report** as a
+  under `settings.attachment_dir`, managed by `storage.py: ExpenseAttachmentStorage` — a thin
+  wrapper over the shared `core/file_storage.py: FileStorage` (dotfile-then-rename writes, a key
+  pattern that doubles as path-traversal validation) that fixes the allowed types and maps its
+  errors to `Attachment*Error`. `prune_orphans` only looks at `<hex>/<file>` keys, so the
+  `purchases` module's files under `<attachment_dir>/purchases/` are never swept by it. Attachments hang off the **report** as a
   whole; `line_id` (nullable, `ON DELETE SET NULL` — deleting a line unlinks its receipts rather
   than deleting them) optionally says which of the report's own lines a receipt substantiates. It
   is the one field a write ever changes after creation, via `SetAttachmentLine` — everything else

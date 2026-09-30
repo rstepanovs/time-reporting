@@ -26,6 +26,23 @@ _EXPENSE_HEADERS = (
 )
 
 
+_PURCHASE_HEADERS = (
+    "File",
+    "Date",
+    "Kind",
+    "Vendor",
+    "Document no.",
+    "Description",
+    "Amount",
+    "Currency",
+    "Base amount",
+    "Provisional",
+    "Status",
+    "Payment method",
+    "Card invoice",
+)
+
+
 def _write_header_row(sheet: Worksheet, headers: tuple[str, ...]) -> None:
     sheet.append(headers)
     for cell in sheet[1]:
@@ -68,6 +85,27 @@ def build_summary_workbook(content: PackageContent) -> Workbook:
                 expense_row.currency,
                 receipt,
                 "Yes" if expense_row.is_internal else "No",
+            )
+        )
+
+    purchases_sheet = workbook.create_sheet("Purchases")
+    _write_header_row(purchases_sheet, _PURCHASE_HEADERS)
+    for purchase_row in content.purchase_rows:
+        purchases_sheet.append(
+            (
+                f"{purchase_row.file_number:03d}" if purchase_row.file_number else "",
+                purchase_row.document_date,
+                purchase_row.kind,
+                purchase_row.vendor,
+                purchase_row.document_no,
+                purchase_row.description,
+                purchase_row.amount,
+                purchase_row.currency,
+                purchase_row.amount_base,
+                "Yes" if purchase_row.provisional else "",
+                purchase_row.status,
+                purchase_row.payment_method,
+                purchase_row.card_invoice,
             )
         )
 

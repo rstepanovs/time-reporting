@@ -32,6 +32,11 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   "invoice.issued": "Invoice issued",
   "invoice.paid": "Invoice marked paid",
   "invoice.voided": "Invoice voided",
+  "purchase.registered": "Purchase registered",
+  "purchase.paid": "Purchase marked paid",
+  "purchase.unpaid": "Purchase marked unpaid",
+  "purchase.discarded": "Purchase discarded",
+  "purchase.rebilled": "Purchase rebilled",
 };
 
 const ACTION_OPTIONS = (Object.keys(ACTION_LABELS) as AuditAction[]).map((value) => ({
