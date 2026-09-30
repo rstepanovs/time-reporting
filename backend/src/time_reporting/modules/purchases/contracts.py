@@ -21,6 +21,9 @@ ALLOWED_PURCHASE_CONTENT_TYPES: frozenset[str] = frozenset(
 
 DEFAULT_LIST_LIMIT = 200
 
+# How far ahead "due soon" looks, in days, counting today.
+DUE_SOON_DAYS = 7
+
 
 class PurchaseStage(StrEnum):
     INBOX = "inbox"
@@ -148,6 +151,35 @@ class CardInvoiceDTO:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class PurchasesSummaryDTO:
+    """What needs attention, for the dashboard.
+
+    The unpaid figures cover registered invoices and card invoices not yet paid. Their total is in
+    ``base_currency`` and is *provisional* when ``unpaid_provisional`` — at least one amount is
+    still the document-date estimate, not a final one; ``unpaid_unconverted_count`` counts unpaid
+    documents with no base-currency amount at all (left out of the total).
+    """
+
+    base_currency: str
+    inbox_count: int
+    unpaid_count: int
+    unpaid_total_base: Decimal
+    unpaid_provisional: bool
+    unpaid_unconverted_count: int
+    overdue_count: int
+    due_soon_count: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class MonthPurchaseDTO:
+    """One registered document of a month. A card invoice carries the receipts it settled
+    (whatever their own dates); those receipts are not listed on their own."""
+
+    document: PurchaseDocumentDTO
+    card_receipts: tuple[PurchaseDocumentDTO, ...]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class CardReceiptLink:
     """One receipt to link, with its amount in the base currency as printed on the card invoice."""
 
@@ -213,6 +245,21 @@ class ListPurchaseDocuments(Query[tuple[PurchaseDocumentDTO, ...]]):
 @dataclass(frozen=True, slots=True, kw_only=True)
 class GetPurchaseDocument(Query[PurchaseDocumentDTO]):
     document_id: UUID
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GetPurchasesSummary(Query[PurchasesSummaryDTO]):
+    today: date
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ListMonthPurchases(Query[tuple[MonthPurchaseDTO, ...]]):
+    """Registered documents whose ``document_date`` is in the month, oldest first, with card
+    receipts grouped under their card invoice. A card receipt not linked to any card invoice is
+    listed on its own (with no base-currency amount)."""
+
+    year: int
+    month: int
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

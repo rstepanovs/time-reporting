@@ -129,3 +129,23 @@ class CardInvoiceResponse(BaseModel):
     receipts: list[PurchaseDocumentResponse]
     receipts_total_base: Decimal
     difference_base: Decimal | None
+
+
+class PurchasesSummaryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    base_currency: str
+    inbox_count: int
+    unpaid_count: int
+    unpaid_total_base: Decimal
+    unpaid_provisional: bool
+    unpaid_unconverted_count: int
+    overdue_count: int
+    due_soon_count: int
+
+
+class MonthPurchaseResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    document: PurchaseDocumentResponse
+    card_receipts: list[PurchaseDocumentResponse]

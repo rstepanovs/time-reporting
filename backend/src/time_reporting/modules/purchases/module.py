@@ -7,7 +7,9 @@ from time_reporting.modules.purchases.contracts import (
     GetCardInvoice,
     GetPurchaseDocument,
     GetPurchaseFilePath,
+    GetPurchasesSummary,
     LinkCardReceipts,
+    ListMonthPurchases,
     ListPurchaseDocuments,
     ListPurchaseStorageKeys,
     ListUnlinkedCardReceipts,
@@ -25,7 +27,9 @@ from time_reporting.modules.purchases.handlers import (
     GetCardInvoiceHandler,
     GetPurchaseDocumentHandler,
     GetPurchaseFilePathHandler,
+    GetPurchasesSummaryHandler,
     LinkCardReceiptsHandler,
+    ListMonthPurchasesHandler,
     ListPurchaseDocumentsHandler,
     ListPurchaseStorageKeysHandler,
     ListUnlinkedCardReceiptsHandler,
@@ -45,6 +49,8 @@ def register(registry: HandlerRegistry) -> None:
     registry.query(GetPurchaseFilePath, GetPurchaseFilePathHandler)
     registry.query(ListPurchaseStorageKeys, ListPurchaseStorageKeysHandler)
     registry.query(GetCardInvoice, GetCardInvoiceHandler)
+    registry.query(GetPurchasesSummary, GetPurchasesSummaryHandler)
+    registry.query(ListMonthPurchases, ListMonthPurchasesHandler)
     registry.query(ListUnlinkedCardReceipts, ListUnlinkedCardReceiptsHandler)
 
     registry.command(AddPurchaseDocument, AddPurchaseDocumentHandler)

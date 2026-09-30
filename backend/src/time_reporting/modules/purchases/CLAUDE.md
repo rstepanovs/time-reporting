@@ -85,6 +85,19 @@ amount is open until a `card_invoice` (registered) settles it.
   into another kind; a linked receipt stays a card-paid receipt (edits to its other fields keep the
   card amount) and discarding one unlinks it first.
 
+## Summary and month list
+
+- `GetPurchasesSummary(today)` → `PurchasesSummaryDTO` for the dashboard: `inbox_count`, and over
+  registered unpaid invoices/card invoices `unpaid_count`, `unpaid_total_base` (in
+  `base_currency`; `unpaid_provisional` when any term is still an estimate, and
+  `unpaid_unconverted_count` documents with no base amount are left out of it), `overdue_count`
+  (`due_date < today`) and `due_soon_count` (due within `DUE_SOON_DAYS` = 7 days, today included).
+- `ListMonthPurchases(year, month)` for `accounting`: registered documents dated in the month and
+  not linked to a card invoice, oldest first, each card invoice carrying its `card_receipts` (by
+  link, whatever their own dates — a receipt belongs to the month of the card invoice that settled
+  it). An unlinked card receipt is listed on its own with no base amount; inbox documents (no date)
+  never appear.
+
 ## HTTP API
 
 Under `/purchases`, all `AccountantDep`: `POST /documents` (multipart, `files` — several at once;
@@ -93,7 +106,7 @@ every file's type and size is checked before any is stored, so one bad file reje
 `POST /documents/{id}/discard` (409 on a state error), `POST /documents/{id}/register` and `PUT
 /documents/{id}` (`PurchaseDetailsRequest`; 400 on a rule error, 409 on state), `POST
 /documents/{id}/return-to-inbox`, `POST /documents/{id}/paid` (`paid_on`, `payment_method`,
-optional `amount_base`) `POST /documents/{id}/unpaid`; for card invoices `GET /card-receipts/unlinked?date_from=&date_to=`,
+optional `amount_base`) `POST /documents/{id}/unpaid`; `GET /summary?today=`, `GET /months/{year}/{month}`; for card invoices `GET /card-receipts/unlinked?date_from=&date_to=`,
 `GET /documents/{id}/card-invoice`, `POST /documents/{id}/card-receipts` (`{links: [{receipt_id,
 amount_base}]}`), `PUT /documents/{id}/card-amount` and `POST /documents/{id}/unlink-card` (the last
 two take the *receipt's* id). `frontend/nginx.conf`'s 12 MB body limit

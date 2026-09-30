@@ -4,7 +4,7 @@ from datetime import date
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, File, HTTPException, Path, Query, UploadFile, status
 from fastapi.responses import FileResponse
 
 from time_reporting.api.deps import BusDep
@@ -19,7 +19,9 @@ from time_reporting.modules.purchases.contracts import (
     GetCardInvoice,
     GetPurchaseDocument,
     GetPurchaseFilePath,
+    GetPurchasesSummary,
     LinkCardReceipts,
+    ListMonthPurchases,
     ListPurchaseDocuments,
     ListUnlinkedCardReceipts,
     MarkPurchasePaid,
@@ -42,8 +44,10 @@ from time_reporting.modules.purchases.schemas import (
     CardReceiptAmountRequest,
     LinkCardReceiptsRequest,
     MarkPaidRequest,
+    MonthPurchaseResponse,
     PurchaseDetailsRequest,
     PurchaseDocumentResponse,
+    PurchasesSummaryResponse,
     UpdatePurchaseRequest,
 )
 
@@ -382,3 +386,25 @@ async def unlink_card_receipt(
     except PurchaseDocumentStateError as exc:
         raise _conflict(exc) from exc
     return PurchaseDocumentResponse.model_validate(receipt)
+
+
+@router.get("/summary", summary="Inbox and unpaid figures for the dashboard")
+async def get_purchases_summary(
+    _: AccountantDep, bus: BusDep, today: date | None = None
+) -> PurchasesSummaryResponse:
+    summary = await bus.query(GetPurchasesSummary(today=today or date.today()))
+    return PurchasesSummaryResponse.model_validate(summary)
+
+
+@router.get(
+    "/months/{year}/{month}",
+    summary="Registered documents dated in a month, card receipts under their card invoice",
+)
+async def list_month_purchases(
+    year: Annotated[int, Path(ge=2000, le=2100)],
+    month: Annotated[int, Path(ge=1, le=12)],
+    _: AccountantDep,
+    bus: BusDep,
+) -> list[MonthPurchaseResponse]:
+    entries = await bus.query(ListMonthPurchases(year=year, month=month))
+    return [MonthPurchaseResponse.model_validate(entry) for entry in entries]

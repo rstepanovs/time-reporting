@@ -299,11 +299,11 @@ sorting suggestions (deferred).
 
 #### A6 — backend `purchases`: summary and month list
 
-- [ ] `GetPurchasesSummary(today)` — inbox count, unpaid count and SEK total (provisional marked),
+- [x] `GetPurchasesSummary(today)` — inbox count, unpaid count and SEK total (provisional marked),
       overdue, due within 7 days.
-- [ ] `ListMonthPurchases(year, month)` for `accounting` (registered documents with
+- [x] `ListMonthPurchases(year, month)` for `accounting` (registered documents with
       `document_date` in the month, card receipts grouped under their card invoice).
-- [ ] Tests for both.
+- [x] Tests for both.
 
 #### A7 — backend: rebilling a purchase
 

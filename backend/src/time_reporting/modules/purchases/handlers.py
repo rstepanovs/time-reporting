@@ -3,9 +3,13 @@
 Handlers translate between bus messages and the service/repository and never return ORM entities.
 """
 
+import calendar
+from datetime import date
 from decimal import Decimal
+from uuid import UUID
 
 from time_reporting.core.cqrs import Bus
+from time_reporting.modules.company.contracts import GetCompanySettings
 from time_reporting.modules.purchases.contracts import (
     AddPurchaseDocument,
     CardInvoiceDTO,
@@ -13,14 +17,19 @@ from time_reporting.modules.purchases.contracts import (
     GetCardInvoice,
     GetPurchaseDocument,
     GetPurchaseFilePath,
+    GetPurchasesSummary,
     LinkCardReceipts,
+    ListMonthPurchases,
     ListPurchaseDocuments,
     ListPurchaseStorageKeys,
     ListUnlinkedCardReceipts,
     MarkPurchasePaid,
     MarkPurchaseUnpaid,
+    MonthPurchaseDTO,
     PurchaseDocumentDTO,
     PurchaseFileDTO,
+    PurchaseKind,
+    PurchasesSummaryDTO,
     RegisterPurchaseDocument,
     ReturnPurchaseToInbox,
     UnlinkCardReceipt,
@@ -172,3 +181,41 @@ class UnlinkCardReceiptHandler(_Handler):
 class UpdateCardReceiptAmountHandler(_Handler):
     async def handle(self, command: UpdateCardReceiptAmount) -> PurchaseDocumentDTO:
         return to_dto(await self._service.update_card_receipt_amount(command))
+
+
+class GetPurchasesSummaryHandler(_Handler):
+    async def handle(self, query: GetPurchasesSummary) -> PurchasesSummaryDTO:
+        figures = await self._documents.unpaid_figures(query.today)
+        company = await self._bus.query(GetCompanySettings())
+        return PurchasesSummaryDTO(
+            base_currency=company.base_currency,
+            inbox_count=await self._documents.count_inbox(),
+            unpaid_count=figures.unpaid_count,
+            unpaid_total_base=figures.total_base,
+            unpaid_provisional=figures.provisional_count > 0,
+            unpaid_unconverted_count=figures.unconverted_count,
+            overdue_count=figures.overdue_count,
+            due_soon_count=figures.due_soon_count,
+        )
+
+
+class ListMonthPurchasesHandler(_Handler):
+    async def handle(self, query: ListMonthPurchases) -> tuple[MonthPurchaseDTO, ...]:
+        last_day = calendar.monthrange(query.year, query.month)[1]
+        documents = await self._documents.list_registered_in_range(
+            date(query.year, query.month, 1), date(query.year, query.month, last_day)
+        )
+        receipts = await self._documents.list_receipts_of(
+            [d.id for d in documents if d.kind is PurchaseKind.CARD_INVOICE]
+        )
+        by_invoice: dict[UUID, list[PurchaseDocumentDTO]] = {}
+        for receipt in receipts:
+            assert receipt.card_invoice_id is not None
+            by_invoice.setdefault(receipt.card_invoice_id, []).append(to_dto(receipt))
+        return tuple(
+            MonthPurchaseDTO(
+                document=to_dto(document),
+                card_receipts=tuple(by_invoice.get(document.id, ())),
+            )
+            for document in documents
+        )

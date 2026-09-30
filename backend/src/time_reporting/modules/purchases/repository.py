@@ -2,7 +2,9 @@
 transactions."""
 
 from collections.abc import Sequence
-from datetime import date
+from datetime import date, timedelta
+from decimal import Decimal
+from typing import NamedTuple
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -10,13 +12,24 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from time_reporting.modules.purchases.contracts import (
+    DUE_SOON_DAYS,
     PaymentMethod,
+    PaymentStatus,
     PurchaseKind,
     PurchaseStage,
 )
 from time_reporting.modules.purchases.models import PurchaseDocument
 
 _EXTERNAL_REF_CONSTRAINT = "uq_purchase_documents_external_ref"
+
+
+class UnpaidFigures(NamedTuple):
+    unpaid_count: int
+    total_base: Decimal
+    provisional_count: int
+    unconverted_count: int
+    overdue_count: int
+    due_soon_count: int
 
 
 class ExternalRefTakenError(Exception):
@@ -100,4 +113,66 @@ class PurchaseDocumentRepository:
         if date_to is not None:
             statement = statement.where(PurchaseDocument.document_date <= date_to)
         result = await self._session.scalars(statement)
+        return result.all()
+
+    async def count_inbox(self) -> int:
+        result = await self._session.scalar(
+            select(func.count())
+            .select_from(PurchaseDocument)
+            .where(PurchaseDocument.stage == PurchaseStage.INBOX)
+        )
+        return result or 0
+
+    async def unpaid_figures(self, today: date) -> UnpaidFigures:
+        """Aggregates over registered, unpaid invoices and card invoices."""
+        is_unpaid = (
+            (PurchaseDocument.stage == PurchaseStage.REGISTERED)
+            & (PurchaseDocument.payment_status == PaymentStatus.UNPAID)
+            & PurchaseDocument.kind.in_((PurchaseKind.INVOICE, PurchaseKind.CARD_INVOICE))
+        )
+        has_base = PurchaseDocument.amount_base.is_not(None)
+        row = (
+            await self._session.execute(
+                select(
+                    func.count(),
+                    func.coalesce(func.sum(PurchaseDocument.amount_base), Decimal(0)),
+                    func.count().filter(has_base & ~PurchaseDocument.amount_base_final),
+                    func.count().filter(~has_base),
+                    func.count().filter(PurchaseDocument.due_date < today),
+                    func.count().filter(
+                        PurchaseDocument.due_date.between(
+                            today, today + timedelta(days=DUE_SOON_DAYS - 1)
+                        )
+                    ),
+                ).where(is_unpaid)
+            )
+        ).one()
+        return UnpaidFigures(*row)
+
+    async def list_registered_in_range(
+        self, date_from: date, date_to: date
+    ) -> Sequence[PurchaseDocument]:
+        """Registered documents dated in the range that are not linked to a card invoice."""
+        result = await self._session.scalars(
+            select(PurchaseDocument)
+            .where(
+                PurchaseDocument.stage == PurchaseStage.REGISTERED,
+                PurchaseDocument.card_invoice_id.is_(None),
+                PurchaseDocument.document_date >= date_from,
+                PurchaseDocument.document_date <= date_to,
+            )
+            .order_by(PurchaseDocument.document_date, PurchaseDocument.created_at)
+        )
+        return result.all()
+
+    async def list_receipts_of(
+        self, card_invoice_ids: Sequence[UUID]
+    ) -> Sequence[PurchaseDocument]:
+        if not card_invoice_ids:
+            return []
+        result = await self._session.scalars(
+            select(PurchaseDocument)
+            .where(PurchaseDocument.card_invoice_id.in_(card_invoice_ids))
+            .order_by(PurchaseDocument.document_date, PurchaseDocument.created_at)
+        )
         return result.all()
