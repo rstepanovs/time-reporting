@@ -4,18 +4,20 @@ transactions."""
 from collections.abc import Sequence
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import NamedTuple
+from typing import Any, NamedTuple
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from time_reporting.db.queries import escape_like
 from time_reporting.modules.purchases.contracts import (
     DUE_SOON_DAYS,
     PaymentMethod,
     PaymentStatus,
     PurchaseKind,
+    PurchaseSort,
     PurchaseStage,
 )
 from time_reporting.modules.purchases.models import PurchaseDocument
@@ -49,18 +51,63 @@ class PurchaseDocumentRepository:
         )
         return result.one_or_none()
 
-    async def list(
-        self, *, stage: PurchaseStage | None, kind: PurchaseKind | None, limit: int
-    ) -> Sequence[PurchaseDocument]:
-        statement = select(PurchaseDocument).order_by(
-            PurchaseDocument.created_at.desc(), PurchaseDocument.id
-        )
+    async def list_page(
+        self,
+        *,
+        stage: PurchaseStage | None,
+        kind: PurchaseKind | None,
+        payment_status: PaymentStatus | None,
+        search: str | None,
+        date_from: date | None,
+        date_to: date | None,
+        sort: PurchaseSort,
+        limit: int,
+        offset: int,
+    ) -> tuple[Sequence[PurchaseDocument], int]:
+        conditions: list[ColumnElement[bool]] = []
         if stage is not None:
-            statement = statement.where(PurchaseDocument.stage == stage)
+            conditions.append(PurchaseDocument.stage == stage)
         if kind is not None:
-            statement = statement.where(PurchaseDocument.kind == kind)
-        result = await self._session.scalars(statement.limit(limit))
-        return result.all()
+            conditions.append(PurchaseDocument.kind == kind)
+        if payment_status is not None:
+            conditions.append(PurchaseDocument.payment_status == payment_status)
+        if date_from is not None:
+            conditions.append(PurchaseDocument.document_date >= date_from)
+        if date_to is not None:
+            conditions.append(PurchaseDocument.document_date <= date_to)
+        if search:
+            pattern = f"%{escape_like(search)}%"
+            conditions.append(
+                or_(
+                    PurchaseDocument.vendor.ilike(pattern, escape="\\"),
+                    PurchaseDocument.document_no.ilike(pattern, escape="\\"),
+                    PurchaseDocument.description.ilike(pattern, escape="\\"),
+                )
+            )
+
+        order: tuple[Any, ...]
+        match sort:
+            case PurchaseSort.DUE_DATE:
+                order = (PurchaseDocument.due_date.asc().nulls_last(), PurchaseDocument.created_at)
+            case PurchaseSort.DOCUMENT_DATE:
+                order = (
+                    PurchaseDocument.document_date.desc().nulls_last(),
+                    PurchaseDocument.created_at.desc(),
+                )
+            case PurchaseSort.NEWEST:
+                order = (PurchaseDocument.created_at.desc(),)
+
+        total = await self._session.scalar(
+            select(func.count()).select_from(PurchaseDocument).where(*conditions)
+        )
+        result = await self._session.scalars(
+            select(PurchaseDocument)
+            .where(*conditions)
+            .order_by(*order, PurchaseDocument.id)
+            .limit(limit)
+            .offset(offset)
+        )
+        return result.all(), total or 0
 
     async def list_storage_keys(self) -> frozenset[str]:
         result = await self._session.scalars(select(PurchaseDocument.storage_key))

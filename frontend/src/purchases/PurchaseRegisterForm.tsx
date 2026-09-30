@@ -1,6 +1,7 @@
 import {
   Alert,
   Button,
+  Checkbox,
   Group,
   NumberInput,
   SegmentedControl,
@@ -22,7 +23,12 @@ import {
   type PurchaseDocument,
   type PurchaseKind,
 } from "@/purchases/api";
-import { useExchangeRate, useRegisterPurchaseDocument } from "@/purchases/hooks";
+import { METHOD_LABEL } from "@/purchases/format";
+import {
+  useExchangeRate,
+  useRegisterPurchaseDocument,
+  useUpdatePurchaseDocument,
+} from "@/purchases/hooks";
 
 const KIND_OPTIONS: { value: PurchaseKind; label: string }[] = [
   { value: "receipt", label: "Receipt" },
@@ -30,14 +36,6 @@ const KIND_OPTIONS: { value: PurchaseKind; label: string }[] = [
   { value: "card_invoice", label: "Card invoice" },
   { value: "other", label: "Other" },
 ];
-
-const METHOD_LABEL: Record<PaymentMethod, string> = {
-  card: "Card",
-  bank_transfer: "Bank transfer",
-  direct_debit: "Direct debit",
-  cash: "Cash",
-  private: "Paid privately",
-};
 
 function methodOptions(kind: PurchaseKind) {
   return (Object.keys(METHOD_LABEL) as PaymentMethod[])
@@ -66,7 +64,25 @@ type Values = {
   amountBase: string;
 };
 
-function initialValues(baseCurrency: string): Values {
+function initialValues(baseCurrency: string, document: PurchaseDocument): Values {
+  // A registered document (edit mode) starts from its own fields; an inbox one starts blank.
+  if (document.kind !== null) {
+    return {
+      kind: document.kind,
+      vendor: document.vendor ?? "",
+      documentNo: document.document_no ?? "",
+      description: document.description ?? "",
+      documentDate: document.document_date ?? "",
+      dueDate: document.due_date ?? "",
+      paymentStatus: document.payment_status ?? "unpaid",
+      paidOn: document.paid_on ?? "",
+      paymentMethod: document.payment_method ?? "",
+      amount: document.amount ?? "",
+      currency: document.currency ?? baseCurrency,
+      vatAmount: document.vat_amount ?? "",
+      amountBase: "",
+    };
+  }
   return {
     kind: "receipt",
     vendor: "",
@@ -109,19 +125,24 @@ function detailsFrom(values: Values): PurchaseDetails {
   };
 }
 
-/** Classifies one inbox document. The form is keyed by the document's id by its parent, so
- * switching documents starts a fresh one. */
+/** Classifies one inbox document (`mode="register"`) or edits a registered one (`mode="edit"`).
+ * The form is keyed by the document's id by its parent, so switching documents starts a fresh
+ * one. */
 export function PurchaseRegisterForm({
   document,
   baseCurrency,
-  onRegistered,
+  mode = "register",
+  onDone,
 }: {
   document: PurchaseDocument;
   baseCurrency: string;
-  onRegistered?: () => void;
+  mode?: "register" | "edit";
+  onDone?: () => void;
 }) {
   const register = useRegisterPurchaseDocument();
-  const [values, setValues] = useState<Values>(initialValues(baseCurrency));
+  const update = useUpdatePurchaseDocument();
+  const [values, setValues] = useState<Values>(initialValues(baseCurrency, document));
+  const [recompute, setRecompute] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function patch(change: Partial<Values>) {
@@ -166,9 +187,18 @@ export function PurchaseRegisterForm({
   async function handleSubmit() {
     setError(null);
     try {
-      await register.mutateAsync({ documentId: document.id, details: detailsFrom(values) });
-      notifications.show({ title: "Document registered", message: document.file_name });
-      onRegistered?.();
+      if (mode === "edit") {
+        await update.mutateAsync({
+          documentId: document.id,
+          details: detailsFrom(values),
+          recomputeConversion: recompute,
+        });
+        notifications.show({ title: "Document saved", message: document.file_name });
+      } else {
+        await register.mutateAsync({ documentId: document.id, details: detailsFrom(values) });
+        notifications.show({ title: "Document registered", message: document.file_name });
+      }
+      onDone?.();
     } catch (registerError) {
       if (registerError instanceof PurchaseRuleError || registerError instanceof PurchaseConflictError) {
         setError(registerError.message);
@@ -293,6 +323,14 @@ export function PurchaseRegisterForm({
                 onChange={(value) => patch({ amountBase: value === "" ? "" : String(value) })}
               />
             )}
+            {mode === "edit" && document.rate_source === "manual" && (
+              <Checkbox
+                label={`Recompute the ${baseCurrency} amount automatically`}
+                description={`It was set by hand; it is kept unless the amount or currency changes.`}
+                checked={recompute}
+                onChange={(event) => setRecompute(event.currentTarget.checked)}
+              />
+            )}
             {preview && (
               <Text size="sm" c="dimmed" aria-label="Base currency preview">
                 {preview}
@@ -306,8 +344,8 @@ export function PurchaseRegisterForm({
           </>
         )}
         <Group justify="flex-end">
-          <Button type="submit" loading={register.isPending}>
-            Register
+          <Button type="submit" loading={register.isPending || update.isPending}>
+            {mode === "edit" ? "Save" : "Register"}
           </Button>
         </Group>
       </Stack>

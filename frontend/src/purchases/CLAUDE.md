@@ -6,7 +6,9 @@ on `/purchases`).
 
 ## API layer
 
-- `api.ts` — `listPurchaseDocuments({ stage?, kind? })`, `getPurchasesSummary` (inbox count, unpaid
+- `api.ts` — `listPurchaseDocuments(params)` (a *page*: `stage`, `kind`, `paymentStatus`, `search`,
+  `dateFrom`/`dateTo`, `sort`, `limit`, `offset`), `getPurchaseDocument`, `updatePurchaseDocument`,
+  `markPurchasePaid`, `markPurchaseUnpaid`, `returnPurchaseToInbox`, `getPurchasesSummary` (inbox count, unpaid
   figures and the **base currency**), `uploadPurchaseDocuments(files)` (one multipart request, several
   `files`; a bad file rejects the whole batch), `discardPurchaseDocument`,
   `registerPurchaseDocument({ documentId, details })`, `getExchangeRate({ currency, on })` and
@@ -21,7 +23,8 @@ on `/purchases`).
 
 ## Inbox (`pages/PurchasesPage.tsx`, `PurchaseRegisterForm.tsx`)
 
-- `/purchases?tab=inbox` (only tab so far): a list of inbox documents (file, source — the email
+- `/purchases?tab=inbox|register|to-pay` (`Tabs` with `keepMounted={false}`, so only the open tab
+  queries). **Inbox**: a list of inbox documents (file, source — the email
   subject for mail — size, date), the selected one (first by default) with a preview (PDF in an
   `<iframe>`, images in an `<img>`, a plain link for HEIC which browsers can't render) and a
   download link, **Discard**, and the register form beside it. The tab title and the "Purchases" nav
@@ -37,3 +40,23 @@ on `/purchases`).
   receipt shows a note instead (its amount comes from the card invoice). When no rate is published,
   a hint asks for the manual "<base> amount (optional)" — which, when filled, also switches the
   preview off (the backend stores it as a manual amount, never recomputed).
+
+## Register, To pay and the document page
+
+- **Register tab** (`PurchaseRegisterTab`): every registered document, newest document date first,
+  20 per page (`Pagination`), filterable by kind, payment state, a date range and a debounced text
+  search (vendor, number, description); any filter change returns to page 1. Amounts come from
+  `format.ts`: a `~` before a base-currency amount marks an estimate (unpaid), "—" a missing one
+  (a card receipt awaiting its card invoice, or no published rate).
+- **To pay tab** (`PurchaseToPayTab`): unpaid invoices/card invoices by due date (`sort=due_date`),
+  overdue ones in red with a badge (compared with `todayIso()`), each with **Paid…**
+  (`MarkPaidModal`: payment date — default today — method, and for a foreign-currency document an
+  optional base-currency amount actually debited; omitted, the backend converts at the payment
+  date's rate and makes it final).
+- **`/purchases/:documentId`** (`PurchaseDocumentPage`): header with kind/status badges, the amounts
+  and how the base amount arose (rate of a date, set by hand, from the card invoice), the file
+  preview, and for a registered document the same form as registration in `mode="edit"`
+  (`updatePurchaseDocument`; a "recompute" checkbox appears for a hand-set base amount), Paid…/
+  Mark unpaid (invoices and card invoices) and "Back to inbox…" (confirmed). A rebilled document
+  shows a notice and no form or return action, matching the backend freeze. The form is keyed by
+  `id + updated_at`, so a save or payment change resets it from the server's copy.

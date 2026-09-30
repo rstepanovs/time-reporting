@@ -36,7 +36,12 @@ vi.mock("@/purchases/api", async (importOriginal) => ({
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(fetchCurrentUser).mockResolvedValue(testAccountant);
-  vi.mocked(listPurchaseDocuments).mockResolvedValue([testPurchaseInboxDocument]);
+  vi.mocked(listPurchaseDocuments).mockResolvedValue({
+    items: [testPurchaseInboxDocument],
+    total: 1,
+    limit: 200,
+    offset: 0,
+  });
   vi.mocked(getPurchasesSummary).mockResolvedValue(testPurchasesSummary);
 });
 
@@ -52,7 +57,7 @@ describe("PurchasesPage", () => {
     renderApp("/purchases");
 
     await screen.findByRole("heading", { level: 4, name: "scan-001.pdf" });
-    expect(listPurchaseDocuments).toHaveBeenCalledWith({ stage: "inbox", kind: undefined });
+    expect(listPurchaseDocuments).toHaveBeenCalledWith({ stage: "inbox", limit: 200 });
     expect(screen.getByTitle("Document preview").getAttribute("src")).toBe(
       `/api/v1/purchases/documents/${testPurchaseInboxDocument.id}/file`,
     );

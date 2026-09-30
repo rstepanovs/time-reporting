@@ -26,11 +26,13 @@ from time_reporting.modules.purchases.contracts import (
     ListUnlinkedCardReceipts,
     MarkPurchasePaid,
     MarkPurchaseUnpaid,
+    PaymentStatus,
     PurchaseDocumentNotFoundError,
     PurchaseDocumentStateError,
     PurchaseFileTooLargeError,
     PurchaseFileTypeNotAllowedError,
     PurchaseKind,
+    PurchaseSort,
     PurchaseStage,
     PurchaseValidationError,
     RebillPurchase,
@@ -48,6 +50,7 @@ from time_reporting.modules.purchases.schemas import (
     MarkPaidRequest,
     MonthPurchaseResponse,
     PurchaseDetailsRequest,
+    PurchaseDocumentPageResponse,
     PurchaseDocumentResponse,
     PurchasesSummaryResponse,
     RebillRequest,
@@ -141,10 +144,28 @@ async def list_purchase_documents(
     bus: BusDep,
     stage: PurchaseStage | None = None,
     kind: PurchaseKind | None = None,
-    limit: Annotated[int, Query(ge=1, le=1000)] = DEFAULT_LIST_LIMIT,
-) -> list[PurchaseDocumentResponse]:
-    documents = await bus.query(ListPurchaseDocuments(stage=stage, kind=kind, limit=limit))
-    return [PurchaseDocumentResponse.model_validate(document) for document in documents]
+    payment_status: PaymentStatus | None = None,
+    search: Annotated[str | None, Query(max_length=100)] = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    sort: PurchaseSort = PurchaseSort.NEWEST,
+    limit: Annotated[int, Query(ge=1, le=500)] = DEFAULT_LIST_LIMIT,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> PurchaseDocumentPageResponse:
+    page = await bus.query(
+        ListPurchaseDocuments(
+            stage=stage,
+            kind=kind,
+            payment_status=payment_status,
+            search=search,
+            date_from=date_from,
+            date_to=date_to,
+            sort=sort,
+            limit=limit,
+            offset=offset,
+        )
+    )
+    return PurchaseDocumentPageResponse.model_validate(page)
 
 
 @router.get("/documents/{document_id}", responses=_NOT_FOUND_RESPONSE)

@@ -337,11 +337,13 @@ sorting suggestions (deferred).
 
 #### A10 — frontend: register, to pay, document page
 
-- [ ] Register tab: filterable, paginated table.
-- [ ] To pay tab: by due date, overdue highlighted, "Paid…" dialog (date, method, optional actual
+- [x] Register tab: filterable, paginated table.
+- [x] To pay tab: by due date, overdue highlighted, "Paid…" dialog (date, method, optional actual
       SEK amount).
-- [ ] `/purchases/:id`: preview, edit, Paid/Unpaid, Back to inbox.
-- [ ] Tests: filters, Paid flow incl. the actual SEK amount, Unpaid.
+- [x] `/purchases/:id`: preview, edit, Paid/Unpaid, Back to inbox.
+- [x] Tests: filters, Paid flow incl. the actual SEK amount, Unpaid.
+      (Backend pulled into this task: `ListPurchaseDocuments` became a filtered, sorted, paged
+      query with `payment_status`, `search`, dates, `sort`, `offset` and a `total`.)
 
 #### A11 — frontend: card invoices and rebilling
 

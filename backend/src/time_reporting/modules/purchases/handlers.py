@@ -27,6 +27,7 @@ from time_reporting.modules.purchases.contracts import (
     MarkPurchaseUnpaid,
     MonthPurchaseDTO,
     PurchaseDocumentDTO,
+    PurchaseDocumentPageDTO,
     PurchaseFileDTO,
     PurchaseKind,
     PurchasesSummaryDTO,
@@ -100,11 +101,24 @@ class _Handler:
 
 
 class ListPurchaseDocumentsHandler(_Handler):
-    async def handle(self, query: ListPurchaseDocuments) -> tuple[PurchaseDocumentDTO, ...]:
-        documents = await self._documents.list(
-            stage=query.stage, kind=query.kind, limit=query.limit
+    async def handle(self, query: ListPurchaseDocuments) -> PurchaseDocumentPageDTO:
+        documents, total = await self._documents.list_page(
+            stage=query.stage,
+            kind=query.kind,
+            payment_status=query.payment_status,
+            search=query.search,
+            date_from=query.date_from,
+            date_to=query.date_to,
+            sort=query.sort,
+            limit=query.limit,
+            offset=query.offset,
         )
-        return tuple(to_dto(document) for document in documents)
+        return PurchaseDocumentPageDTO(
+            items=tuple(to_dto(document) for document in documents),
+            total=total,
+            limit=query.limit,
+            offset=query.offset,
+        )
 
 
 class GetPurchaseDocumentHandler(_Handler):

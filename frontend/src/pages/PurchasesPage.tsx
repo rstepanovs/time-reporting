@@ -33,6 +33,8 @@ import {
   useUploadPurchaseDocuments,
 } from "@/purchases/hooks";
 import { PurchaseRegisterForm } from "@/purchases/PurchaseRegisterForm";
+import { PurchaseRegisterTab } from "@/purchases/PurchaseRegisterTab";
+import { PurchaseToPayTab } from "@/purchases/PurchaseToPayTab";
 import { formatBytes } from "@/system/format";
 
 const ACCEPT = "application/pdf,image/jpeg,image/png,image/webp,image/heic";
@@ -61,14 +63,14 @@ function Preview({ document }: { document: PurchaseDocument }) {
 }
 
 function InboxTab() {
-  const inbox = usePurchaseDocuments("inbox");
+  const inbox = usePurchaseDocuments({ stage: "inbox", limit: 200 });
   const summary = usePurchasesSummary();
   const upload = useUploadPurchaseDocuments();
   const discard = useDiscardPurchaseDocument();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const documents = inbox.data ?? [];
+  const documents = inbox.data?.items ?? [];
   const selected = documents.find((document) => document.id === selectedId) ?? documents[0] ?? null;
 
   async function handleUpload(files: File[]) {
@@ -195,7 +197,7 @@ function InboxTab() {
   );
 }
 
-const TABS = ["inbox"] as const;
+const TABS = ["inbox", "register", "to-pay"] as const;
 type Tab = (typeof TABS)[number];
 
 export function PurchasesPage() {
@@ -203,11 +205,16 @@ export function PurchasesPage() {
   const requested = searchParams.get("tab");
   const tab: Tab = TABS.find((candidate) => candidate === requested) ?? "inbox";
   const summary = usePurchasesSummary();
+  const baseCurrency = summary.data?.base_currency;
 
   return (
     <Stack>
       <Title order={2}>Purchases</Title>
-      <Tabs value={tab} onChange={(value) => value && setSearchParams({ tab: value })}>
+      <Tabs
+        value={tab}
+        keepMounted={false}
+        onChange={(value) => value && setSearchParams({ tab: value })}
+      >
         <Tabs.List>
           <Tabs.Tab value="inbox">
             <Group gap="xs">
@@ -219,9 +226,17 @@ export function PurchasesPage() {
               )}
             </Group>
           </Tabs.Tab>
+          <Tabs.Tab value="register">Register</Tabs.Tab>
+          <Tabs.Tab value="to-pay">To pay</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="inbox" pt="md">
           <InboxTab />
+        </Tabs.Panel>
+        <Tabs.Panel value="register" pt="md">
+          {baseCurrency && <PurchaseRegisterTab baseCurrency={baseCurrency} />}
+        </Tabs.Panel>
+        <Tabs.Panel value="to-pay" pt="md">
+          {baseCurrency && <PurchaseToPayTab baseCurrency={baseCurrency} />}
         </Tabs.Panel>
       </Tabs>
     </Stack>

@@ -3275,6 +3275,17 @@ export interface components {
             /** Exchange Rate */
             exchange_rate?: number | string | null;
         };
+        /** PurchaseDocumentPageResponse */
+        PurchaseDocumentPageResponse: {
+            /** Items */
+            items: components["schemas"]["PurchaseDocumentResponse"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
         /** PurchaseDocumentResponse */
         PurchaseDocumentResponse: {
             /**
@@ -3346,6 +3357,11 @@ export interface components {
          * @enum {string}
          */
         PurchaseKind: "receipt" | "invoice" | "card_invoice" | "other";
+        /**
+         * PurchaseSort
+         * @enum {string}
+         */
+        PurchaseSort: "newest" | "document_date" | "due_date";
         /**
          * PurchaseSource
          * @enum {string}
@@ -6868,7 +6884,13 @@ export interface operations {
             query?: {
                 stage?: components["schemas"]["PurchaseStage"] | null;
                 kind?: components["schemas"]["PurchaseKind"] | null;
+                payment_status?: components["schemas"]["PaymentStatus"] | null;
+                search?: string | null;
+                date_from?: string | null;
+                date_to?: string | null;
+                sort?: components["schemas"]["PurchaseSort"];
                 limit?: number;
+                offset?: number;
             };
             header?: never;
             path?: never;
@@ -6882,7 +6904,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PurchaseDocumentResponse"][];
+                    "application/json": components["schemas"]["PurchaseDocumentPageResponse"];
                 };
             };
             /** @description Validation Error */

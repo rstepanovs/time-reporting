@@ -951,6 +951,46 @@ export const testPurchaseInboxDocument: PurchaseDocument = {
   updated_at: "2026-09-25T08:00:00Z",
 };
 
+export const testPurchaseInvoice: PurchaseDocument = {
+  ...testPurchaseInboxDocument,
+  id: "b2b2b2b2-2222-4222-8222-222222222222",
+  stage: "registered",
+  kind: "invoice",
+  vendor: "Hosting AB",
+  document_no: "F-100",
+  document_date: "2026-08-20",
+  due_date: "2026-09-01",
+  payment_status: "unpaid",
+  amount: "100.00",
+  currency: "EUR",
+  amount_base: "1126.45",
+  exchange_rate: "11.26450000",
+  rate_date: "2026-08-20",
+  rate_source: "riksbank",
+  amount_base_final: false,
+  file_name: "hosting.pdf",
+  source: "upload",
+  email_from: null,
+  email_subject: null,
+};
+
+export const testPurchaseReceipt: PurchaseDocument = {
+  ...testPurchaseInvoice,
+  id: "c3c3c3c3-3333-4333-8333-333333333333",
+  kind: "receipt",
+  vendor: "Hotel AB",
+  document_no: null,
+  due_date: null,
+  payment_status: "paid",
+  paid_on: "2026-09-25",
+  payment_method: "bank_transfer",
+  amount_base: "1129.00",
+  exchange_rate: "11.29000000",
+  rate_date: "2026-09-25",
+  amount_base_final: true,
+  file_name: "hotel.pdf",
+};
+
 export const testPurchasesSummary: PurchasesSummary = {
   base_currency: "SEK",
   inbox_count: 1,

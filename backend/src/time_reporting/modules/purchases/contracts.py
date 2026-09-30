@@ -51,6 +51,12 @@ class PaymentMethod(StrEnum):
     PRIVATE = "private"
 
 
+class PurchaseSort(StrEnum):
+    NEWEST = "newest"  # most recently added first
+    DOCUMENT_DATE = "document_date"  # newest document date first
+    DUE_DATE = "due_date"  # earliest due date first, undated last — the "to pay" order
+
+
 class PurchaseSource(StrEnum):
     UPLOAD = "upload"
     EMAIL = "email"
@@ -246,12 +252,28 @@ class PurchaseDetails:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class ListPurchaseDocuments(Query[tuple[PurchaseDocumentDTO, ...]]):
-    """Newest first, restricted to a stage and/or kind when given."""
+class PurchaseDocumentPageDTO:
+    items: tuple[PurchaseDocumentDTO, ...]
+    total: int
+    limit: int
+    offset: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ListPurchaseDocuments(Query[PurchaseDocumentPageDTO]):
+    """One page of documents. Every filter is optional: ``search`` matches vendor, document number
+    and description (case-insensitive, literal); ``date_from``/``date_to`` bound ``document_date``
+    (inclusive). ``total`` counts every match, not just the page."""
 
     stage: PurchaseStage | None = None
     kind: PurchaseKind | None = None
+    payment_status: PaymentStatus | None = None
+    search: str | None = None
+    date_from: date | None = None
+    date_to: date | None = None
+    sort: PurchaseSort = PurchaseSort.NEWEST
     limit: int = DEFAULT_LIST_LIMIT
+    offset: int = 0
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

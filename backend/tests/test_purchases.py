@@ -146,7 +146,7 @@ async def test_upload_list_download_discard_round_trip(
     listed = await client.get(
         "/api/v1/purchases/documents", headers=headers, params={"stage": "inbox"}
     )
-    assert {first["id"], second["id"]} <= {item["id"] for item in listed.json()}
+    assert {first["id"], second["id"]} <= {item["id"] for item in listed.json()["items"]}
 
     download = await client.get(f"/api/v1/purchases/documents/{first['id']}/file", headers=headers)
     assert download.status_code == 200

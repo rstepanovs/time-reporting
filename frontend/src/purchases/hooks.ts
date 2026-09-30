@@ -3,28 +3,41 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   discardPurchaseDocument,
   getExchangeRate,
+  getPurchaseDocument,
   getPurchasesSummary,
   listPurchaseDocuments,
+  markPurchasePaid,
+  markPurchaseUnpaid,
   registerPurchaseDocument,
+  returnPurchaseToInbox,
+  updatePurchaseDocument,
   uploadPurchaseDocuments,
-  type PurchaseKind,
-  type PurchaseStage,
+  type PurchaseListParams,
 } from "@/purchases/api";
 
 export const purchaseKeys = {
   all: ["purchases"] as const,
   // A shared prefix, for invalidating every list and the summary at once.
   documents: () => [...purchaseKeys.all, "documents"] as const,
-  list: (stage?: PurchaseStage, kind?: PurchaseKind) =>
-    [...purchaseKeys.documents(), "list", stage, kind] as const,
+  list: (params: PurchaseListParams) => [...purchaseKeys.documents(), "list", params] as const,
+  document: (documentId: string) => [...purchaseKeys.documents(), documentId] as const,
   summary: () => [...purchaseKeys.all, "summary"] as const,
   rate: (currency: string, on: string) => [...purchaseKeys.all, "rate", currency, on] as const,
 };
 
-export function usePurchaseDocuments(stage?: PurchaseStage, kind?: PurchaseKind) {
+export function usePurchaseDocuments(params: PurchaseListParams) {
   return useQuery({
-    queryKey: purchaseKeys.list(stage, kind),
-    queryFn: () => listPurchaseDocuments({ stage, kind }),
+    queryKey: purchaseKeys.list(params),
+    queryFn: () => listPurchaseDocuments(params),
+    // Keep the previous page on screen while the next one (or a new filter) loads.
+    placeholderData: (previous) => previous,
+  });
+}
+
+export function usePurchaseDocument(documentId: string) {
+  return useQuery({
+    queryKey: purchaseKeys.document(documentId),
+    queryFn: () => getPurchaseDocument(documentId),
   });
 }
 
@@ -70,6 +83,39 @@ export function useRegisterPurchaseDocument() {
   return useMutation({
     mutationFn: (params: Parameters<typeof registerPurchaseDocument>[0]) =>
       registerPurchaseDocument(params),
+    onSuccess: invalidate,
+  });
+}
+
+export function useUpdatePurchaseDocument() {
+  const invalidate = useInvalidatePurchases();
+  return useMutation({
+    mutationFn: (params: Parameters<typeof updatePurchaseDocument>[0]) =>
+      updatePurchaseDocument(params),
+    onSuccess: invalidate,
+  });
+}
+
+export function useMarkPurchasePaid() {
+  const invalidate = useInvalidatePurchases();
+  return useMutation({
+    mutationFn: (params: Parameters<typeof markPurchasePaid>[0]) => markPurchasePaid(params),
+    onSuccess: invalidate,
+  });
+}
+
+export function useMarkPurchaseUnpaid() {
+  const invalidate = useInvalidatePurchases();
+  return useMutation({
+    mutationFn: (documentId: string) => markPurchaseUnpaid(documentId),
+    onSuccess: invalidate,
+  });
+}
+
+export function useReturnPurchaseToInbox() {
+  const invalidate = useInvalidatePurchases();
+  return useMutation({
+    mutationFn: (documentId: string) => returnPurchaseToInbox(documentId),
     onSuccess: invalidate,
   });
 }

@@ -33,7 +33,11 @@ the purchases directory, reporting those keys with a `purchases/` prefix).
   (the flush runs in a savepoint so the session stays usable). `actor_id` is `None` for the mail
   importer.
 - `DiscardPurchaseDocument` → `discarded`; refused when already discarded or rebilled.
-- `ListPurchaseDocuments(stage, kind, limit)` newest first, `GetPurchaseDocument`,
+- `ListPurchaseDocuments(stage, kind, payment_status, search, date_from, date_to, sort, limit,
+  offset)` → `PurchaseDocumentPageDTO` (`items`, `total`, `limit`, `offset`): `search` matches vendor,
+  number and description literally and case-insensitively; dates bound `document_date`; `sort` is
+  `newest` (added), `document_date` (newest first) or `due_date` (earliest first, undated last —
+  the "to pay" order). `GetPurchaseDocument`,
   `GetPurchaseFilePath` (a missing row *or* missing file is `PurchaseDocumentNotFoundError`),
   `ListPurchaseStorageKeys`.
 
@@ -122,7 +126,7 @@ amount is open until a `card_invoice` (registered) settles it.
 
 Under `/purchases`, all `AccountantDep`: `POST /documents` (multipart, `files` — several at once;
 every file's type and size is checked before any is stored, so one bad file rejects the batch:
-415/413), `GET /documents?stage=&kind=&limit=`, `GET /documents/{id}`, `GET /documents/{id}/file`,
+415/413), `GET /documents?stage=&kind=&payment_status=&search=&date_from=&date_to=&sort=&limit=&offset=` (a page), `GET /documents/{id}`, `GET /documents/{id}/file`,
 `POST /documents/{id}/discard` (409 on a state error), `POST /documents/{id}/register` and `PUT
 /documents/{id}` (`PurchaseDetailsRequest`; 400 on a rule error, 409 on state), `POST
 /documents/{id}/return-to-inbox`, `POST /documents/{id}/paid` (`paid_on`, `payment_method`,

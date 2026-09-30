@@ -171,3 +171,12 @@ class RebillSuggestionResponse(BaseModel):
     currency: str
     expense_date: date | None
     description: str
+
+
+class PurchaseDocumentPageResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    items: list[PurchaseDocumentResponse]
+    total: int
+    limit: int
+    offset: int
